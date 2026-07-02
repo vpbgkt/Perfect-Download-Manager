@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Tell WinForms our DPI mode; the manifest already declares PerMonitorV2 for WPF. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <!--
+      WPF and WinForms both define types with the same simple names (Application, Application, etc.).
+      With ImplicitUsings, unqualified references become ambiguous. Disable the WinForms
+      implicit using set; we only use WinForms.NotifyIcon and reach it via fully-qualified names.
+    -->
+    <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <AssemblyName>PDM</AssemblyName>
+    <RootNamespace>PDM.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PDM.Core\PDM.Core.csproj" />
+    <ProjectReference Include="..\PDM.Infrastructure\PDM.Infrastructure.csproj" />
+    <ProjectReference Include="..\PDM.Licensing\PDM.Licensing.csproj" />
+    <ProjectReference Include="..\PDM.Updater\PDM.Updater.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ApplicationIcon>Assets\pdm.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\pdm.ico" />
+    <None Update="Assets\generate-icon.ps1">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

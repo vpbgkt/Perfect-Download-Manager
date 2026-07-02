@@ -1,0 +1,51 @@
+# .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+out/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.DotSettings.user
+
+# Test results
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+coverage/
+
+# PDM runtime artifacts (local state — never commit)
+downloads/
+smoketest/
+*.pdmdownload
+*.pdmstate
+
+# Temp log files captured during dev
+*.log
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+$RECYCLE.BIN/
+
+# Windows Installer logs
+*.msi.log

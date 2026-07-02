@@ -1,0 +1,66 @@
+<ui:FluentWindow x:Class="PDM.App.Views.LicenseWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="License"
+                 Height="440" Width="560"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 ResizeMode="NoResize">
+
+    <DockPanel LastChildFill="True">
+        <ui:TitleBar DockPanel.Dock="Top" Title="License" />
+
+        <StackPanel Margin="16,32,16,16">
+            <ui:TextBlock FontTypography="Subtitle"
+                          Text="{Binding StatusText}"
+                          Margin="0,0,0,12" />
+
+            <ui:TextBlock Text="{Binding Message}"
+                          Opacity="0.75"
+                          TextWrapping="Wrap"
+                          Margin="0,0,0,16"
+                          Visibility="{Binding Message, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+
+            <ui:TextBlock Text="License key" Margin="0,0,0,4"
+                          Visibility="{Binding IsActivated, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+            <ui:TextBox Text="{Binding LicenseKey, UpdateSourceTrigger=PropertyChanged}"
+                        PlaceholderText="PDM-XXXX-XXXX-XXXX-XXXX"
+                        IsEnabled="{Binding IsWorking, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                        Padding="8"
+                        Margin="0,0,0,12"
+                        Visibility="{Binding IsActivated, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+
+            <ui:TextBlock Text="Machine fingerprint (bound at activation)"
+                          Margin="0,4,0,4"
+                          FontSize="12" Opacity="0.7" />
+            <ui:TextBox Text="{Binding Fingerprint, Mode=OneWay}"
+                        IsReadOnly="True"
+                        Padding="8"
+                        FontFamily="Consolas"
+                        FontSize="11"
+                        Margin="0,0,0,16" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <ui:Button Content="Close"
+                           Appearance="Secondary"
+                           MinWidth="96"
+                           Click="OnClose" />
+                <ui:Button Content="Deactivate"
+                           Appearance="Danger"
+                           Margin="8,0,0,0"
+                           MinWidth="120"
+                           Command="{Binding DeactivateCommand}"
+                           Visibility="{Binding IsActivated, Converter={StaticResource BoolToVis}}" />
+                <ui:Button Content="Activate"
+                           Appearance="Primary"
+                           Margin="8,0,0,0"
+                           MinWidth="120"
+                           IsDefault="True"
+                           Command="{Binding ActivateCommand}"
+                           Visibility="{Binding IsActivated, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+            </StackPanel>
+        </StackPanel>
+    </DockPanel>
+</ui:FluentWindow>

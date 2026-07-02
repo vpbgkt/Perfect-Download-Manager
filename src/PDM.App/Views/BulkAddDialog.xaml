@@ -1,0 +1,39 @@
+<ui:FluentWindow x:Class="PDM.App.Views.BulkAddDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Add Multiple Downloads"
+                 Height="440" Width="640"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica">
+
+    <DockPanel LastChildFill="True">
+        <ui:TitleBar DockPanel.Dock="Top" Title="Add Multiple Downloads" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="16,8,16,16">
+            <ui:TextBlock Foreground="#E38B00" Margin="0,0,16,0"
+                          VerticalAlignment="Center"
+                          x:Name="StatusText" />
+            <ui:Button Content="Cancel" Appearance="Secondary" MinWidth="96" Click="OnCancel" />
+            <ui:Button x:Name="OkButton" Content="Add All" Appearance="Primary"
+                       MinWidth="140" Margin="8,0,0,0" IsDefault="True" Click="OnOk" />
+        </StackPanel>
+
+        <StackPanel Margin="16,24,16,8">
+            <ui:TextBlock Text="Paste one URL per line."
+                          Opacity="0.7" Margin="0,0,0,8" />
+            <ui:TextBox x:Name="UrlsBox"
+                        AcceptsReturn="True"
+                        TextWrapping="NoWrap"
+                        MinHeight="240"
+                        FontFamily="Consolas"
+                        FontSize="12"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Auto"
+                        PlaceholderText="https://example.com/a.zip&#x0a;https://example.com/b.iso" />
+        </StackPanel>
+    </DockPanel>
+</ui:FluentWindow>

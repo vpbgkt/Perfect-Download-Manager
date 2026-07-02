@@ -1,0 +1,146 @@
+<ui:FluentWindow x:Class="PDM.App.Views.SettingsWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Settings"
+                 Height="620" Width="640"
+                 MinHeight="500" MinWidth="560"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica">
+
+    <DockPanel LastChildFill="True">
+        <ui:TitleBar DockPanel.Dock="Top" Title="Settings" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="16,8,16,16">
+            <ui:TextBlock Foreground="#E38B00"
+                          Margin="0,0,16,0"
+                          VerticalAlignment="Center"
+                          Text="{Binding ValidationError}" />
+            <ui:Button Content="Cancel"
+                       Appearance="Secondary"
+                       MinWidth="96"
+                       Click="OnCancel" />
+            <ui:Button Content="Save"
+                       Appearance="Primary"
+                       Margin="8,0,0,0"
+                       MinWidth="96"
+                       IsDefault="True"
+                       Click="OnSave" />
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      Padding="16,4,16,8">
+            <StackPanel>
+
+                <ui:TextBlock FontTypography="Subtitle" Text="General" Margin="0,4,0,8" />
+
+                <ui:TextBlock Text="Default download folder" Margin="0,0,0,4" />
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0"
+                                Text="{Binding DefaultDownloadDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                    <ui:Button Grid.Column="1"
+                               Content="Browse..."
+                               Margin="8,0,0,0"
+                               Click="OnBrowseFolder" />
+                </Grid>
+
+                <CheckBox Content="Auto-start downloads when added"
+                          IsChecked="{Binding AutoStartAddedDownloads}"
+                          Margin="0,0,0,4" />
+                <CheckBox Content="Show desktop notifications on completion"
+                          IsChecked="{Binding ShowNotifications}"
+                          Margin="0,0,0,16" />
+
+                <ui:TextBlock FontTypography="Subtitle" Text="Downloads" Margin="0,4,0,8" />
+
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <ui:TextBlock Text="Simultaneous downloads (1-32)" Margin="0,0,0,4" />
+                        <ui:NumberBox Value="{Binding MaxSimultaneousDownloads, Mode=TwoWay}"
+                                      Minimum="1" Maximum="32" SmallChange="1" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <ui:TextBlock Text="Connections per download (1-64)" Margin="0,0,0,4" />
+                        <ui:NumberBox Value="{Binding MaxConnectionsPerDownload, Mode=TwoWay}"
+                                      Minimum="1" Maximum="64" SmallChange="1" />
+                    </StackPanel>
+                </Grid>
+
+                <ui:TextBlock Text="Global speed limit in KB/s (0 = unlimited)" Margin="0,0,0,4" />
+                <ui:NumberBox Value="{Binding GlobalMaxKilobytesPerSecond, Mode=TwoWay}"
+                              Minimum="0" Maximum="10000000"
+                              SmallChange="128"
+                              Margin="0,0,0,12" />
+
+                <ui:TextBlock Text="If the destination file already exists" Margin="0,0,0,4" />
+                <ComboBox ItemsSource="{Binding OverwritePolicies}"
+                          SelectedItem="{Binding OverwritePolicy}"
+                          MinWidth="220"
+                          HorizontalAlignment="Left"
+                          Margin="0,0,0,12" />
+
+                <ui:TextBlock Text="Post-download command (optional; receives the file path as its argument)"
+                              Margin="0,0,0,4" />
+                <ui:TextBox PlaceholderText="e.g. C:\Program Files\Windows Defender\MpCmdRun.exe"
+                            Text="{Binding PostDownloadCommand, UpdateSourceTrigger=PropertyChanged}"
+                            Margin="0,0,0,16" />
+
+                <ui:TextBlock FontTypography="Subtitle" Text="Network" Margin="0,4,0,8" />
+
+                <ui:TextBlock Text="User agent (optional)" Margin="0,0,0,4" />
+                <ui:TextBox PlaceholderText="Perfect Download Manager"
+                            Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
+                            Margin="0,0,0,12" />
+
+                <ui:TextBlock Text="HTTP proxy (optional, e.g. http://user:pass@host:8080)" Margin="0,0,0,4" />
+                <ui:TextBox PlaceholderText="Direct"
+                            Text="{Binding ProxyUrl, UpdateSourceTrigger=PropertyChanged}"
+                            Margin="0,0,0,16" />
+
+                <ui:TextBlock FontTypography="Subtitle" Text="Schedule" Margin="0,4,0,8" />
+
+                <CheckBox Content="Only download during a scheduled time window"
+                          IsChecked="{Binding ScheduleEnabled}"
+                          Margin="0,0,0,8" />
+
+                <Grid IsEnabled="{Binding ScheduleEnabled}" Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <ui:TextBlock Text="Start (HH:mm)" Margin="0,0,0,4" />
+                        <ui:TextBox Text="{Binding ScheduleStart, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <ui:TextBlock Text="End (HH:mm)" Margin="0,0,0,4" />
+                        <ui:TextBox Text="{Binding ScheduleEnd, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Grid>
+
+                <ui:TextBlock FontTypography="Subtitle" Text="Appearance" Margin="0,4,0,8" />
+
+                <ui:TextBlock Text="Theme" Margin="0,0,0,4" />
+                <ComboBox ItemsSource="{Binding Themes}"
+                          SelectedItem="{Binding Theme}"
+                          Margin="0,0,0,8"
+                          MinWidth="220"
+                          HorizontalAlignment="Left" />
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</ui:FluentWindow>
