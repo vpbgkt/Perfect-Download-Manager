@@ -59,14 +59,9 @@
                     <ListBox x:Name="CategoryList"
                              ItemsSource="{Binding Categories}"
                              SelectedItem="{Binding SelectedCategory}"
+                             DisplayMemberPath="Label"
                              Background="Transparent"
-                             BorderThickness="0">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Converter={StaticResource CategoryLabel}}" />
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                             BorderThickness="0" />
                 </StackPanel>
             </Border>
 
@@ -103,8 +98,7 @@
                                Content="Remove"
                                Appearance="Secondary"
                                Icon="{ui:SymbolIcon Delete24}"
-                               Command="{Binding RemoveCommand}"
-                               CommandParameter="{Binding SelectedItem}" />
+                               Click="OnRemoveSelected" />
                     <ui:Button Margin="8,0,0,0"
                                Content="Settings"
                                Appearance="Secondary"
@@ -185,16 +179,7 @@
                                       CommandParameter="{Binding PlacementTarget.SelectedItem,
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             <Separator />
-                            <MenuItem Header="Remove from list"
-                                      Command="{Binding PlacementTarget.DataContext.RemoveCommand,
-                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                      CommandParameter="{Binding PlacementTarget.SelectedItem,
-                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                            <MenuItem Header="Delete file and remove"
-                                      Command="{Binding PlacementTarget.DataContext.DeleteWithFilesCommand,
-                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                      CommandParameter="{Binding PlacementTarget.SelectedItem,
-                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            <MenuItem Header="Remove / Delete..." Click="OnRemoveSelected" />
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                 </DataGrid>

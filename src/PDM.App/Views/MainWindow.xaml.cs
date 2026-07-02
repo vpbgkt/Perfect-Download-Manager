@@ -15,9 +15,7 @@ public partial class MainWindow : FluentWindow
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         DataContext = _viewModel;
         InitializeComponent();
-
-        // Select "All" by default in the sidebar.
-        CategoryList.SelectedIndex = 0;
+        // The "All Downloads" entry is selected by default via the view-model.
     }
 
     private async void OnAddDownload(object sender, RoutedEventArgs e)
@@ -35,6 +33,24 @@ public partial class MainWindow : FluentWindow
                 "The URL could not be added. Make sure it is a valid http:// or https:// address.",
                 "Add download", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private async void OnRemoveSelected(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedItem is not { } item)
+        {
+            MessageBox.Show(this, "Select a download first.", "Remove",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new DeleteConfirmationDialog(item.FileName) { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        await _viewModel.PerformDeleteAsync(item, dialog.DeleteFiles).ConfigureAwait(true);
     }
 
     private async void OnBulkAdd(object sender, RoutedEventArgs e)

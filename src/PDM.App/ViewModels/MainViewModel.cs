@@ -25,7 +25,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ICollectionView Downloads { get; }
 
     [ObservableProperty]
-    private DownloadCategory? _selectedCategory;
+    private CategoryFilterItem _selectedCategory;
 
     [ObservableProperty]
     private string _searchText = string.Empty;
@@ -33,21 +33,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private DownloadItemViewModel? _selectedItem;
 
-    /// <summary>Categories shown in the sidebar; null means "All".</summary>
-    public IReadOnlyList<DownloadCategory?> Categories { get; } = new DownloadCategory?[]
+    /// <summary>Categories shown in the sidebar. The first entry is the "All Downloads" view.</summary>
+    public IReadOnlyList<CategoryFilterItem> Categories { get; } = new[]
     {
-        null,
-        DownloadCategory.General,
-        DownloadCategory.Documents,
-        DownloadCategory.Compressed,
-        DownloadCategory.Music,
-        DownloadCategory.Video,
-        DownloadCategory.Programs
+        CategoryFilterItem.All,
+        CategoryFilterItem.For(DownloadCategory.General),
+        CategoryFilterItem.For(DownloadCategory.Documents),
+        CategoryFilterItem.For(DownloadCategory.Compressed),
+        CategoryFilterItem.For(DownloadCategory.Music),
+        CategoryFilterItem.For(DownloadCategory.Video),
+        CategoryFilterItem.For(DownloadCategory.Programs)
     };
 
     public MainViewModel(AppHost host)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+
+        // Default to the "All Downloads" view.
+        _selectedCategory = Categories[0];
 
         // Seed with anything loaded at startup.
         foreach (ManagedDownload managed in _host.DownloadManager.Downloads)
@@ -65,7 +68,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _host.DownloadManager.ProgressUpdated += OnProgressUpdated;
     }
 
-    partial void OnSelectedCategoryChanged(DownloadCategory? value) => Downloads.Refresh();
+    partial void OnSelectedCategoryChanged(CategoryFilterItem value) => Downloads.Refresh();
 
     partial void OnSearchTextChanged(string value) => Downloads.Refresh();
 
@@ -76,7 +79,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        if (SelectedCategory is { } category && item.Category != category)
+        if (SelectedCategory?.Category is { } category && item.Category != category)
         {
             return false;
         }
@@ -171,22 +174,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand]
-    private async Task RemoveAsync(DownloadItemViewModel? item)
+    /// <summary>
+    /// Removes a download from the list, optionally deleting the file(s) from disk.
+    /// The confirmation prompt lives in the view; this method performs the action once
+    /// the user has confirmed.
+    /// </summary>
+    public async Task PerformDeleteAsync(DownloadItemViewModel item, bool deleteFiles)
     {
-        if (item is not null)
-        {
-            await _host.DownloadManager.RemoveAsync(item.Id, deleteFiles: false).ConfigureAwait(false);
-        }
-    }
-
-    [RelayCommand]
-    private async Task DeleteWithFilesAsync(DownloadItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            await _host.DownloadManager.RemoveAsync(item.Id, deleteFiles: true).ConfigureAwait(false);
-        }
+        ArgumentNullException.ThrowIfNull(item);
+        await _host.DownloadManager.RemoveAsync(item.Id, deleteFiles).ConfigureAwait(false);
     }
 
     [RelayCommand]
@@ -245,11 +241,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            await _host.DownloadManager.AddAsync(uri, destinationDirectory,
+            ManagedDownload managed = await _host.DownloadManager.AddAsync(uri, destinationDirectory,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            // Give immediate feedback that the download was queued/started.
+            if (_host.Settings.ShowNotifications)
+            {
+                _host.Notifications.ShowInfo("Download added", managed.FileName);
+            }
+
             return true;
         }
-        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
         {
             return false;
         }
