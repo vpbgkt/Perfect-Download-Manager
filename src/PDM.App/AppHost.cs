@@ -133,12 +133,23 @@ public sealed class AppHost : IAsyncDisposable
         // configured with a licensing backend; otherwise run trial-only (no server).
         Licensing.ILicenseTransport transport = Licensing.NullLicenseTransport.Instance;
         Licensing.Signed.LicenseTokenVerifier? verifier = null;
-        if (Licensing.Aws.LicensingConfig.IsConfigured)
+
+        // Anti-tamper: refuse to trust a swapped signing key. If the embedded public key does
+        // not match its pinned hash, the licensing subsystem is considered compromised and the
+        // app falls back to trial-only (no activation) rather than trusting attacker-signed tokens.
+        bool keyIntact = Licensing.Security.TamperGuard.VerifyPublicKeyIntegrity(
+            Licensing.Aws.LicensingConfig.PublicKeyBase64, Licensing.Aws.LicensingConfig.PublicKeyHash);
+
+        if (Licensing.Aws.LicensingConfig.IsConfigured && keyIntact)
         {
             transport = new Licensing.Aws.AwsLicenseTransport(
                 httpProvider.Client, Licensing.Aws.LicensingConfig.ApiBaseUrl);
             verifier = Licensing.Signed.LicenseTokenVerifier.FromBase64(
                 Licensing.Aws.LicensingConfig.PublicKeyBase64);
+        }
+        else if (!keyIntact)
+        {
+            startupLogger.LogError("Licensing public key integrity check failed; activation disabled.");
         }
 
         var licenseService = new LicenseService(licenseStore, transport, verifier);

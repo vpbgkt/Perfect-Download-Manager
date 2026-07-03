@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Repo-wide defaults. Release builds strip debug symbols and enable optimization so shipped
+    binaries carry less information for reverse engineering. Obfuscation of the security-sensitive
+    assembly is a separate, opt-in step (build/obfuscate.ps1).
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Deterministic>true</Deterministic>
+    <!-- Do not embed source or produce a PDB alongside release binaries. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <GenerateDocumentationFile Condition="'$(GenerateDocumentationFile)' == ''">false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

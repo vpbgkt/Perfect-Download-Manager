@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>pdm-native-host</AssemblyName>
+    <RootNamespace>PDM.NativeHost</RootNamespace>
+    <!-- No window; this process is spawned by the browser and talks over stdio. -->
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PDM.Core\PDM.Core.csproj" />
+  </ItemGroup>
+
+</Project>

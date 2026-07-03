@@ -1,147 +1,74 @@
-# Perfect Download Manager — Remaining Work
+# Perfect Download Manager — Status & Remaining Work
 
-This document tracks the features that are **not yet implemented** and the decisions you
-need to make. Everything else (core engine, persistence, WPF UI, settings, scheduler,
-notifications, licensing scaffolding, auto-update) is done, tested, and committed.
+Updated after implementing the AWS serverless licensing backend, signed-token security model,
+browser integration, update launcher, packaging, and hardening.
 
-Last updated after fixing the "All Downloads" filter, add-notification, and delete-confirmation bugs.
+## Done ✔
 
----
+- **Stage 1** — Core download engine (multi-connection, resume, retry, throttling, crash-safe state).
+- **Stage 2** — SQLite catalog, DownloadManager queue, concurrency limit, categories.
+- **Stage 3** — WPF desktop UI (Fluent/Mica, dark/light, tray, drag-and-drop).
+- **Stage 4** — Browser integration: native messaging host + Chromium MV3 extension, forwarding
+  to the running app over a per-user named pipe. Proven end-to-end (pipe accepts & enqueues).
+- **Stage 5** — Settings, quiet-hours scheduler, notifications, overwrite policy, post-download
+  hook, bulk add, single-instance, Serilog logging.
+- **Stage 6** — Licensing: **AWS serverless backend live in ap-south-1** (DynamoDB + Lambda +
+  HTTP API), ECDSA-signed license tokens, trial/grace, hardware binding, DPAPI store, revocation.
+  Cross-language interop (Node sign ↔ .NET verify) proven.
+- **Stage 7** — Auto-update: signed manifest + SHA-256 verification + staging, **plus the
+  update-apply launcher with rollback and zip-slip protection** (Stage 8a).
+- **Stage 8b (partial)** — Publish script (`build/publish.ps1`) producing the distributable +
+  update zip; WiX MSI config (`installer/Package.wxs` + `build/build-installer.ps1`).
+- **Security hardening** — signed-token anti-forgery, key-swap detection (pinned hash),
+  debugger detection, DPAPI at-rest, Release symbol stripping, obfuscation config. See SECURITY.md.
 
-## Can we ship without a code-signing certificate?
+**101 tests passing** (33 core + 28 infrastructure + 26 licensing + 11 updater + 3 update-launcher).
 
-**Yes — for development, internal testing, and early access, absolutely.** The app builds,
-runs, and self-updates without one. A certificate is **not a code dependency**; it is a
-trust/UX and distribution concern.
+## Remaining ⏳
 
-What you lose *without* a certificate:
+### 1. Code signing (needed only for public distribution)
+Not required to build/run/test. When distributing publicly, buy a cert (OV ~$200–350/yr,
+EV ~$350–600/yr, or Azure Trusted Signing ~$10/mo) and add a `signtool sign /fd sha256 /tr <ts>`
+step over PDM.exe, the helper exes, and the .msi. Without it users see a SmartScreen "Run anyway"
+prompt. The auto-updater is already safe unsigned (ECDSA + SHA-256 verification).
 
-- **SmartScreen warning**: Windows shows a blue "Windows protected your PC" prompt on first
-  run of the downloaded `.exe`/installer until the app earns reputation. Users can click
-  "More info → Run anyway".
-- **Publisher shows as "Unknown"** in the UAC / install dialog.
-- **Auto-update trust**: our updater already verifies packages with an **ECDSA signature +
-  SHA-256** independent of Authenticode, so updates are cryptographically safe even unsigned.
-  A code-signing cert would additionally satisfy Windows' own Authenticode checks.
+### 2. Verify the MSI build on a release machine
+`installer/Package.wxs` + `build/build-installer.ps1` are written for WiX v5 but have not been
+built here (the `wix` tool wasn't installed). Run `./build/publish.ps1` then
+`./build/build-installer.ps1` on your build machine and adjust harvesting if needed. The
+zip-based portable/update package (`build/publish.ps1`) is verified working.
 
-Recommendation: **build and validate everything now without a cert.** Buy a certificate only
-when you are ready to distribute publicly. Options when that time comes:
+### 3. Browser extension store submissions
+The Chromium MV3 extension works via sideload today. For public release: replace placeholder
+icons, submit to Chrome Web Store (~$5 one-time), Edge Add-ons, and (with a manifest variant)
+Firefox AMO. After publishing, register the native host with the real extension IDs via
+`browser-extension/install-native-host.ps1` (the installer can automate this).
 
-| Type | Approx. cost/yr | SmartScreen behavior |
-|---|---|---|
-| OV (Organization Validation) code-signing | ~$200–350 | Warning until reputation builds |
-| EV (Extended Validation) code-signing | ~$350–600 | Instant reputation, no warning |
-| Azure Trusted Signing (if eligible) | ~$10/mo | Managed, good reputation |
+### 4. Native Windows 11 toasts (optional polish)
+Current balloon notifications work everywhere. Once the app has an AUMID (from the MSIX path or a
+registered shortcut), switch to `CommunityToolkit` toast APIs for richer notifications.
 
-Nothing in the codebase blocks on this. When you get a cert, signing is a one-line
-`signtool sign` step added to the packaging pipeline (Stage 8 below).
+### 5. Wire periodic license re-validation UI (optional)
+Startup already does a background `RefreshAsync`. Optionally add a visible "last validated" time
+and a manual "re-check" button in the License dialog.
 
----
+## Operating the licensing backend
 
-## Stage 4 — Browser Integration (deferred)
-
-Goal: capture downloads from Chrome, Edge, Brave, Opera, and Firefox, plus a right-click
-"Download with PDM" and automatic link capture.
-
-### What needs to be built
-
-1. **Native Messaging Host** (`PDM.NativeHost`, a small console exe)
-   - Reads length-prefixed JSON messages from stdin, writes responses to stdout (the Chrome
-     Native Messaging protocol; Firefox uses the same wire format).
-   - Translates browser messages (`{ "url": "...", "referrer": "...", "cookies": "...",
-     "userAgent": "..." }`) into calls on the existing `DownloadManager.AddAsync`.
-   - Reuses `PDM.Core` + `PDM.Infrastructure` directly (or talks to the running app over a
-     local named pipe so a single manager owns the queue).
-
-2. **Host registration** (installer step)
-   - Chrome/Edge/Brave/Opera: write a native-messaging manifest JSON to
-     `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.pdm.host` (and the Edge/Brave/Opera
-     equivalents) pointing at the host exe, with `allowed_origins` listing the extension IDs.
-   - Firefox: manifest under `HKCU\Software\Mozilla\NativeMessagingHosts\com.pdm.host` with
-     `allowed_extensions`.
-
-3. **Browser extension** (MV3)
-   - One shared MV3 extension for Chromium browsers (Chrome/Edge/Brave/Opera share the API).
-   - A Firefox variant (MV3 with minor manifest differences).
-   - Uses `chrome.downloads.onDeterminingFilename` / `onCreated` to intercept, `chrome.contextMenus`
-     for right-click "Download with PDM", and `chrome.runtime.connectNative` to hand the URL to
-     the host.
-   - Option to cancel the browser's own download once PDM accepts the URL.
-
-### Design decisions you need to make
-
-- **Single-instance ownership**: should the native host start its own manager, or forward to
-  the already-running app via a named pipe? (Recommended: named pipe to the running app so the
-  queue, settings, and concurrency limit are shared. Requires adding a tiny IPC listener to
-  `PDM.App`.)
-- **Extension distribution**: Chrome Web Store + Edge Add-ons + Firefox AMO listings (each has
-  its own review + fee: Chrome ~$5 one-time, others free) vs. self-hosted/enterprise sideload.
-- **Cookie/session forwarding**: whether to pass browser cookies to PDM for authenticated
-  downloads (privacy + security implications; opt-in recommended).
-
-Estimated effort: 3–5 days including store submissions.
-
----
-
-## Stage 8 — Packaging, Installer & Distribution
-
-Goal: turn the built binaries into something a customer can install and that can update itself.
-
-### What needs to be built
-
-1. **Update-apply launcher** (`PDM.UpdateLauncher`, tiny exe) — *the last mile of auto-update*
-   - The `UpdateService` already downloads + verifies the package into a staging folder.
-   - The launcher runs on next start (or on user confirmation): waits for the main process to
-     exit, swaps the staged files into the install dir, then relaunches PDM.
-   - **Rollback**: back up the current version first; if the swap or first relaunch fails,
-     restore the backup. (~100–150 lines.)
-
-2. **Installer**
-   - **MSIX** (recommended for Windows 11): clean install/uninstall, automatic AUMID for native
-     toast notifications, per-user install without admin. Downside: needs signing to install
-     outside dev mode.
-   - **MSI (WiX Toolset)** as an alternative: works everywhere, more control, familiar to users.
-   - The installer also registers the browser native-messaging manifests (Stage 4) if present.
-
-3. **Native toast notifications** (optional upgrade)
-   - Once the app has an AUMID (from MSIX or a manually registered shortcut), replace the current
-     WinForms balloon tips with real Windows 11 toasts via `Microsoft.Toolkit.Uwp.Notifications`
-     / `CommunityToolkit` toast APIs. Current balloon tips work fine in the meantime.
-
-4. **Code signing** (see top section) — a `signtool sign /fd sha256 /tr <timestamp>` step over
-   the exe, launcher, and installer, added once you have a certificate.
-
-### Decisions you need to make
-
-- MSIX vs MSI (recommendation: MSIX for Win11-first, MSI if you need broad/enterprise control).
-- Where the update manifest + packages are hosted (S3 / GitHub Releases / your own CDN). Then set
-  `AppSettings.UpdateManifestUrl` and embed the public key in `AppSettings.UpdatePublicKeyBase64`.
-- Per-user vs per-machine install.
-
-Estimated effort: 3–4 days (launcher + installer + wiring the signing step).
-
----
-
-## Licensing — server decision (paused by you)
-
-The client side is done: trial, grace, hardware binding, DPAPI-encrypted local store, and the
-`ILicenseTransport` seam. What remains is **choosing and wiring the server**:
-
-- **Recommended: self-host Keygen CE** on a ~$5/mo VM — full feature set, ~$60–120/yr, you own the data.
-- Keygen Cloud (Std tier ~$99–299/mo) if you want zero-ops + SLA.
-- Custom AWS Lambda + DynamoDB (~$1–5/mo but 2–4 weeks of dev + ongoing security ownership).
-
-When decided, implement a `KeygenLicenseTransport : ILicenseTransport` (~100 lines calling the
-license validate/activate REST endpoints) and register it in `AppHost.CreateAsync`. No other
-code changes are needed — the trial/grace/binding logic already consumes the transport.
-
----
+- Deployed stack: `pdm-licensing` (region ap-south-1). API base URL is embedded in
+  `LicensingConfig.ApiBaseUrl`; public key + pinned hash in `LicensingConfig`.
+- Mint a license: `node backend/licensing/admin/create-license.mjs --region ap-south-1 --table pdm-licenses --owner "Name" --max-activations 3 [--expires 2027-01-01] [--features pro]`
+- Rotate signing key: `backend/licensing/deploy.ps1 -RotateKeys` (then update the embedded public
+  key + pinned hash and ship a new build).
+- Tear down: `aws cloudformation delete-stack --stack-name pdm-licensing --region ap-south-1`
+  (also remove the SSM parameter and deploy bucket).
 
 ## Summary checklist
 
-- [ ] Stage 4 — Native messaging host + MV3 extensions (Chrome/Edge/Brave/Opera/Firefox)
-- [ ] Stage 8a — Update-apply launcher with rollback
-- [ ] Stage 8b — MSIX or MSI installer (+ browser host registration)
-- [ ] Stage 8c — Native Windows 11 toasts (after AUMID exists) — optional
-- [ ] Stage 8d — Code signing (buy cert, add signtool step) — needed only for public distribution
-- [ ] Licensing — pick server, implement `KeygenLicenseTransport`, register in `AppHost`
+- [x] Stage 4 — Browser integration
+- [x] Stage 8a — Update launcher with rollback
+- [x] Stage 8b — Publish script + WiX config (verify MSI build on release machine)
+- [x] Licensing — AWS serverless backend, signed tokens, deployed & tested
+- [x] Security hardening — anti-forgery, tamper detection, obfuscation config, SECURITY.md
+- [ ] Code signing (public distribution only)
+- [ ] Extension store submissions + final icons
+- [ ] Verify MSI build with WiX tool on release machine

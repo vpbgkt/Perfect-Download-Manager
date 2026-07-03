@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Obfuscar configuration for release hardening.
+
+  Scope: PDM.Licensing only. Its PUBLIC API is preserved (KeepPublicApi=true) because the WPF
+  app references it by name; its PRIVATE/INTERNAL members are renamed and control flow obscured
+  (HidePrivateApi=true), hiding the token-verification and tamper-check internals from casual
+  decompilation. String hiding is enabled to obscure the embedded public key handling.
+
+  PDM.App is deliberately NOT obfuscated: WPF XAML data-binding resolves property names as
+  strings at runtime, so renaming view-model members would break the UI.
+
+  Paths are supplied by build/obfuscate.ps1 via -Var overrides.
+-->
+<Obfuscator>
+  <Var name="InPath" value="." />
+  <Var name="OutPath" value=".\obfuscated" />
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="HideStrings" value="true" />
+  <Var name="Optimize" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+
+  <Module file="$(InPath)\PDM.Licensing.dll" />
+</Obfuscator>

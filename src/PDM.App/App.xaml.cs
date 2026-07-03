@@ -19,6 +19,7 @@ public partial class App : Application
     public static AppHost? Host { get; private set; }
 
     private SingleInstance? _instance;
+    private Services.DownloadRequestListener? _browserListener;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -54,10 +55,40 @@ public partial class App : Application
         var mainWindow = new MainWindow(new MainViewModel(Host));
         MainWindow = mainWindow;
         mainWindow.Show();
+
+        StartBrowserListener();
+    }
+
+    private void StartBrowserListener()
+    {
+        if (Host is null)
+        {
+            return;
+        }
+
+        var logger = Host.LoggerFactory.CreateLogger("PDM.BrowserIntegration");
+        _browserListener = new Services.DownloadRequestListener(async request =>
+        {
+            if (!Uri.TryCreate(request.Url, UriKind.Absolute, out Uri? uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                return;
+            }
+
+            await Host.DownloadManager.AddAsync(uri, request.Directory, request.FileName).ConfigureAwait(false);
+        }, logger);
+
+        _browserListener.Start();
     }
 
     protected override async void OnExit(ExitEventArgs e)
     {
+        if (_browserListener is not null)
+        {
+            await _browserListener.DisposeAsync().ConfigureAwait(false);
+            _browserListener = null;
+        }
+
         if (Host is not null)
         {
             await Host.DisposeAsync().ConfigureAwait(false);

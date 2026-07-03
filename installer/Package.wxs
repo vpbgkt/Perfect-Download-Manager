@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX v5 installer definition for Perfect Download Manager.
+
+  Builds a per-user MSI that installs the published app (PDM.exe + native host + update launcher)
+  and a Start Menu shortcut. Per-user scope avoids requiring admin rights and matches the app's
+  per-user data model. Harvests everything under $(PublishDir) produced by build/publish.ps1.
+
+  Build with build/build-installer.ps1 (installs the 'wix' dotnet tool). Requires that
+  ./build/publish.ps1 has produced dist/PDM first.
+
+  Note: this MSI is unsigned. For public distribution, sign PDM.exe, the helper exes, and the
+  resulting .msi with a code-signing certificate (see docs/REMAINING-WORK.md).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="Perfect Download Manager"
+           Manufacturer="Perfect Download Manager"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="7C3F2A9E-4B1D-4E6A-9F2C-1A2B3C4D5E6F"
+           Scope="perUser"
+           Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Perfect Download Manager is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Perfect Download Manager" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuFolder" Name="Perfect Download Manager" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Perfect Download Manager" Level="1">
+      <!-- Harvest the published output directory into INSTALLFOLDER. -->
+      <Files Directory="INSTALLFOLDER" Include="$(var.PublishDir)\**" />
+      <ComponentGroupRef Id="ShortcutComponents" />
+    </Feature>
+
+    <ComponentGroup Id="ShortcutComponents" Directory="AppMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="B2E5D1C4-3A6F-4C8B-8D2E-9F0A1B2C3D4E">
+        <Shortcut Id="PdmShortcut"
+                  Name="Perfect Download Manager"
+                  Target="[INSTALLFOLDER]PDM.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\PerfectDownloadManager"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+  </Package>
+</Wix>

@@ -6,6 +6,10 @@ obj/
 artifacts/
 publish/
 out/
+dist/
+
+# dotnet local tool manifest is fine to commit; obfuscated output is not
+**/obfuscated/
 
 # NuGet
 *.nupkg
