@@ -23,4 +23,10 @@ public sealed class LicenseRecord
 
     /// <summary>Human-friendly account name returned by the server, if any.</summary>
     public string? Owner { get; set; }
+
+    /// <summary>The server-signed license token; the authoritative entitlement, verified locally.</summary>
+    public string? SignedToken { get; set; }
+
+    /// <summary>Feature flags granted by the license.</summary>
+    public string[]? Features { get; set; }
 }

@@ -49,3 +49,18 @@ $RECYCLE.BIN/
 
 # Windows Installer logs
 *.msi.log
+
+# Node / backend
+node_modules/
+backend/**/lambda.zip
+backend/**/_keygen.mjs
+backend/**/_derive-pub.mjs
+*.pem
+
+# Local scratch
+stack-info.json
+deploy-out.log
+pubkey.txt
+testkey.txt
+activate-resp.json
+vector.json

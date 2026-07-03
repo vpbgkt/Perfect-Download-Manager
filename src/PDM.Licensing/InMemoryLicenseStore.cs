@@ -39,7 +39,9 @@ public sealed class InMemoryLicenseStore : ILicenseStore
             BoundFingerprint = source.BoundFingerprint,
             LastValidatedUtc = source.LastValidatedUtc,
             ExpiresUtc = source.ExpiresUtc,
-            Owner = source.Owner
+            Owner = source.Owner,
+            SignedToken = source.SignedToken,
+            Features = source.Features is null ? null : (string[])source.Features.Clone()
         };
     }
 }

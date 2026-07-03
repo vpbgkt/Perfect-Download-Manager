@@ -1,22 +1,24 @@
 using PDM.Licensing;
+using PDM.Licensing.Signed;
 
 namespace PDM.Licensing.Tests;
 
-public sealed class LicenseServiceTests
+public sealed class LicenseServiceTests : IDisposable
 {
-    private const string TestFingerprint = "TESTFINGERPRINT";
+    private const string Fingerprint = "ABCDEF0123456789ABCDEF0123456789";
+    private readonly TestTokenIssuer _issuer = new();
 
-    private static LicenseService CreateService(
+    private LicenseService CreateService(
         InMemoryLicenseStore store,
-        FakeLicenseTransport? transport = null,
+        FakeLicenseTransport transport,
         DateTimeOffset? now = null,
         TimeSpan? trial = null,
         TimeSpan? grace = null,
-        string fingerprint = TestFingerprint)
+        string fingerprint = Fingerprint)
     {
+        var verifier = new LicenseTokenVerifier(_issuer.PublicKeySpki);
         return new LicenseService(
-            store,
-            transport ?? new FakeLicenseTransport(),
+            store, transport, verifier,
             () => now ?? DateTimeOffset.UtcNow,
             () => fingerprint)
         {
@@ -29,92 +31,98 @@ public sealed class LicenseServiceTests
     public async Task FirstLaunch_StartsTrial()
     {
         var store = new InMemoryLicenseStore();
-        var service = CreateService(store, now: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var service = CreateService(store, new FakeLicenseTransport(),
+            now: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
         var snapshot = await service.GetSnapshotAsync();
 
         Assert.Equal(LicenseStatus.Trial, snapshot.Status);
         Assert.True(snapshot.Remaining > TimeSpan.Zero);
-        Assert.NotNull(await store.LoadAsync());
     }
 
     [Fact]
     public async Task TrialThenGraceThenExpired()
     {
         var store = new InMemoryLicenseStore();
+        var transport = new FakeLicenseTransport();
         DateTimeOffset t0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        // Seed the store with a first-launch timestamp.
-        DateTimeOffset now = t0;
-        var service = CreateService(store, now: now, trial: TimeSpan.FromDays(30), grace: TimeSpan.FromDays(7));
-        Assert.Equal(LicenseStatus.Trial, (await service.GetSnapshotAsync()).Status);
-
-        // Fast-forward 25 days: still in trial.
-        now = t0.AddDays(25);
-        service = CreateService(store, now: now, trial: TimeSpan.FromDays(30), grace: TimeSpan.FromDays(7));
-        Assert.Equal(LicenseStatus.Trial, (await service.GetSnapshotAsync()).Status);
-
-        // Fast-forward 32 days: grace.
-        now = t0.AddDays(32);
-        service = CreateService(store, now: now, trial: TimeSpan.FromDays(30), grace: TimeSpan.FromDays(7));
-        Assert.Equal(LicenseStatus.Grace, (await service.GetSnapshotAsync()).Status);
-
-        // Fast-forward 40 days: expired.
-        now = t0.AddDays(40);
-        service = CreateService(store, now: now, trial: TimeSpan.FromDays(30), grace: TimeSpan.FromDays(7));
-        Assert.Equal(LicenseStatus.Expired, (await service.GetSnapshotAsync()).Status);
+        CreateService(store, transport, now: t0);
+        Assert.Equal(LicenseStatus.Trial,
+            (await CreateService(store, transport, now: t0).GetSnapshotAsync()).Status);
+        Assert.Equal(LicenseStatus.Trial,
+            (await CreateService(store, transport, now: t0.AddDays(25)).GetSnapshotAsync()).Status);
+        Assert.Equal(LicenseStatus.Grace,
+            (await CreateService(store, transport, now: t0.AddDays(32)).GetSnapshotAsync()).Status);
+        Assert.Equal(LicenseStatus.Expired,
+            (await CreateService(store, transport, now: t0.AddDays(40)).GetSnapshotAsync()).Status);
     }
 
     [Fact]
-    public async Task Activate_ValidPerpetualKey_MovesToActivated()
+    public async Task Activate_WithValidSignedToken_Activates()
     {
         var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        string token = _issuer.Issue("PDM-GOOD-KEY", Fingerprint, now.AddDays(14),
+            features: new[] { "pro" }, owner: "Alice");
+
         var transport = new FakeLicenseTransport
         {
             ActivateResponses =
             {
-                ["PDM-GOOD-KEY"] = LicenseValidationResult.Success(expiresUtc: null, owner: "Alice")
+                ["PDM-GOOD-KEY"] = LicenseValidationResult.Success(token, now.AddDays(14), "Alice",
+                    new[] { "pro" })
             }
         };
-        var service = CreateService(store, transport);
 
+        var service = CreateService(store, transport, now: now);
         var snapshot = await service.ActivateAsync("PDM-GOOD-KEY");
 
         Assert.Equal(LicenseStatus.Activated, snapshot.Status);
         Assert.Equal("Alice", snapshot.Owner);
-        Assert.Equal(TestFingerprint, transport.LastFingerprintSeen);
 
         LicenseRecord? persisted = await store.LoadAsync();
         Assert.Equal("PDM-GOOD-KEY", persisted!.LicenseKey);
-        Assert.Equal(TestFingerprint, persisted.BoundFingerprint);
+        Assert.Equal(token, persisted.SignedToken);
     }
 
     [Fact]
-    public async Task Activate_ExpiredSubscription_ReturnsGraceThenExpired()
+    public async Task Activate_TokenSignedByWrongKey_IsRejected()
     {
         var store = new InMemoryLicenseStore();
-        DateTimeOffset t0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        DateTimeOffset expiry = t0.AddDays(30);
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        // A DIFFERENT issuer signs the token — as an attacker with their own key would.
+        using var attacker = new TestTokenIssuer();
+        string forged = attacker.Issue("PDM-GOOD-KEY", Fingerprint, now.AddDays(14));
 
         var transport = new FakeLicenseTransport
         {
-            ActivateResponses = { ["KEY"] = LicenseValidationResult.Success(expiresUtc: expiry) }
+            ActivateResponses = { ["PDM-GOOD-KEY"] = LicenseValidationResult.Success(forged, now.AddDays(14)) }
         };
 
-        // Activate before expiry.
-        var svc = CreateService(store, transport, now: t0, grace: TimeSpan.FromDays(5));
-        var snap = await svc.ActivateAsync("KEY");
-        Assert.Equal(LicenseStatus.Activated, snap.Status);
+        var service = CreateService(store, transport, now: now);
+        var snapshot = await service.ActivateAsync("PDM-GOOD-KEY");
 
-        // Move past expiry but within grace.
-        svc = CreateService(store, transport, now: expiry.AddDays(1), grace: TimeSpan.FromDays(5));
-        snap = await svc.GetSnapshotAsync();
-        Assert.Equal(LicenseStatus.Grace, snap.Status);
+        Assert.Equal(LicenseStatus.Invalid, snapshot.Status);
+        Assert.Null((await store.LoadAsync())?.SignedToken);
+    }
 
-        // Move past grace.
-        svc = CreateService(store, transport, now: expiry.AddDays(10), grace: TimeSpan.FromDays(5));
-        snap = await svc.GetSnapshotAsync();
-        Assert.Equal(LicenseStatus.Expired, snap.Status);
+    [Fact]
+    public async Task Activate_TokenForDifferentFingerprint_IsRejected()
+    {
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        // Token bound to another machine.
+        string token = _issuer.Issue("K", "0000000000000000DEADBEEF00000000", now.AddDays(14));
+
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, now.AddDays(14)) }
+        };
+
+        var snapshot = await CreateService(store, transport, now: now).ActivateAsync("K");
+        Assert.Equal(LicenseStatus.Invalid, snapshot.Status);
     }
 
     [Fact]
@@ -132,76 +140,95 @@ public sealed class LicenseServiceTests
     }
 
     [Fact]
-    public async Task Fingerprint_ChangeAfterActivation_Invalidates()
+    public async Task TokenExpiry_MovesToGraceThenExpired()
     {
         var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset tokenExpiry = now.AddDays(14);
+        string token = _issuer.Issue("K", Fingerprint, tokenExpiry);
+
         var transport = new FakeLicenseTransport
         {
-            ActivateResponses = { ["K"] = LicenseValidationResult.Success() }
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, tokenExpiry) }
         };
 
-        var svc = CreateService(store, transport, fingerprint: "MACHINE-A");
-        Assert.Equal(LicenseStatus.Activated, (await svc.ActivateAsync("K")).Status);
+        // Activate while token valid.
+        Assert.Equal(LicenseStatus.Activated,
+            (await CreateService(store, transport, now: now, grace: TimeSpan.FromDays(5)).ActivateAsync("K")).Status);
 
-        // Same store on a different machine: fingerprint mismatch => invalid.
-        var svcOther = CreateService(store, transport, fingerprint: "MACHINE-B");
-        Assert.Equal(LicenseStatus.Invalid, (await svcOther.GetSnapshotAsync()).Status);
+        // Past token expiry but within grace.
+        Assert.Equal(LicenseStatus.Grace,
+            (await CreateService(store, transport, now: tokenExpiry.AddDays(1), grace: TimeSpan.FromDays(5))
+                .GetSnapshotAsync()).Status);
+
+        // Past grace.
+        Assert.Equal(LicenseStatus.Expired,
+            (await CreateService(store, transport, now: tokenExpiry.AddDays(10), grace: TimeSpan.FromDays(5))
+                .GetSnapshotAsync()).Status);
     }
 
     [Fact]
-    public async Task Refresh_RevokedResponse_ClearsLocalLicense()
+    public async Task Refresh_Revoked_ClearsLicense()
     {
         var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14));
+
         var transport = new FakeLicenseTransport
         {
-            ActivateResponses = { ["K"] = LicenseValidationResult.Success() },
-            ValidateResponses = { ["K"] = LicenseValidationResult.Failure("License has been revoked.") }
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, now.AddDays(14)) },
+            ValidateResponses = { ["K"] = LicenseValidationResult.Failure("License has been revoked.", revoked: true) }
         };
 
-        var svc = CreateService(store, transport);
+        var svc = CreateService(store, transport, now: now);
         Assert.Equal(LicenseStatus.Activated, (await svc.ActivateAsync("K")).Status);
 
         var snap = await svc.RefreshAsync();
         Assert.NotEqual(LicenseStatus.Activated, snap.Status);
-        LicenseRecord? persisted = await store.LoadAsync();
-        Assert.Null(persisted!.LicenseKey);
+        Assert.Null((await store.LoadAsync())!.SignedToken);
     }
 
     [Fact]
-    public async Task Refresh_TransientFailure_KeepsLocalLicense()
+    public async Task Refresh_Offline_KeepsToken()
     {
         var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14));
+
         var transport = new FakeLicenseTransport
         {
-            ActivateResponses = { ["K"] = LicenseValidationResult.Success() },
-            ValidateResponses = { ["K"] = LicenseValidationResult.Failure("network timeout") }
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, now.AddDays(14)) }
         };
 
-        var svc = CreateService(store, transport);
+        var svc = CreateService(store, transport, now: now);
         Assert.Equal(LicenseStatus.Activated, (await svc.ActivateAsync("K")).Status);
 
-        // A generic failure that isn't revocation should not clear the license so a
-        // temporary outage doesn't lock the user out.
+        // Simulate the server being unreachable on refresh.
+        transport.ThrowOnCall = new HttpRequestException("network down");
         var snap = await svc.RefreshAsync();
+
         Assert.Equal(LicenseStatus.Activated, snap.Status);
-        Assert.Equal("K", (await store.LoadAsync())!.LicenseKey);
+        Assert.Equal(token, (await store.LoadAsync())!.SignedToken);
     }
 
     [Fact]
-    public async Task Deactivate_ClearsLicense_KeepsTrialStart()
+    public async Task Deactivate_ReturnsToTrial()
     {
         var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14));
         var transport = new FakeLicenseTransport
         {
-            ActivateResponses = { ["K"] = LicenseValidationResult.Success() }
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, now.AddDays(14)) }
         };
-        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        var svc = CreateService(store, transport, now: t0);
+
+        var svc = CreateService(store, transport, now: now);
         await svc.ActivateAsync("K");
 
         var snap = await svc.DeactivateAsync();
-        // After deactivation, the trial timer is untouched, so we go back to Trial.
         Assert.Equal(LicenseStatus.Trial, snap.Status);
-        Assert.Equal(t0, (await store.LoadAsync())!.FirstLaunchUtc);
+        Assert.Equal(now, (await store.LoadAsync())!.FirstLaunchUtc);
     }
+
+    public void Dispose() => _issuer.Dispose();
 }

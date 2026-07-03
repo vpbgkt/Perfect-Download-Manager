@@ -128,8 +128,32 @@ public sealed class AppHost : IAsyncDisposable
         await manager.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
         var licenseStore = new DpapiLicenseStore(AppPaths.LicenseFile);
-        var licenseService = new LicenseService(licenseStore);
+
+        // Wire the real AWS-backed transport + signed-token verifier when the build was
+        // configured with a licensing backend; otherwise run trial-only (no server).
+        Licensing.ILicenseTransport transport = Licensing.NullLicenseTransport.Instance;
+        Licensing.Signed.LicenseTokenVerifier? verifier = null;
+        if (Licensing.Aws.LicensingConfig.IsConfigured)
+        {
+            transport = new Licensing.Aws.AwsLicenseTransport(
+                httpProvider.Client, Licensing.Aws.LicensingConfig.ApiBaseUrl);
+            verifier = Licensing.Signed.LicenseTokenVerifier.FromBase64(
+                Licensing.Aws.LicensingConfig.PublicKeyBase64);
+        }
+
+        var licenseService = new LicenseService(licenseStore, transport, verifier);
         LicenseSnapshot license = await licenseService.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+
+        // Best-effort background re-validation so revocations and token refreshes propagate
+        // without blocking startup. Failures are swallowed (offline tolerance).
+        if (Licensing.Aws.LicensingConfig.IsConfigured && license.Status != LicenseStatus.Trial)
+        {
+            _ = Task.Run(async () =>
+            {
+                try { await licenseService.RefreshAsync().ConfigureAwait(false); }
+                catch { /* offline: token TTL + grace govern access */ }
+            }, cancellationToken);
+        }
 
         startupLogger.LogInformation("Startup complete. License status: {Status}", license.Status);
 

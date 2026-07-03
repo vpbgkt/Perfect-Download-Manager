@@ -17,11 +17,24 @@ public sealed class LicenseValidationResult
     /// <summary>Human-readable message for the UI when <see cref="IsValid"/> is false.</summary>
     public string? Message { get; init; }
 
-    public static LicenseValidationResult Failure(string message) =>
-        new() { IsValid = false, Message = message };
+    /// <summary>
+    /// The server-signed license token (base64url payload + signature). This is the
+    /// authoritative entitlement; the client stores it and verifies its signature locally.
+    /// </summary>
+    public string? Token { get; init; }
 
-    public static LicenseValidationResult Success(DateTimeOffset? expiresUtc = null, string? owner = null) =>
-        new() { IsValid = true, ExpiresUtc = expiresUtc, Owner = owner };
+    /// <summary>Feature flags granted by the license, as reported by the server.</summary>
+    public string[]? Features { get; init; }
+
+    /// <summary>True when the server explicitly reported the license as revoked/suspended.</summary>
+    public bool Revoked { get; init; }
+
+    public static LicenseValidationResult Failure(string message, bool revoked = false) =>
+        new() { IsValid = false, Message = message, Revoked = revoked };
+
+    public static LicenseValidationResult Success(
+        string token, DateTimeOffset? expiresUtc = null, string? owner = null, string[]? features = null) =>
+        new() { IsValid = true, Token = token, ExpiresUtc = expiresUtc, Owner = owner, Features = features };
 }
 
 /// <summary>
