@@ -58,6 +58,14 @@ public interface ILicenseTransport
     /// </summary>
     Task<LicenseValidationResult> ValidateAsync(
         string licenseKey, string fingerprint, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Fetches the server-signed trial anchor for this machine. The server remembers the first
+    /// time each fingerprint was seen, so the returned token carries the original trial start
+    /// even after a reinstall — this is what prevents trial resets. Returns a token string, or
+    /// null on failure (offline: the client falls back to a local trial start).
+    /// </summary>
+    Task<string?> GetTrialAnchorAsync(string fingerprint, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -81,5 +89,10 @@ public sealed class NullLicenseTransport : ILicenseTransport
     {
         return Task.FromResult(LicenseValidationResult.Failure(
             "Online validation is not configured."));
+    }
+
+    public Task<string?> GetTrialAnchorAsync(string fingerprint, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<string?>(null);
     }
 }

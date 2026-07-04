@@ -15,6 +15,7 @@ public sealed class AwsLicenseTransport : ILicenseTransport
     private readonly HttpClient _client;
     private readonly Uri _activateUri;
     private readonly Uri _validateUri;
+    private readonly Uri _trialUri;
 
     public AwsLicenseTransport(HttpClient client, string apiBaseUrl)
     {
@@ -24,6 +25,7 @@ public sealed class AwsLicenseTransport : ILicenseTransport
         string baseUrl = apiBaseUrl.TrimEnd('/');
         _activateUri = new Uri($"{baseUrl}/activate");
         _validateUri = new Uri($"{baseUrl}/validate");
+        _trialUri = new Uri($"{baseUrl}/trial");
     }
 
     public Task<LicenseValidationResult> ActivateAsync(
@@ -33,6 +35,23 @@ public sealed class AwsLicenseTransport : ILicenseTransport
     public Task<LicenseValidationResult> ValidateAsync(
         string licenseKey, string fingerprint, CancellationToken cancellationToken = default)
         => CallAsync(_validateUri, licenseKey, fingerprint, cancellationToken);
+
+    public async Task<string?> GetTrialAnchorAsync(string fingerprint, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using HttpResponseMessage response = await _client
+                .PostAsJsonAsync(_trialUri, new { fingerprint }, cancellationToken).ConfigureAwait(false);
+            var body = await response.Content
+                .ReadFromJsonAsync<LicenseResponse>(cancellationToken).ConfigureAwait(false);
+            // The /trial endpoint returns { ok, token, ... }; the token is present only on success.
+            return body?.Token;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 
     private async Task<LicenseValidationResult> CallAsync(
         Uri uri, string licenseKey, string fingerprint, CancellationToken cancellationToken)

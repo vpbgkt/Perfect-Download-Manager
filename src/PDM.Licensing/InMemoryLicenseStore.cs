@@ -41,7 +41,8 @@ public sealed class InMemoryLicenseStore : ILicenseStore
             ExpiresUtc = source.ExpiresUtc,
             Owner = source.Owner,
             SignedToken = source.SignedToken,
-            Features = source.Features is null ? null : (string[])source.Features.Clone()
+            Features = source.Features is null ? null : (string[])source.Features.Clone(),
+            TrialToken = source.TrialToken
         };
     }
 }

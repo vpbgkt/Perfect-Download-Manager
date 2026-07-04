@@ -30,8 +30,8 @@ public readonly record struct LicenseSnapshot(
 /// </summary>
 public sealed class LicenseService
 {
-    /// <summary>Length of the initial trial (from first launch on the current machine).</summary>
-    public static readonly TimeSpan DefaultTrialLength = TimeSpan.FromDays(30);
+    /// <summary>Length of the initial free trial (14 days).</summary>
+    public static readonly TimeSpan DefaultTrialLength = TimeSpan.FromDays(14);
 
     /// <summary>Grace period after the trial or token expires before features lock.</summary>
     public static readonly TimeSpan DefaultGracePeriod = TimeSpan.FromDays(7);
@@ -67,6 +67,50 @@ public sealed class LicenseService
     {
         LicenseRecord record = await LoadOrInitializeAsync(cancellationToken).ConfigureAwait(false);
         return BuildSnapshot(record);
+    }
+
+    /// <summary>
+    /// Fetches the server-signed trial anchor for this machine and stores it, so the trial start
+    /// is authoritative and survives reinstalls. No-op when a license is already active or the
+    /// server is unreachable (the client then falls back to its local trial start).
+    /// Call once at startup after <see cref="GetSnapshotAsync"/>.
+    /// </summary>
+    public async Task EnsureTrialAnchorAsync(CancellationToken cancellationToken = default)
+    {
+        LicenseRecord record = await LoadOrInitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(record.SignedToken))
+        {
+            return; // licensed; trial anchor irrelevant
+        }
+
+        string fingerprint = _fingerprintProvider();
+
+        string? token;
+        try
+        {
+            token = await _transport.GetTrialAnchorAsync(fingerprint, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return; // offline: keep whatever we have
+        }
+
+        if (string.IsNullOrWhiteSpace(token) || _verifier is null)
+        {
+            return;
+        }
+
+        // Only trust an anchor that verifies and is bound to this machine.
+        TrialClaims? claims = _verifier.VerifyTrial(token);
+        if (claims is null ||
+            !string.Equals(claims.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase) ||
+            claims.Type != "trial")
+        {
+            return;
+        }
+
+        record.TrialToken = token;
+        await _store.SaveAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -230,22 +274,40 @@ public sealed class LicenseService
             return BuildLicensedSnapshot(record, now);
         }
 
-        // No license: trial and grace flow.
-        DateTimeOffset trialEnd = record.FirstLaunchUtc + TrialLength;
+        // No license: trial flow. Prefer the server-signed anchor (reinstall-proof) over the
+        // local first-launch time, so deleting local state or the registry cannot reset the trial.
+        (DateTimeOffset trialStart, TimeSpan trialLength) = ResolveTrialWindow(record);
+        DateTimeOffset trialEnd = trialStart + trialLength;
+
         if (now < trialEnd)
         {
             return new LicenseSnapshot(LicenseStatus.Trial, trialEnd - now, null, null);
         }
 
-        TimeSpan sinceTrialEnd = now - trialEnd;
-        if (sinceTrialEnd < GracePeriod)
+        return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, null,
+            "Your free trial has ended. Please activate a license to continue.");
+    }
+
+    /// <summary>
+    /// Determines the effective trial start and length. Uses the verified server anchor when
+    /// present; otherwise the local first-launch time. The anchor cannot be forged (signed) and
+    /// its start is server-authoritative per machine fingerprint.
+    /// </summary>
+    private (DateTimeOffset start, TimeSpan length) ResolveTrialWindow(LicenseRecord record)
+    {
+        if (!string.IsNullOrWhiteSpace(record.TrialToken) && _verifier is not null)
         {
-            return new LicenseSnapshot(LicenseStatus.Grace, GracePeriod - sinceTrialEnd, null,
-                "Your trial has expired. Activate a license to continue.");
+            TrialClaims? claims = _verifier.VerifyTrial(record.TrialToken);
+            if (claims is not null &&
+                claims.Type == "trial" &&
+                string.Equals(claims.Fingerprint, _fingerprintProvider(), StringComparison.OrdinalIgnoreCase))
+            {
+                int days = claims.TrialDays > 0 ? claims.TrialDays : (int)TrialLength.TotalDays;
+                return (claims.TrialStartUtc, TimeSpan.FromDays(days));
+            }
         }
 
-        return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, null,
-            "Your trial period has ended. Please activate a license.");
+        return (record.FirstLaunchUtc, TrialLength);
     }
 
     private LicenseSnapshot BuildLicensedSnapshot(LicenseRecord record, DateTimeOffset now)

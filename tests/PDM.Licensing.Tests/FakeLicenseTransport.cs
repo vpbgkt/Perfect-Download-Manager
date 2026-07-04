@@ -44,4 +44,21 @@ public sealed class FakeLicenseTransport : ILicenseTransport
             ? r
             : LicenseValidationResult.Failure("unknown key"));
     }
+
+    /// <summary>Trial anchor token returned by <see cref="GetTrialAnchorAsync"/>; null by default.</summary>
+    public string? TrialToken { get; set; }
+
+    public int TrialCallCount { get; private set; }
+
+    public Task<string?> GetTrialAnchorAsync(string fingerprint, CancellationToken cancellationToken = default)
+    {
+        TrialCallCount++;
+        LastFingerprintSeen = fingerprint;
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        return Task.FromResult(TrialToken);
+    }
 }

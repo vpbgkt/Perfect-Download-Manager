@@ -22,13 +22,16 @@ if (-not (Test-Path (Join-Path $publishDir "PDM.exe"))) {
     exit 1
 }
 
-# Ensure the WiX tool is available.
+# Ensure the WiX tool is available. Pinned to v5: WiX v7+ requires accepting the paid
+# Open Source Maintenance Fee (OSMF) EULA for commercial use; v5 has the same build syntax
+# and our Package.wxs uses the v4/v5 schema.
+$WixVersion = "5.0.2"
 if (-not (Test-Path (Join-Path $repo ".config/dotnet-tools.json"))) {
     Push-Location $repo; dotnet new tool-manifest | Out-Null; Pop-Location
 }
 Push-Location $repo
-dotnet tool install wix 2>$null | Out-Null
-dotnet tool run wix -- extension add WixToolset.UI.wixext 2>$null | Out-Null
+dotnet tool uninstall wix 2>$null | Out-Null
+dotnet tool install wix --version $WixVersion 2>$null | Out-Null
 Pop-Location
 
 Push-Location $repo

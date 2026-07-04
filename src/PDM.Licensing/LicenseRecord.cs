@@ -29,4 +29,11 @@ public sealed class LicenseRecord
 
     /// <summary>Feature flags granted by the license.</summary>
     public string[]? Features { get; set; }
+
+    /// <summary>
+    /// Server-signed trial anchor for this machine. When present and valid, its start date
+    /// (not the local <see cref="FirstLaunchUtc"/>) governs the trial, so reinstalling cannot
+    /// reset it.
+    /// </summary>
+    public string? TrialToken { get; set; }
 }

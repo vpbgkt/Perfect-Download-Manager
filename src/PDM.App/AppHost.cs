@@ -153,11 +153,20 @@ public sealed class AppHost : IAsyncDisposable
         }
 
         var licenseService = new LicenseService(licenseStore, transport, verifier);
+
+        // Anchor the trial to the server (reinstall-proof) before evaluating state. Best-effort:
+        // if offline, the local trial start is used until the machine reconnects.
+        if (Licensing.Aws.LicensingConfig.IsConfigured && keyIntact)
+        {
+            try { await licenseService.EnsureTrialAnchorAsync(cancellationToken).ConfigureAwait(false); }
+            catch { /* offline: fall back to local trial start */ }
+        }
+
         LicenseSnapshot license = await licenseService.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
 
         // Best-effort background re-validation so revocations and token refreshes propagate
         // without blocking startup. Failures are swallowed (offline tolerance).
-        if (Licensing.Aws.LicensingConfig.IsConfigured && license.Status != LicenseStatus.Trial)
+        if (Licensing.Aws.LicensingConfig.IsConfigured && keyIntact && license.Status != LicenseStatus.Trial)
         {
             _ = Task.Run(async () =>
             {

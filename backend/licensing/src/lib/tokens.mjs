@@ -55,3 +55,12 @@ export function issueToken(claims, privateKeyPem) {
   const payload = buildPayload(claims);
   return { token: signToken(payload, privateKeyPem), payload: JSON.parse(payload) };
 }
+
+/**
+ * Signs an already-constructed claims object (property order is the caller's responsibility).
+ * Used for non-license tokens such as the trial anchor.
+ */
+export function signClaims(claims, privateKeyPem) {
+  const json = JSON.stringify(claims);
+  return { token: signToken(json, privateKeyPem), payload: claims };
+}

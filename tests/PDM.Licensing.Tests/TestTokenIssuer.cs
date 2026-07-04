@@ -46,6 +46,26 @@ internal sealed class TestTokenIssuer : IDisposable
         return $"{B64Url(payloadBytes)}.{B64Url(signature)}";
     }
 
+    /// <summary>Issues a signed trial anchor token (mirrors the server's /trial response).</summary>
+    public string IssueTrial(string fingerprint, DateTimeOffset trialStartUtc, int trialDays = 14)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["v"] = 1,
+            ["type"] = "trial",
+            ["fingerprint"] = fingerprint,
+            ["trialStartUtc"] = trialStartUtc.ToString("O"),
+            ["trialDays"] = trialDays,
+            ["issuedAt"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["nonce"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(16))
+        };
+
+        byte[] payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
+        byte[] signature = _ecdsa.SignData(payloadBytes, HashAlgorithmName.SHA256,
+            DSASignatureFormat.Rfc3279DerSequence);
+        return $"{B64Url(payloadBytes)}.{B64Url(signature)}";
+    }
+
     /// <summary>Signs an arbitrary raw payload (for tamper tests).</summary>
     public string SignRaw(byte[] payloadBytes)
     {

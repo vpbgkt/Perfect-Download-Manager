@@ -41,21 +41,58 @@ public sealed class LicenseServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task TrialThenGraceThenExpired()
+    public async Task Trial_14Days_ThenExpired()
     {
         var store = new InMemoryLicenseStore();
         var transport = new FakeLicenseTransport();
         DateTimeOffset t0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        CreateService(store, transport, now: t0);
+        // Default trial length is 14 days.
         Assert.Equal(LicenseStatus.Trial,
-            (await CreateService(store, transport, now: t0).GetSnapshotAsync()).Status);
+            (await new LicenseService(store, transport, new LicenseTokenVerifier(_issuer.PublicKeySpki),
+                () => t0, () => Fingerprint).GetSnapshotAsync()).Status);
         Assert.Equal(LicenseStatus.Trial,
-            (await CreateService(store, transport, now: t0.AddDays(25)).GetSnapshotAsync()).Status);
-        Assert.Equal(LicenseStatus.Grace,
-            (await CreateService(store, transport, now: t0.AddDays(32)).GetSnapshotAsync()).Status);
+            (await new LicenseService(store, transport, new LicenseTokenVerifier(_issuer.PublicKeySpki),
+                () => t0.AddDays(13), () => Fingerprint).GetSnapshotAsync()).Status);
         Assert.Equal(LicenseStatus.Expired,
-            (await CreateService(store, transport, now: t0.AddDays(40)).GetSnapshotAsync()).Status);
+            (await new LicenseService(store, transport, new LicenseTokenVerifier(_issuer.PublicKeySpki),
+                () => t0.AddDays(15), () => Fingerprint).GetSnapshotAsync()).Status);
+    }
+
+    [Fact]
+    public async Task TrialAnchor_FromServer_OverridesLocalStart_PreventingReset()
+    {
+        // Simulate a reinstall: local first-launch is "now", but the server anchor says the trial
+        // actually started 20 days ago on this fingerprint. The trial must be expired, not reset.
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        string anchor = _issuer.IssueTrial(Fingerprint, now.AddDays(-20), trialDays: 14);
+
+        var transport = new FakeLicenseTransport { TrialToken = anchor };
+        var svc = CreateService(store, transport, now: now);
+
+        // Fresh install would look like a new trial locally...
+        Assert.Equal(LicenseStatus.Trial, (await svc.GetSnapshotAsync()).Status);
+
+        // ...until we anchor to the server, after which the trial is correctly expired.
+        await svc.EnsureTrialAnchorAsync();
+        Assert.Equal(LicenseStatus.Expired, (await svc.GetSnapshotAsync()).Status);
+    }
+
+    [Fact]
+    public async Task TrialAnchor_ForDifferentFingerprint_IsIgnored()
+    {
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        // Anchor bound to another machine — must not be trusted.
+        string anchor = _issuer.IssueTrial("0000FFFF0000FFFF0000FFFF0000FFFF", now.AddDays(-20));
+
+        var transport = new FakeLicenseTransport { TrialToken = anchor };
+        var svc = CreateService(store, transport, now: now);
+
+        await svc.EnsureTrialAnchorAsync();
+        // The foreign anchor is rejected, so the local (fresh) trial still applies.
+        Assert.Equal(LicenseStatus.Trial, (await svc.GetSnapshotAsync()).Status);
     }
 
     [Fact]

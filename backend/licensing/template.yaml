@@ -61,6 +61,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - dynamodb:GetItem
+                  - dynamodb:PutItem
                   - dynamodb:UpdateItem
                 Resource: !GetAtt LicensesTable.Arn
               - Effect: Allow
@@ -111,6 +112,24 @@ Resources:
           PRIVATE_KEY_PARAM: !Ref PrivateKeyParam
           TOKEN_TTL_DAYS: !Ref TokenTtlDays
 
+  TrialFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: pdm-license-trial
+      Runtime: nodejs20.x
+      Handler: trial.handler
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          LICENSE_TABLE: !Ref TableName
+          PRIVATE_KEY_PARAM: !Ref PrivateKeyParam
+          TRIAL_DAYS: "14"
+
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -147,6 +166,21 @@ Resources:
       RouteKey: "POST /validate"
       Target: !Sub "integrations/${ValidateIntegration}"
 
+  TrialIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt TrialFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  TrialRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /trial"
+      Target: !Sub "integrations/${TrialIntegration}"
+
   ApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
@@ -173,6 +207,14 @@ Resources:
       FunctionName: !Ref ValidateFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*/validate"
+
+  TrialPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref TrialFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*/trial"
 
 Outputs:
   ApiBaseUrl:

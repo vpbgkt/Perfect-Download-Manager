@@ -36,11 +36,33 @@ public sealed class LicenseTokenVerifier
     }
 
     /// <summary>
-    /// Verifies the token's signature and, on success, returns its parsed claims.
+    /// Verifies the token's signature and, on success, returns its parsed license claims.
     /// Returns null when the token is malformed or the signature does not match.
     /// Does NOT evaluate expiry or fingerprint — callers apply those policy checks.
     /// </summary>
     public LicenseClaims? Verify(string? token)
+    {
+        byte[]? payload = VerifyPayload(token);
+        if (payload is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<LicenseClaims>(payload);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Verifies the token's signature and returns the raw payload bytes on success, or null.
+    /// Callers deserialize into whichever claims shape the token carries (license or trial).
+    /// </summary>
+    public byte[]? VerifyPayload(string? token)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -65,27 +87,33 @@ public sealed class LicenseTokenVerifier
             return null;
         }
 
-        bool valid;
         try
         {
             using ECDsa ecdsa = ECDsa.Create();
             ecdsa.ImportSubjectPublicKeyInfo(_publicKeySpki, out _);
-            valid = ecdsa.VerifyData(payloadBytes, signature, HashAlgorithmName.SHA256,
-                DSASignatureFormat.Rfc3279DerSequence);
+            return ecdsa.VerifyData(payloadBytes, signature, HashAlgorithmName.SHA256,
+                DSASignatureFormat.Rfc3279DerSequence)
+                ? payloadBytes
+                : null;
         }
         catch (CryptographicException)
         {
             return null;
         }
+    }
 
-        if (!valid)
+    /// <summary>Verifies a signed trial anchor token and returns its claims, or null.</summary>
+    public TrialClaims? VerifyTrial(string? token)
+    {
+        byte[]? payload = VerifyPayload(token);
+        if (payload is null)
         {
             return null;
         }
 
         try
         {
-            return JsonSerializer.Deserialize<LicenseClaims>(payloadBytes);
+            return JsonSerializer.Deserialize<TrialClaims>(payload);
         }
         catch (JsonException)
         {
