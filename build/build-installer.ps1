@@ -32,10 +32,17 @@ if (-not (Test-Path (Join-Path $repo ".config/dotnet-tools.json"))) {
 Push-Location $repo
 dotnet tool uninstall wix 2>$null | Out-Null
 dotnet tool install wix --version $WixVersion 2>$null | Out-Null
+# WiX UI dialog set + util helpers (used for the standard Welcome/License/InstallDir flow).
+dotnet tool run wix -- extension add "WixToolset.UI.wixext/$WixVersion" 2>$null | Out-Null
+dotnet tool run wix -- extension add "WixToolset.Util.wixext/$WixVersion" 2>$null | Out-Null
 Pop-Location
 
+$installerDir = Join-Path $repo "installer"
 Push-Location $repo
 dotnet tool run wix -- build $wxs `
+    -ext WixToolset.UI.wixext `
+    -ext WixToolset.Util.wixext `
+    -bindpath $installerDir `
     -d "PublishDir=$publishDir" `
     -d "ProductVersion=$Version" `
     -o $msi

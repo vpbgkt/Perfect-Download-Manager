@@ -37,6 +37,11 @@ Publish (Join-Path $repo "src/PDM.App/PDM.App.csproj")
 Publish (Join-Path $repo "src/PDM.NativeHost/PDM.NativeHost.csproj")
 Publish (Join-Path $repo "src/PDM.UpdateLauncher/PDM.UpdateLauncher.csproj")
 
+# Copy the app icon alongside the exe so the installer can reference it as ARPPRODUCTICON.
+$assets = Join-Path $appOut "Assets"
+New-Item -ItemType Directory -Path $assets -Force | Out-Null
+Copy-Item (Join-Path $repo "src/PDM.App/Assets/pdm.ico") (Join-Path $assets "pdm.ico") -Force
+
 $zip = Join-Path $dist "PDM-$Version.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $appOut "*") -DestinationPath $zip

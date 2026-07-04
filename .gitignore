@@ -11,6 +11,9 @@ dist/
 # dotnet local tool manifest is fine to commit; obfuscated output is not
 **/obfuscated/
 
+# WiX toolset extension cache (auto-downloaded per machine)
+.wix/
+
 # NuGet
 *.nupkg
 *.snupkg

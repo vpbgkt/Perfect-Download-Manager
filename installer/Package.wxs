@@ -1,18 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  WiX v5 installer definition for Perfect Download Manager.
+  WiX v5 installer for Perfect Download Manager.
 
-  Builds a per-user MSI that installs the published app (PDM.exe + native host + update launcher)
-  and a Start Menu shortcut. Per-user scope avoids requiring admin rights and matches the app's
-  per-user data model. Harvests everything under $(PublishDir) produced by build/publish.ps1.
+  User-facing flow (WixUI_InstallDir):
+    1. Welcome
+    2. License agreement (License.rtf)
+    3. Installation folder (default: %LOCALAPPDATA%\Perfect Download Manager)
+    4. Ready to install
+    5. Progress
+    6. Finish - with "Launch Perfect Download Manager" and "Open the read-me" style checkbox
+       ("Launch" checked by default per user request).
 
-  Build with build/build-installer.ps1 (installs the 'wix' dotnet tool). Requires that
-  ./build/publish.ps1 has produced dist/PDM first.
+  Options:
+    - Feature "MainFeature" (required, hidden): app + native host + update launcher +
+      Start Menu shortcut.
+    - Feature "DesktopShortcut" (optional, on by default): creates a desktop shortcut.
 
-  Note: this MSI is unsigned. For public distribution, sign PDM.exe, the helper exes, and the
-  resulting .msi with a code-signing certificate (see docs/REMAINING-WORK.md).
+  Per-user install: no admin required, matches the app's per-user data model. The MSI is
+  unsigned - sign PDM.exe, the helpers, and the .msi with signtool for public distribution.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <Package Name="Perfect Download Manager"
            Manufacturer="Perfect Download Manager"
@@ -23,7 +32,11 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of Perfect Download Manager is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon.ico" SourceFile="$(var.PublishDir)\Assets\pdm.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/perfectdownloadmanager" />
 
+    <!-- ============ Directories ============ -->
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="INSTALLFOLDER" Name="Perfect Download Manager" />
     </StandardDirectory>
@@ -32,27 +45,85 @@
       <Directory Id="AppMenuFolder" Name="Perfect Download Manager" />
     </StandardDirectory>
 
-    <Feature Id="Main" Title="Perfect Download Manager" Level="1">
-      <!-- Harvest the published output directory into INSTALLFOLDER. -->
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- ============ Features ============ -->
+    <Feature Id="MainFeature"
+             Title="Perfect Download Manager"
+             Description="The main application, browser integration helper, and update launcher."
+             Level="1"
+             Display="expand"
+             ConfigurableDirectory="INSTALLFOLDER"
+             AllowAdvertise="no"
+             AllowAbsent="no">
       <Files Directory="INSTALLFOLDER" Include="$(var.PublishDir)\**" />
-      <ComponentGroupRef Id="ShortcutComponents" />
+      <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
-    <ComponentGroup Id="ShortcutComponents" Directory="AppMenuFolder">
-      <Component Id="StartMenuShortcut" Guid="B2E5D1C4-3A6F-4C8B-8D2E-9F0A1B2C3D4E">
-        <Shortcut Id="PdmShortcut"
-                  Name="Perfect Download Manager"
-                  Target="[INSTALLFOLDER]PDM.exe"
-                  WorkingDirectory="INSTALLFOLDER" />
-        <RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
-        <RegistryValue Root="HKCU"
-                       Key="Software\PerfectDownloadManager"
-                       Name="installed"
-                       Type="integer"
-                       Value="1"
-                       KeyPath="yes" />
-      </Component>
-    </ComponentGroup>
+    <Feature Id="DesktopShortcutFeature"
+             Title="Desktop shortcut"
+             Description="Adds a shortcut to Perfect Download Manager on the desktop."
+             Level="1"
+             AllowAdvertise="no">
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+    <!-- ============ Components ============ -->
+    <Component Id="StartMenuShortcut" Directory="AppMenuFolder" Guid="B2E5D1C4-3A6F-4C8B-8D2E-9F0A1B2C3D4E">
+      <Shortcut Id="PdmStartMenuShortcut"
+                Name="Perfect Download Manager"
+                Target="[INSTALLFOLDER]PDM.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon.ico" />
+      <RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\PerfectDownloadManager"
+                     Name="StartMenuShortcutInstalled"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="A47C3E12-9B4D-4A1F-B7C0-2E3F4A5B6C7D">
+      <Shortcut Id="PdmDesktopShortcut"
+                Name="Perfect Download Manager"
+                Target="[INSTALLFOLDER]PDM.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon.ico" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\PerfectDownloadManager"
+                     Name="DesktopShortcutInstalled"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <!-- ============ UI ============ -->
+    <!-- WixUI_InstallDir gives: Welcome > License > InstallDir > Ready > Progress > Finish -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+    <!-- Finish-page checkbox: "Launch Perfect Download Manager", checked by default. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Perfect Download Manager" />
+
+    <!-- Launch PDM.exe when the checkbox is set at the end of a fresh install (not uninstall).
+         Uses a directory-based ExeCommand so we don't depend on a specific File Id from the
+         auto-harvested Files element. -->
+    <CustomAction Id="LaunchApp"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand='"[INSTALLFOLDER]PDM.exe"'
+                  Execute="immediate"
+                  Return="asyncNoWait"
+                  Impersonate="yes" />
+
+    <UI>
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="LaunchApp"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
 
   </Package>
 </Wix>

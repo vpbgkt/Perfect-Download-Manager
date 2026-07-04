@@ -45,9 +45,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         CategoryFilterItem.For(DownloadCategory.Programs)
     };
 
+    /// <summary>License banner shown at the top of the main window.</summary>
+    public LicenseBannerViewModel LicenseBanner { get; }
+
     public MainViewModel(AppHost host)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+
+        LicenseBanner = new LicenseBannerViewModel(host);
 
         // Default to the "All Downloads" view.
         _selectedCategory = Categories[0];
@@ -261,6 +266,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        LicenseBanner.Dispose();
         _host.DownloadManager.DownloadAdded -= OnDownloadAdded;
         _host.DownloadManager.DownloadChanged -= OnDownloadChanged;
         _host.DownloadManager.DownloadRemoved -= OnDownloadRemoved;

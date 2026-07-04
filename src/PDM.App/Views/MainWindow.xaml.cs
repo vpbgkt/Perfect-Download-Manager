@@ -99,6 +99,7 @@ public partial class MainWindow : FluentWindow
         var dialog = new LicenseWindow(vm) { Owner = this };
         dialog.ShowDialog();
         App.Host.License = dialog.LatestSnapshot;
+        _viewModel.LicenseBanner.Refresh();
     }
 
     private async void OnCheckForUpdates(object sender, RoutedEventArgs e)

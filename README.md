@@ -15,9 +15,18 @@ production-quality code before the next.
 - **PDM.Cli** — thin command-line front end used to exercise the engine.
 - **xUnit** — **81 tests**, all passing.
 
+## Documentation
+
+- **[docs/USER-GUIDE.md](docs/USER-GUIDE.md)** — end-user manual (install, download, activate, settings).
+- **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)** — Chrome/Edge/Brave extension install + use.
+- **[docs/API-REFERENCE.md](docs/API-REFERENCE.md)** — licensing endpoints (`/trial`, `/activate`, `/validate`) with examples.
+- **[docs/COMMANDS.md](docs/COMMANDS.md)** — cheat sheet for build/test/publish/install and operator tasks.
+- **[docs/SECURITY.md](docs/SECURITY.md)** — anti-tamper / anti-crack threat model.
+- **[docs/REMAINING-WORK.md](docs/REMAINING-WORK.md)** — what's left before public launch.
+
 ## Build, run, and test — trial mode
 
-The app runs in **trial mode out of the box** — no license or license server required. First launch starts a 30-day trial; after that a 7-day grace period; after that features that require a license are marked, but nothing today is gated (features unlock via the licensing spec you settle on).
+The app runs in **trial mode out of the box** — a 14-day free trial. First launch anchors the trial to your machine's fingerprint on the licensing server so reinstalling can't reset it.
 
 ### Prerequisites
 
@@ -46,8 +55,7 @@ Expected: **81 passed, 0 failed** across four test projects (`PDM.Core.Tests`, `
 dotnet run --project src/PDM.App
 ```
 
-You should see the main window with the Fluent/Mica look. On first launch a fresh trial record is created (encrypted with Windows DPAPI) at
-`%LOCALAPPDATA%\PerfectDownloadManager\license.dat`.
+You should see the main window with the Fluent/Mica look and a **license banner** at the top showing "Free trial — 14 days left". On first launch a fresh trial record is created (encrypted with Windows DPAPI) at `%LOCALAPPDATA%\PerfectDownloadManager\license.dat`.
 
 Try:
 - **Add Download** → paste a URL and hit Enter.
