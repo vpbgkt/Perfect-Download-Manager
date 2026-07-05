@@ -38,11 +38,15 @@ public static class UpdateApplier
 
     /// <summary>
     /// Extracts a zip package over <paramref name="installDir"/>, refusing any entry that would
-    /// escape the install directory (zip-slip protection).
+    /// escape the install directory (zip-slip protection). Also handles the edge-case where an
+    /// entry would overwrite the currently-running process by renaming the old file aside first;
+    /// Windows refuses direct overwrite of a running exe.
     /// </summary>
     public static void ExtractOver(string package, string installDir)
     {
         string installFull = Path.GetFullPath(installDir);
+        string selfPath = ResolveCurrentProcessPath();
+
         using ZipArchive archive = ZipFile.OpenRead(package);
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
@@ -59,7 +63,37 @@ public static class UpdateApplier
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+
+            // If the target is our own running exe, Windows won't let us overwrite it in place.
+            // Windows DOES allow us to RENAME it though, so move the old one aside first. The
+            // primary fix for this is running the launcher from %TEMP% (see UpdateOrchestrator),
+            // but this makes the extractor robust even when that isn't the case.
+            if (selfPath.Length > 0 &&
+                string.Equals(destination, selfPath, StringComparison.OrdinalIgnoreCase))
+            {
+                string aside = destination + ".old";
+                try
+                {
+                    if (File.Exists(aside)) File.Delete(aside);
+                }
+                catch (IOException) { /* .old is locked; try a new suffix */ aside = destination + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".old"; }
+                File.Move(destination, aside);
+            }
+
             entry.ExtractToFile(destination, overwrite: true);
+        }
+    }
+
+    private static string ResolveCurrentProcessPath()
+    {
+        try
+        {
+            string? p = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            return string.IsNullOrEmpty(p) ? string.Empty : Path.GetFullPath(p);
+        }
+        catch (Exception)
+        {
+            return string.Empty;
         }
     }
 

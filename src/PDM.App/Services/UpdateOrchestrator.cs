@@ -104,8 +104,11 @@ public sealed class UpdateOrchestrator
     }
 
     /// <summary>
-    /// Launches <c>pdm-update.exe</c> to apply the staged package and relaunch PDM, then asks
-    /// the current app to shut down. The launcher waits for our exit before touching files.
+    /// Applies the staged update package by copying <c>pdm-update.exe</c> to a temp location
+    /// and running <b>that</b> copy - never the copy in the install directory. This is critical:
+    /// Windows refuses to overwrite an exe that is currently running, so if the launcher were
+    /// started from the install dir it would fail to replace itself and the whole update would
+    /// roll back. Running from temp releases the file lock and lets the swap succeed.
     /// </summary>
     public bool StartApply(string stagedPackagePath)
     {
@@ -117,8 +120,22 @@ public sealed class UpdateOrchestrator
             return false;
         }
 
+        string tempLauncher;
+        try
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "pdm-updater");
+            Directory.CreateDirectory(tempDir);
+            tempLauncher = Path.Combine(tempDir, $"pdm-update-{Guid.NewGuid():N}.exe");
+            File.Copy(launcher, tempLauncher, overwrite: false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not stage the update launcher into a temp folder.");
+            return false;
+        }
+
         int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
-        var psi = new System.Diagnostics.ProcessStartInfo(launcher)
+        var psi = new System.Diagnostics.ProcessStartInfo(tempLauncher)
         {
             UseShellExecute = false,
             CreateNoWindow = true
@@ -131,7 +148,8 @@ public sealed class UpdateOrchestrator
         try
         {
             System.Diagnostics.Process.Start(psi);
-            _logger.LogInformation("Update launcher started (pid wait={Pid}).", pid);
+            _logger.LogInformation(
+                "Update launcher started from {Temp} (waiting on pid {Pid}).", tempLauncher, pid);
             return true;
         }
         catch (Exception ex)

@@ -25,6 +25,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>All downloads, filtered by the current category and search text.</summary>
     public ICollectionView Downloads { get; }
 
+    /// <summary>Window title with the running product version, e.g. "Perfect Download Manager 1.0.6".</summary>
+    public string AppTitle
+    {
+        get
+        {
+            Version? v = typeof(MainViewModel).Assembly.GetName().Version;
+            string versionText = v is null ? "1.0" : $"{v.Major}.{v.Minor}.{v.Build}";
+            return $"Perfect Download Manager {versionText}";
+        }
+    }
+
     [ObservableProperty]
     private CategoryFilterItem _selectedCategory;
 

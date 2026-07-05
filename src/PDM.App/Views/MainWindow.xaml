@@ -5,7 +5,7 @@
                  xmlns:vm="clr-namespace:PDM.App.ViewModels"
                  xmlns:sys="clr-namespace:System;assembly=System.Runtime"
                  xmlns:tray="clr-namespace:Wpf.Ui.Tray.Controls;assembly=Wpf.Ui.Tray"
-                 Title="Perfect Download Manager"
+                 Title="{Binding AppTitle}"
                  Height="720" Width="1200"
                  MinHeight="480" MinWidth="900"
                  WindowStartupLocation="CenterScreen"
@@ -26,8 +26,8 @@
              always gets a visible confirmation even if OS balloon tips are suppressed. -->
         <ui:SnackbarPresenter x:Name="SnackbarHost" Grid.RowSpan="3" Panel.ZIndex="1000" />
 
-        <!-- Title bar with app title and icon -->
-        <ui:TitleBar Grid.Row="0" Title="Perfect Download Manager">
+        <!-- Title bar with app title (includes version) and icon. -->
+        <ui:TitleBar Grid.Row="0" Title="{Binding AppTitle}">
             <ui:TitleBar.Icon>
                 <ui:ImageIcon Source="pack://application:,,,/Assets/pdm.ico" />
             </ui:TitleBar.Icon>
