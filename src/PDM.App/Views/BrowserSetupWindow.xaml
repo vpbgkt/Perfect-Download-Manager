@@ -29,7 +29,7 @@
         <StackPanel Margin="16,20,16,8">
             <ui:TextBlock FontTypography="Subtitle" Text="Send downloads from your browser to PDM" Margin="0,0,0,4" />
             <ui:TextBlock FontSize="12" Opacity="0.75" TextWrapping="Wrap" Margin="0,0,0,4"
-                          Text="For each browser below: (1) open the extension page, (2) install the PDM extension, (3) paste its ID and register." />
+                          Text="For each browser: click 'Install extension' - PDM will show step-by-step instructions with the extension folder open in Explorer. Drag the folder into the browser, then paste its ID and Register." />
             <ui:TextBlock FontSize="12" Opacity="0.6" Text="{Binding SummaryText}" Margin="0,0,0,12" />
 
             <ItemsControl ItemsSource="{Binding Browsers}">
@@ -51,7 +51,7 @@
                                 <ui:TextBlock Grid.Row="0" Grid.Column="0"
                                               FontTypography="BodyStrong" Text="{Binding DisplayName}" />
                                 <ui:Button Grid.Row="0" Grid.Column="1"
-                                           Content="1. Install extension"
+                                           Content="1. Show me how"
                                            MinWidth="150"
                                            Command="{Binding DataContext.OpenStorePageCommand,
                                                      RelativeSource={RelativeSource AncestorType=ItemsControl}}"

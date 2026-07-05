@@ -6,6 +6,24 @@ using PDM.App.Services;
 
 namespace PDM.App.ViewModels;
 
+/// <summary>Payload for <see cref="BrowserSetupViewModel.InstallExtensionRequested"/>.</summary>
+public sealed class InstallExtensionRequestedEventArgs : EventArgs
+{
+    public InstallExtensionRequestedEventArgs(
+        BrowserRowViewModel row, DetectedBrowser browser, string extensionFolder, string extensionsUrl)
+    {
+        Row = row;
+        Browser = browser;
+        ExtensionFolder = extensionFolder;
+        ExtensionsUrl = extensionsUrl;
+    }
+
+    public BrowserRowViewModel Row { get; }
+    public DetectedBrowser Browser { get; }
+    public string ExtensionFolder { get; }
+    public string ExtensionsUrl { get; }
+}
+
 /// <summary>Row in the Browser Setup wizard: one per detected browser.</summary>
 public sealed partial class BrowserRowViewModel : ObservableObject
 {
@@ -64,11 +82,12 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
 
     [ObservableProperty] private string _summaryText = string.Empty;
 
+    /// <summary>Raised when the user clicks "Install extension" - the view shows the help dialog.</summary>
+    public event EventHandler<InstallExtensionRequestedEventArgs>? InstallExtensionRequested;
+
     /// <summary>
-    /// Opens the browser's own extensions page (chrome://extensions etc.) and copies the
-    /// packaged extension folder path to the clipboard so the user can immediately paste it
-    /// into "Load unpacked". Once the extension is published to stores, this can be swapped
-    /// to a direct store URL.
+    /// Fires <see cref="InstallExtensionRequested"/> for the row. The view shows a step-by-step
+    /// help dialog that opens the browser, Explorer, and copies the folder path.
     /// </summary>
     [RelayCommand]
     private void OpenStorePage(BrowserRowViewModel? row)
@@ -79,41 +98,17 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
         }
 
         string extensionFolder = FindExtensionFolder();
-        try
+        if (string.IsNullOrEmpty(extensionFolder))
         {
-            if (!string.IsNullOrEmpty(extensionFolder) && Directory.Exists(extensionFolder))
-            {
-                System.Windows.Clipboard.SetText(extensionFolder);
-            }
-        }
-        catch (Exception)
-        {
-            // Clipboard access can be denied in unusual situations; the status text still helps.
+            row.Status = "Extension folder not found. Please reinstall PDM or contact support.";
+            return;
         }
 
-        try
-        {
-            Process.Start(new ProcessStartInfo(row.Browser.ExecutablePath)
-            {
-                Arguments = row.StorePageUrl,
-                UseShellExecute = false
-            });
+        InstallExtensionRequested?.Invoke(this, new InstallExtensionRequestedEventArgs(
+            row, row.Browser, extensionFolder, row.StorePageUrl));
 
-            if (!string.IsNullOrEmpty(extensionFolder))
-            {
-                row.Status = "1) Enable Developer mode  2) Click 'Load unpacked' and paste the copied path  " +
-                             $"3) Copy the ID and paste it below. Extension folder: {extensionFolder}";
-            }
-            else
-            {
-                row.Status = "Enable Developer mode, click 'Load unpacked' and pick browser-extension\\chromium, " +
-                             "then paste the extension ID below.";
-            }
-        }
-        catch (Exception ex)
-        {
-            row.Status = "Could not open the browser: " + ex.Message;
-        }
+        row.Status = "Extension folder path copied to clipboard. " +
+                     "After you install the extension in the browser, copy its ID (32 lowercase letters) into the box below.";
     }
 
     /// <summary>

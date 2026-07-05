@@ -24,25 +24,41 @@ machine; there is no cloud dependency for browser capture.
 - PDM open at least once, so its named-pipe listener is running. If PDM is closed when you
   trigger a capture, the native host will start it automatically.
 
-## Install — using PDM's built-in Browser Setup wizard (recommended)
+## Install — using PDM's built-in Browser Setup wizard (current path)
 
-The easiest way. **No PowerShell needed.**
+Until the extension is published to the Chrome Web Store (see below), the wizard walks you
+through a one-time drag-and-drop install:
 
-1. Open PDM → toolbar → **Browser Setup**. The wizard detects all Chromium browsers you have
-   installed (Chrome, Edge, Brave) and lists one row per browser.
-2. For each browser: click **1. Install extension** — the wizard launches that specific browser
-   at the extension install page. Click "Add to Chrome/Edge/Brave" as usual.
-3. Open the extensions page in that browser (`chrome://extensions` etc.) and **copy the
-   extension ID** (32 lowercase letters).
-4. Paste the ID into the wizard's text box and click **2. Register with PDM**. PDM writes the
-   native-messaging host manifest and the required registry entries in one shot.
-5. Restart the browser once. Done — right-click → *Download with PDM* now works.
+1. Open PDM → toolbar → **More → Browser Setup**. The wizard detects Chrome, Edge, and Brave
+   (and Firefox, in a slightly different flow) and lists one row per browser.
+2. Click **1. Install extension**. PDM shows a step-by-step help window and:
+   - Opens the browser at its `chrome://extensions` page.
+   - Opens Windows Explorer at the packaged extension folder (highlighted).
+   - Copies the folder path to the clipboard.
+3. In the browser's extensions page, toggle **Developer mode** on (top-right).
+4. **Drag the `chromium` folder** from the Explorer window onto the browser's extensions page.
+   The browser installs the extension immediately. (Or use "Load unpacked" and paste the path.)
+5. Copy the new extension's **ID** (32 lowercase letters) shown under its name.
+6. Paste the ID into the wizard's text box and click **2. Register with PDM**. Done.
 
-You can revoke everything with **Remove PDM from all browsers** at the bottom of the wizard.
+Remove it any time with the **Remove PDM from all browsers** button.
 
-**Why do I need to click "Add to Chrome"?** Modern browsers require explicit user consent to
-install extensions — no app is allowed to silently drop an extension into your browser. The
-wizard reduces the process to three clicks per browser.
+## After the Chrome Web Store listing goes live (one-click install)
+
+Once we pay the one-time $5 Chrome Web Store developer fee and get the extension approved, the
+flow shortens to:
+
+1. Open PDM → **Browser Setup** → **Install extension**
+2. Browser opens the store page. Click **Add to Chrome**.
+3. Copy the ID → paste → **Register**.
+
+No Developer mode toggle. No Explorer. No folder path. Same one-click experience IDM offers via
+their store-hosted [IDM Integration Module](https://chromewebstore.google.com/detail/idm-integration-module/ngpampappnmepgilojfohadhhmbhlaek).
+
+Fees and listing timelines:
+- **Chrome Web Store**: $5 one-time developer registration. Review usually 1–14 days per submission.
+- **Microsoft Edge Add-ons**: free.
+- **Firefox AMO**: free; add-ons are automatically signed on submission.
 
 ## Install — sideload for development
 
