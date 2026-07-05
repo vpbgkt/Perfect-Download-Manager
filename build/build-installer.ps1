@@ -26,7 +26,12 @@ if (-not (Test-Path (Join-Path $publishDir "PDM.exe"))) {
 # Open Source Maintenance Fee (OSMF) EULA for commercial use; v5 has the same build syntax
 # and our Package.wxs uses the v4/v5 schema.
 $WixVersion = "5.0.2"
-if (-not (Test-Path (Join-Path $repo ".config/dotnet-tools.json"))) {
+# The tool manifest may live either at the repo root (dotnet-tools.json) or under
+# .config/dotnet-tools.json. Only create a fresh one if neither exists - otherwise
+# `dotnet new tool-manifest` prompts for an overwrite and returns non-zero here.
+$manifestRoot = Join-Path $repo "dotnet-tools.json"
+$manifestConfig = Join-Path $repo ".config/dotnet-tools.json"
+if (-not (Test-Path $manifestRoot) -and -not (Test-Path $manifestConfig)) {
     Push-Location $repo; dotnet new tool-manifest | Out-Null; Pop-Location
 }
 Push-Location $repo

@@ -10,4 +10,29 @@
     <RootNamespace>PDM.UpdateLauncher</RootNamespace>
   </PropertyGroup>
 
+  <!--
+    Publish as a self-contained single-file exe so the orchestrator can copy just
+    pdm-update.exe to %TEMP% and run it standalone - no need for pdm-update.dll,
+    pdm-update.deps.json, pdm-update.runtimeconfig.json, or any framework files to
+    be present in the same folder. Historically 1.0.6/1.0.7 copied only the stub
+    exe and the .NET host aborted before Main() ran because the main assembly
+    (pdm-update.dll) was missing.
+
+    Self-contained embeds the .NET 10 runtime slice this launcher needs. It adds
+    ~15-20 MB compressed, but the payoff is that the updater is now completely
+    decoupled from whatever runtime version the main app is using - it can update
+    the main app across framework upgrades without becoming a chicken-and-egg
+    problem. IncludeNativeLibrariesForSelfExtract + IncludeAllContentForSelfExtract
+    ensures every native SxS lib is bundled and self-extracted on first launch.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
 </Project>

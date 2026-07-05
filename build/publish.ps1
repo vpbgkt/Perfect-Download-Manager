@@ -32,10 +32,37 @@ function Publish($project) {
     if ($LASTEXITCODE -ne 0) { throw "publish failed for $project" }
 }
 
+# The launcher is always published self-contained single-file, regardless of the caller's
+# -SelfContained switch. That switch controls whether the main app bundles the runtime;
+# the launcher NEEDS to be self-contained single-file so the orchestrator can copy just
+# pdm-update.exe to %TEMP% and run it. Framework-dependent single-file still requires
+# pdm-update.runtimeconfig.json alongside the exe, which defeats the temp-copy trick.
+function PublishLauncher($project) {
+    Write-Host "Publishing $project (self-contained single-file) ..."
+    dotnet publish $project -c $Configuration -r $rid -o $appOut `
+        -p:Version=$Version --nologo `
+        --self-contained true `
+        -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
+        -p:IncludeAllContentForSelfExtract=true `
+        -p:EnableCompressionInSingleFile=true
+    if ($LASTEXITCODE -ne 0) { throw "publish failed for $project" }
+}
+
 # All three executables land in the same folder so the native host and updater sit next to PDM.exe.
 Publish (Join-Path $repo "src/PDM.App/PDM.App.csproj")
 Publish (Join-Path $repo "src/PDM.NativeHost/PDM.NativeHost.csproj")
-Publish (Join-Path $repo "src/PDM.UpdateLauncher/PDM.UpdateLauncher.csproj")
+PublishLauncher (Join-Path $repo "src/PDM.UpdateLauncher/PDM.UpdateLauncher.csproj")
+
+# The launcher's self-contained single-file publish sometimes leaves stray extracted files
+# (pdm-update.dll, pdm-update.deps.json, pdm-update.runtimeconfig.json) alongside the exe
+# because the earlier framework-dependent PDM.App publish wrote them into $appOut. Remove
+# them - they are baked into pdm-update.exe now and having stale copies alongside can
+# confuse the .NET host at runtime.
+foreach ($stale in @("pdm-update.dll", "pdm-update.deps.json", "pdm-update.runtimeconfig.json", "pdm-update.pdb")) {
+    $p = Join-Path $appOut $stale
+    if (Test-Path $p) { Remove-Item $p -Force }
+}
 
 # Copy the app icon alongside the exe so the installer can reference it as ARPPRODUCTICON.
 $assets = Join-Path $appOut "Assets"

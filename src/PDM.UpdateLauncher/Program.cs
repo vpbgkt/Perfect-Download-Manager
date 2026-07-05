@@ -22,19 +22,38 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        // Register an unhandled-exception handler FIRST so any crash below still writes
+        // a diagnostic file to the user's Desktop. Historically the launcher would die
+        // silently before Main() even ran (missing .dll next to the temp-copied exe),
+        // leaving users with a closed app and no idea why.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            Log($"FATAL: {e.ExceptionObject}");
+            WriteDesktopFailure(e.ExceptionObject as Exception);
+        };
+
+        Log("---- launcher started ----");
+        Log($"processPath={Environment.ProcessPath} pid={Environment.ProcessId}");
+        Log($"args=[{string.Join(" ", args)}]");
+
         var options = Options.Parse(args);
         if (options is null)
         {
             Console.Error.WriteLine(
                 "Usage: pdm-update --package <zip> --install-dir <dir> --exe <name> [--wait-pid <pid>]");
+            Log("Missing required args; aborting.");
             return 2;
         }
 
-        Log($"Update starting. package={options.Package} installDir={options.InstallDir}");
+        Log($"package={options.Package}");
+        Log($"installDir={options.InstallDir}");
+        Log($"exe={options.Exe}");
+        Log($"waitPid={options.WaitPid?.ToString() ?? "(none)"}");
 
         if (!File.Exists(options.Package))
         {
-            Log("Staged package not found; aborting.");
+            Log($"Staged package not found at {options.Package}; aborting.");
+            WriteDesktopFailure(new FileNotFoundException("Staged update package missing", options.Package));
             return 3;
         }
 
@@ -53,6 +72,7 @@ internal static class Program
             Log($"Update failed: {ex.Message}. Rolling back.");
             try { UpdateApplier.Rollback(options.InstallDir, backupDir); Log("Rollback complete."); }
             catch (Exception rex) { Log($"Rollback failed: {rex.Message}"); }
+            WriteDesktopFailure(ex);
             RelaunchApp(options);
             return 1;
         }
@@ -77,14 +97,20 @@ internal static class Program
         try
         {
             using Process proc = Process.GetProcessById(id);
+            Log($"Waiting for pid {id} to exit...");
             if (!proc.WaitForExit(30_000))
             {
                 Log("Main process did not exit within 30s; proceeding cautiously.");
+            }
+            else
+            {
+                Log($"pid {id} exited.");
             }
         }
         catch (ArgumentException)
         {
             // Process already exited — good.
+            Log($"pid {id} already gone.");
         }
 
         // A brief settle delay so the OS fully releases handles.
@@ -97,16 +123,19 @@ internal static class Program
         if (!File.Exists(exePath))
         {
             Log($"Cannot relaunch; {exePath} not found.");
+            WriteDesktopFailure(new FileNotFoundException("Relaunch target missing", exePath));
             return;
         }
 
         try
         {
             Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = true });
+            Log($"Relaunched {exePath}");
         }
         catch (Exception ex)
         {
             Log($"Relaunch failed: {ex.Message}");
+            WriteDesktopFailure(ex);
         }
     }
 
@@ -122,15 +151,23 @@ internal static class Program
         catch (Exception ex) { Log($"Cleanup of {path} failed: {ex.Message}"); }
     }
 
-    private static void Log(string message)
+    private static string LogFilePath
     {
-        try
+        get
         {
             string dir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "PerfectDownloadManager", "logs");
             Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "update.log"),
+            return Path.Combine(dir, "update.log");
+        }
+    }
+
+    private static void Log(string message)
+    {
+        try
+        {
+            File.AppendAllText(LogFilePath,
                 $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
         }
         catch
@@ -139,6 +176,33 @@ internal static class Program
         }
 
         Console.WriteLine(message);
+    }
+
+    /// <summary>
+    /// Drops a plain-text notice on the user's Desktop so a silent update failure never
+    /// leaves them without recourse. Points them at the detailed log for diagnostics.
+    /// </summary>
+    private static void WriteDesktopFailure(Exception? ex)
+    {
+        try
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string notice = Path.Combine(desktop, "PDM-update-failed.txt");
+            string logHint = string.Empty;
+            try { logHint = LogFilePath; } catch { }
+            string body =
+                $"Perfect Download Manager could not apply the update.{Environment.NewLine}{Environment.NewLine}" +
+                $"When: {DateTimeOffset.Now:F}{Environment.NewLine}" +
+                $"Error: {ex?.GetType().Name}: {ex?.Message}{Environment.NewLine}{Environment.NewLine}" +
+                $"Full log: {logHint}{Environment.NewLine}{Environment.NewLine}" +
+                "Please reinstall PDM from https://github.com/vpbgkt/Perfect-Download-Manager/releases " +
+                "and attach the log above when reporting this.";
+            File.WriteAllText(notice, body);
+        }
+        catch
+        {
+            // Never let the failure notice itself fail.
+        }
     }
 
     private sealed class Options

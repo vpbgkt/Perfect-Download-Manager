@@ -22,7 +22,22 @@ browser integration, update launcher, packaging, and hardening.
 - **Security hardening** — signed-token anti-forgery, key-swap detection (pinned hash),
   debugger detection, DPAPI at-rest, Release symbol stripping, obfuscation config. See SECURITY.md.
 
-**101 tests passing** (33 core + 28 infrastructure + 26 licensing + 11 updater + 3 update-launcher).
+**112 tests passing** (37 core + 28 infrastructure + 28 licensing + 16 updater + 3 update-launcher).
+
+## Recent releases
+
+- **1.0.8** — Fixed silent auto-update failure. Prior versions copied only `pdm-update.exe` to
+  `%TEMP%`, but that exe was a framework-dependent stub that also needed `pdm-update.dll`,
+  `pdm-update.deps.json`, and `pdm-update.runtimeconfig.json` alongside it - the .NET host
+  aborted before `Main()` ran, PDM closed, nothing swapped. The launcher is now published as
+  a **self-contained single-file exe**, so the temp copy runs standalone. Also added verbose
+  `update.log` entries + a Desktop `PDM-update-failed.txt` fallback notice so future failures
+  are diagnosable. 1.0.6/1.0.7 users must install the 1.0.8 MSI manually one final time.
+- **1.0.7** — Manifest signature verification: `.NET`'s `JsonSerializer` was escaping
+  apostrophes and a few other characters as `\uXXXX` while Node's `JSON.stringify` left them
+  as-is, so any release notes with an apostrophe failed signature verification. Fixed by
+  setting `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`. Also: smart Resume/Pause visibility,
+  wider Name column, coloured progress bars.
 
 ## Remaining ⏳
 
