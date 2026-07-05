@@ -90,8 +90,15 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Sidebar: category filter list -->
-            <Border Grid.Column="0" Padding="12">
+            <!--
+              Sidebar: category filter list. Given a subtle two-tone contrast from the main
+              area so the boundary is visible without dominating the Mica window.
+            -->
+            <Border Grid.Column="0"
+                    Padding="12"
+                    Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,1,0">
                 <StackPanel>
                     <ui:TextBlock FontTypography="Subtitle" Text="Library" Margin="0,0,0,8" />
                     <ListBox x:Name="CategoryList"
@@ -159,10 +166,17 @@
                                Click="OnCheckForUpdates" />
                 </StackPanel>
 
-                <!-- Search box -->
+                <!--
+                  Search box - narrow (about 40% of the toolbar width), left-aligned, with a
+                  leading Search icon so users don't confuse it with an "add download" field.
+                -->
                 <ui:TextBox Grid.Row="1"
-                            PlaceholderText="Search name or URL"
+                            PlaceholderText="Search downloads"
                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                            Icon="{ui:SymbolIcon Search24}"
+                            IconPlacement="Left"
+                            MaxWidth="340"
+                            HorizontalAlignment="Left"
                             Margin="0,0,0,8" />
 
                 <!-- Downloads grid -->

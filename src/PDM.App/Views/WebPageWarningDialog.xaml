@@ -1,0 +1,50 @@
+<ui:FluentWindow x:Class="PDM.App.Views.WebPageWarningDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Not a downloadable file"
+                 Height="320" Width="520"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 ResizeMode="NoResize">
+
+    <DockPanel LastChildFill="True">
+        <ui:TitleBar DockPanel.Dock="Top" Title="Not a downloadable file" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="16,8,16,16">
+            <ui:Button Content="Cancel"
+                       Appearance="Secondary"
+                       MinWidth="96"
+                       Click="OnCancel" />
+            <ui:Button Content="Open Browser Setup"
+                       Appearance="Primary"
+                       Margin="8,0,0,0"
+                       MinWidth="180"
+                       IsDefault="True"
+                       Click="OnOpenBrowserSetup" />
+            <ui:Button Content="Download page anyway"
+                       Appearance="Caution"
+                       Margin="8,0,0,0"
+                       MinWidth="180"
+                       Click="OnForceDownload" />
+        </StackPanel>
+
+        <StackPanel Margin="16,24,16,8">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <ui:SymbolIcon Symbol="Info24" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <ui:TextBlock FontTypography="Subtitle" Text="This URL is a web page" />
+            </StackPanel>
+
+            <ui:TextBlock TextWrapping="Wrap" Margin="0,0,0,10"
+                          Text="{Binding UrlText}" FontFamily="Consolas" FontSize="12" Opacity="0.75" />
+
+            <ui:TextBlock TextWrapping="Wrap" Margin="0,0,0,6"
+                          Text="No downloadable file was found at this URL - the server returned an HTML web page instead of a file." />
+            <ui:TextBlock TextWrapping="Wrap" Opacity="0.85"
+                          Text="Tip: to grab the real file behind this page (a video, installer, archive, etc.), install the PDM browser extension. Then, on the page, right-click a link and choose 'Download with PDM'." />
+        </StackPanel>
+    </DockPanel>
+</ui:FluentWindow>

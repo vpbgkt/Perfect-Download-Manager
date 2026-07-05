@@ -41,6 +41,10 @@ public sealed class DownloadEngine
     /// <param name="fileNameOverride">Optional explicit file name; server-suggested name is used otherwise.</param>
     /// <param name="category">Category classification (auto-detected from the file name when null).</param>
     /// <param name="overwritePolicy">How to handle a destination path that already exists.</param>
+    /// <param name="allowWebPage">
+    /// When false (the default), the engine throws <see cref="LikelyWebPageException"/> if the URL
+    /// resolves to an HTML page. Set to true to intentionally download the page's HTML source.
+    /// </param>
     /// <param name="options">Optional per-download options; engine defaults are used otherwise.</param>
     /// <param name="cancellationToken">Token used to cancel probing.</param>
     public async Task<DownloadState> PrepareAsync(
@@ -49,6 +53,7 @@ public sealed class DownloadEngine
         string? fileNameOverride = null,
         DownloadCategory? category = null,
         OverwritePolicy overwritePolicy = OverwritePolicy.Rename,
+        bool allowWebPage = false,
         DownloadOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -59,6 +64,13 @@ public sealed class DownloadEngine
         effective.Validate();
 
         RemoteFileInfo info = await _inspector.InspectAsync(url, cancellationToken).ConfigureAwait(false);
+
+        // Refuse HTML pages by default so the user gets a clear "not a downloadable file" message
+        // instead of silently downloading an unhelpful .html of the landing page.
+        if (!allowWebPage && info.IsLikelyWebPage)
+        {
+            throw new LikelyWebPageException(url, info.ContentType);
+        }
 
         string fileName = FileNameResolver.Sanitize(
             string.IsNullOrWhiteSpace(fileNameOverride) ? info.SuggestedFileName : fileNameOverride);
@@ -125,11 +137,13 @@ public sealed class DownloadEngine
         IProgress<DownloadProgress>? progress = null,
         DownloadCategory? category = null,
         OverwritePolicy overwritePolicy = OverwritePolicy.Rename,
+        bool allowWebPage = false,
         DownloadOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         DownloadState state = await PrepareAsync(
-                url, destinationDirectory, fileNameOverride, category, overwritePolicy, options, cancellationToken)
+                url, destinationDirectory, fileNameOverride, category, overwritePolicy,
+                allowWebPage, options, cancellationToken)
             .ConfigureAwait(false);
         await RunAsync(state, progress, options, cancellationToken).ConfigureAwait(false);
         return state;

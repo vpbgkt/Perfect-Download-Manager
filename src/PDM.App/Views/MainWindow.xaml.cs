@@ -26,12 +26,48 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        bool ok = await _viewModel.AddDownloadAsync(dialog.Url).ConfigureAwait(true);
-        if (!ok)
+        await AddOneAsync(dialog.Url).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Adds a single URL and handles the LooksLikeWebPage case with a friendly dialog offering
+    /// the browser-setup wizard as the recommended fix.
+    /// </summary>
+    private async Task AddOneAsync(string url)
+    {
+        var outcome = await _viewModel.AddDownloadAsync(url).ConfigureAwait(true);
+        switch (outcome.Result)
         {
-            MessageBox.Show(this,
-                "The URL could not be added. Make sure it is a valid http:// or https:// address.",
-                "Add download", MessageBoxButton.OK, MessageBoxImage.Warning);
+            case ViewModels.MainViewModel.AddResult.Ok:
+                return;
+
+            case ViewModels.MainViewModel.AddResult.InvalidUrl:
+                MessageBox.Show(this,
+                    "The URL could not be added. Make sure it is a valid http:// or https:// address.",
+                    "Add download", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+
+            case ViewModels.MainViewModel.AddResult.LooksLikeWebPage:
+                {
+                    var warn = new WebPageWarningDialog(outcome.Url!) { Owner = this };
+                    warn.ShowDialog();
+                    switch (warn.UserChoice)
+                    {
+                        case WebPageWarningDialog.Choice.OpenBrowserSetup:
+                            OnBrowserSetup(this, new RoutedEventArgs());
+                            break;
+                        case WebPageWarningDialog.Choice.DownloadAnyway:
+                            await _viewModel.AddDownloadAsync(url, allowWebPage: true).ConfigureAwait(true);
+                            break;
+                    }
+                    return;
+                }
+
+            case ViewModels.MainViewModel.AddResult.Failed:
+                MessageBox.Show(this,
+                    outcome.ErrorMessage ?? "The URL could not be added.",
+                    "Add download", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
         }
     }
 
@@ -61,18 +97,34 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        int failed = 0;
+        int failed = 0, webpages = 0;
         foreach (Uri url in dialog.Urls)
         {
-            bool ok = await _viewModel.AddDownloadAsync(url.ToString()).ConfigureAwait(true);
-            if (!ok) failed++;
+            var outcome = await _viewModel.AddDownloadAsync(url.ToString()).ConfigureAwait(true);
+            switch (outcome.Result)
+            {
+                case ViewModels.MainViewModel.AddResult.Ok:
+                    break;
+                case ViewModels.MainViewModel.AddResult.LooksLikeWebPage:
+                    webpages++;
+                    break;
+                default:
+                    failed++;
+                    break;
+            }
         }
 
-        if (failed > 0)
+        if (failed > 0 || webpages > 0)
         {
-            MessageBox.Show(this,
-                $"{failed} of {dialog.Urls.Count} URLs could not be added.",
-                "Add downloads", MessageBoxButton.OK, MessageBoxImage.Warning);
+            string message = failed > 0
+                ? $"{failed} of {dialog.Urls.Count} URLs could not be added."
+                : $"{webpages} URL(s) were web pages, not downloadable files.";
+            if (webpages > 0 && failed == 0)
+            {
+                message += "\n\nTip: install the PDM browser extension to grab the real files behind those pages.";
+            }
+            MessageBox.Show(this, message, "Add downloads",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -172,13 +224,7 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        bool ok = await _viewModel.AddDownloadAsync(url).ConfigureAwait(true);
-        if (!ok)
-        {
-            MessageBox.Show(this,
-                "The dropped item was not a valid downloadable URL.",
-                "Drop", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
+        await AddOneAsync(url).ConfigureAwait(true);
     }
 
     private static bool HasAcceptableUrl(DragEventArgs e) => TryExtractUrl(e) is not null;

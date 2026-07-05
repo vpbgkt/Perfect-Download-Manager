@@ -32,4 +32,15 @@ public sealed class RemoteFileInfo
     /// multi-connection segmented download is possible.
     /// </summary>
     public bool CanSegment => SupportsRanges && TotalBytes is > 0;
+
+    /// <summary>
+    /// True when the URL points at an HTML web page rather than a downloadable file:
+    /// the server returned <c>text/html</c> or <c>application/xhtml+xml</c>. This lets the
+    /// UI warn the user that we'd be downloading a page's HTML source, not the file they
+    /// probably wanted, and suggest the browser extension for capturing real download URLs.
+    /// </summary>
+    public bool IsLikelyWebPage =>
+        !string.IsNullOrEmpty(ContentType) &&
+        (ContentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) ||
+         ContentType.StartsWith("application/xhtml+xml", StringComparison.OrdinalIgnoreCase));
 }

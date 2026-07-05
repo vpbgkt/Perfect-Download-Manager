@@ -114,6 +114,7 @@ public sealed class DownloadManager : IAsyncDisposable
         string? fileNameOverride = null,
         DownloadCategory? category = null,
         bool? startImmediately = null,
+        bool allowWebPage = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
@@ -125,7 +126,7 @@ public sealed class DownloadManager : IAsyncDisposable
 
         DownloadState state = await _engine.PrepareAsync(
                 url, destDir, fileNameOverride, chosenCategory,
-                _settings.OverwritePolicy, options, cancellationToken)
+                _settings.OverwritePolicy, allowWebPage, options, cancellationToken)
             .ConfigureAwait(false);
 
         var managed = new ManagedDownload(state);

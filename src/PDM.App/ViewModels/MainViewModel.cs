@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PDM.Core.Downloading;
 using PDM.Core.Models;
 using PDM.Infrastructure;
 
@@ -234,32 +235,55 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Programmatic entry-point invoked by the Add dialog and drag-and-drop.</summary>
-    public async Task<bool> AddDownloadAsync(string url, string? destinationDirectory = null,
-        CancellationToken cancellationToken = default)
+    /// <summary>Outcome of an add-download attempt, so the view can react appropriately.</summary>
+    public enum AddResult
+    {
+        Ok,
+        InvalidUrl,
+        LooksLikeWebPage,
+        Failed
+    }
+
+    /// <summary>Details returned by <see cref="AddDownloadAsync"/>.</summary>
+    public sealed record AddOutcome(
+        AddResult Result,
+        Uri? Url = null,
+        string? ContentType = null,
+        string? ErrorMessage = null);
+
+    /// <summary>
+    /// Adds a URL to the queue, returning a structured outcome. If the URL looks like a web
+    /// page (Content-Type text/html), <see cref="AddResult.LooksLikeWebPage"/> is returned so
+    /// the view can prompt the user for confirmation and hint at the browser extension.
+    /// </summary>
+    public async Task<AddOutcome> AddDownloadAsync(string url, string? destinationDirectory = null,
+        bool allowWebPage = false, CancellationToken cancellationToken = default)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            return false;
+            return new AddOutcome(AddResult.InvalidUrl);
         }
 
         try
         {
             ManagedDownload managed = await _host.DownloadManager.AddAsync(uri, destinationDirectory,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                allowWebPage: allowWebPage, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            // Give immediate feedback that the download was queued/started.
             if (_host.Settings.ShowNotifications)
             {
                 _host.Notifications.ShowInfo("Download added", managed.FileName);
             }
 
-            return true;
+            return new AddOutcome(AddResult.Ok, uri);
+        }
+        catch (LikelyWebPageException ex)
+        {
+            return new AddOutcome(AddResult.LooksLikeWebPage, ex.Url, ex.ContentType);
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
         {
-            return false;
+            return new AddOutcome(AddResult.Failed, uri, ErrorMessage: ex.Message);
         }
     }
 
