@@ -64,6 +64,13 @@ public sealed class AppSettings
     public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
 
     /// <summary>
+    /// When true (the default), browser-captured downloads are held for user confirmation
+    /// before they start, so an accidental click in the browser can't kick off an unwanted
+    /// download. Manual Add Download / Add Many entries are never gated.
+    /// </summary>
+    public bool ConfirmBrowserDownloads { get; set; } = true;
+
+    /// <summary>
     /// Optional command (executable path) invoked after a download completes; the command
     /// is called with the destination path as the sole argument. Common uses: virus scan,
     /// checksum verification, custom processing. Null disables the hook.

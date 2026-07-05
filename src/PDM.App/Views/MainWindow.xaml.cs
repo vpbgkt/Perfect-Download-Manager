@@ -16,6 +16,53 @@ public partial class MainWindow : FluentWindow
         DataContext = _viewModel;
         InitializeComponent();
         // The "All Downloads" entry is selected by default via the view-model.
+
+        if (App.Host is not null)
+        {
+            App.Host.DownloadManager.DownloadChanged += OnDownloadChangedForToast;
+            Closed += (_, _) => App.Host.DownloadManager.DownloadChanged -= OnDownloadChangedForToast;
+        }
+    }
+
+    /// <summary>
+    /// Shows an in-app snackbar when a download reaches a terminal state. This is layered on
+    /// top of the tray balloon so the user always sees a completion notification, even when
+    /// Windows Focus Assist or notification silencing is on.
+    /// </summary>
+    private void OnDownloadChangedForToast(object? sender, PDM.Infrastructure.DownloadEventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            switch (e.Download.State.Status)
+            {
+                case PDM.Core.Models.DownloadStatus.Completed:
+                    ShowSnack("Download complete", e.Download.FileName,
+                        Wpf.Ui.Controls.ControlAppearance.Success,
+                        Wpf.Ui.Controls.SymbolRegular.CheckmarkCircle24);
+                    break;
+                case PDM.Core.Models.DownloadStatus.Failed:
+                    ShowSnack("Download failed",
+                        $"{e.Download.FileName}: {e.Download.State.ErrorMessage ?? "unknown error"}",
+                        Wpf.Ui.Controls.ControlAppearance.Danger,
+                        Wpf.Ui.Controls.SymbolRegular.ErrorCircle24);
+                    break;
+            }
+        });
+    }
+
+    private void ShowSnack(string title, string message,
+        Wpf.Ui.Controls.ControlAppearance appearance,
+        Wpf.Ui.Controls.SymbolRegular icon)
+    {
+        var snack = new Wpf.Ui.Controls.Snackbar(SnackbarHost)
+        {
+            Title = title,
+            Content = message,
+            Icon = new Wpf.Ui.Controls.SymbolIcon { Symbol = icon },
+            Appearance = appearance,
+            Timeout = TimeSpan.FromSeconds(6)
+        };
+        snack.Show();
     }
 
     private async void OnAddDownload(object sender, RoutedEventArgs e)

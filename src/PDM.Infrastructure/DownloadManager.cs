@@ -115,6 +115,7 @@ public sealed class DownloadManager : IAsyncDisposable
         DownloadCategory? category = null,
         bool? startImmediately = null,
         bool allowWebPage = false,
+        bool saveForLater = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
@@ -129,6 +130,13 @@ public sealed class DownloadManager : IAsyncDisposable
                 _settings.OverwritePolicy, allowWebPage, options, cancellationToken)
             .ConfigureAwait(false);
 
+        // Save-for-later parks the download in Paused so the scheduler leaves it alone; the
+        // user resumes it manually when they're ready.
+        if (saveForLater)
+        {
+            state.Status = DownloadStatus.Paused;
+        }
+
         var managed = new ManagedDownload(state);
         _downloads[state.Id] = managed;
 
@@ -137,7 +145,7 @@ public sealed class DownloadManager : IAsyncDisposable
             state.Id, state.SourceUrl, state.DestinationPath, state.TotalBytes, state.Segments.Count);
         DownloadAdded?.Invoke(this, new DownloadEventArgs(managed));
 
-        if (startImmediately ?? _settings.AutoStartAddedDownloads)
+        if (!saveForLater && (startImmediately ?? _settings.AutoStartAddedDownloads))
         {
             Signal();
         }

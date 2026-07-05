@@ -22,6 +22,10 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- In-app toast/snackbar overlay - shown for download completions so the user
+             always gets a visible confirmation even if OS balloon tips are suppressed. -->
+        <ui:SnackbarPresenter x:Name="SnackbarHost" Grid.RowSpan="3" Panel.ZIndex="1000" />
+
         <!-- Title bar with app title and icon -->
         <ui:TitleBar Grid.Row="0" Title="Perfect Download Manager">
             <ui:TitleBar.Icon>

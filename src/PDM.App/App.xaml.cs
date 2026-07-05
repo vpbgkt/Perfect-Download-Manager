@@ -1,6 +1,7 @@
 ﻿using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using PDM.App.Services;
 using PDM.App.ViewModels;
 using PDM.App.Views;
@@ -109,10 +110,77 @@ public partial class App : Application
                 return;
             }
 
-            await Host.DownloadManager.AddAsync(uri, request.Directory, request.FileName).ConfigureAwait(false);
+            // Browser-captured downloads must be confirmed by default so users are never
+            // surprised by unwanted downloads starting silently. Users can turn this off
+            // under Settings > Confirm browser downloads.
+            if (Host.Settings.ConfirmBrowserDownloads)
+            {
+                await ShowNewDownloadPromptAsync(uri, request.FileName, request.Directory).ConfigureAwait(false);
+            }
+            else
+            {
+                try
+                {
+                    await Host.DownloadManager.AddAsync(uri, request.Directory, request.FileName).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Auto-add of browser download {Url} failed", uri);
+                }
+            }
         }, logger);
 
         _browserListener.Start();
+    }
+
+    /// <summary>
+    /// Shows the "New download detected" prompt on the UI thread. Based on the user's choice,
+    /// starts the download, saves it for later (added paused), or does nothing.
+    /// </summary>
+    private static async Task ShowNewDownloadPromptAsync(Uri uri, string? suggestedFileName, string? directory)
+    {
+        if (Host is null || Current.Dispatcher is null)
+        {
+            return;
+        }
+
+        await Current.Dispatcher.InvokeAsync(async () =>
+        {
+            var dialog = new Views.NewDownloadDialog(uri, suggestedFileName)
+            {
+                Owner = Current.MainWindow
+            };
+
+            dialog.ShowDialog();
+
+            switch (dialog.UserChoice)
+            {
+                case Views.NewDownloadDialog.Choice.StartNow:
+                    try
+                    {
+                        await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception) { /* logged elsewhere */ }
+                    break;
+
+                case Views.NewDownloadDialog.Choice.SaveForLater:
+                    try
+                    {
+                        await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName,
+                            saveForLater: true).ConfigureAwait(false);
+                        Host.Notifications.ShowInfo("Saved for later",
+                            dialog.FileName + " is in your queue, paused. Right-click Resume when you're ready.");
+                    }
+                    catch (Exception) { /* logged elsewhere */ }
+                    break;
+
+                case Views.NewDownloadDialog.Choice.Cancel:
+                default:
+                    // User dismissed; do nothing.
+                    break;
+            }
+        });
     }
 
     protected override async void OnExit(ExitEventArgs e)

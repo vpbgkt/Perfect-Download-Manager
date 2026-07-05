@@ -38,7 +38,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         _scheduleEnd = live.ScheduleEnd ?? "07:00";
         _overwritePolicy = live.OverwritePolicy;
         _postDownloadCommand = live.PostDownloadCommand ?? string.Empty;
+        _confirmBrowserDownloads = live.ConfirmBrowserDownloads;
     }
+
+    /// <summary>Confirm browser-captured downloads before starting (default: true).</summary>
+    [ObservableProperty] private bool _confirmBrowserDownloads;
 
     /// <summary>Overwrite policies exposed as ComboBox items.</summary>
     public IReadOnlyList<OverwritePolicy> OverwritePolicies { get; } =
@@ -100,6 +104,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _live.PostDownloadCommand = string.IsNullOrWhiteSpace(PostDownloadCommand)
             ? null
             : PostDownloadCommand.Trim();
+        _live.ConfirmBrowserDownloads = ConfirmBrowserDownloads;
 
         try
         {

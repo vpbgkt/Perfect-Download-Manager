@@ -56,6 +56,9 @@
                           Margin="0,0,0,4" />
                 <CheckBox Content="Show desktop notifications on completion"
                           IsChecked="{Binding ShowNotifications}"
+                          Margin="0,0,0,4" />
+                <CheckBox Content="Confirm browser-captured downloads before starting"
+                          IsChecked="{Binding ConfirmBrowserDownloads}"
                           Margin="0,0,0,16" />
 
                 <ui:TextBlock FontTypography="Subtitle" Text="Downloads" Margin="0,4,0,8" />
