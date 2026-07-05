@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -14,17 +15,32 @@ namespace PDM.App.Services;
 /// to the supplied handler (which adds it to the running download manager), so browser-captured
 /// downloads land in the same queue as the UI.
 ///
-/// Security: the pipe ACL grants access only to the current user, so another user's session on
-/// the same machine cannot inject downloads into this instance.
+/// Security: the pipe ACL grants access only to the current user, so another user's session
+/// on the same machine cannot inject downloads into this instance.
+///
+/// Anti-flood: even though the extension has its own rate limit and circuit breaker, we
+/// apply a second, independent sliding-window rate limit here (see <see cref="RateLimiter"/>)
+/// and a short-lived URL dedup cache. That way a broken or malicious extension cannot spawn
+/// hundreds of "New download detected" prompts in a burst, which historically hung the UI
+/// thread when Edge's session-restore replayed old download history to the extension.
 /// </summary>
 public sealed class DownloadRequestListener : IAsyncDisposable
 {
     /// <summary>The per-user pipe name the native host connects to.</summary>
     public const string PipeName = "PDM.DownloadRequest";
 
+    // Sliding-window rate limit: at most this many requests inside RateWindow are accepted.
+    // Excess requests are rejected with rate_limited so the extension can decide how to react.
+    private const int RateLimitCount = 10;
+    private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(30);
+    // A URL seen inside this window is treated as a duplicate and dropped silently.
+    private static readonly TimeSpan DedupWindow = TimeSpan.FromMinutes(1);
+
     private readonly Func<DownloadRequest, Task> _handler;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _cts = new();
+    private readonly RateLimiter _rateLimiter = new(RateLimitCount, RateWindow);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _recentUrls = new(StringComparer.OrdinalIgnoreCase);
     private Task? _loop;
     private int _disposed;
 
@@ -114,6 +130,25 @@ public sealed class DownloadRequestListener : IAsyncDisposable
             return;
         }
 
+        // Rate limit BEFORE we consult the handler. This is what stops a busted extension from
+        // spawning hundreds of confirmation dialogs on Edge startup.
+        if (!_rateLimiter.TryAcquire())
+        {
+            _logger.LogWarning("Rate-limited browser download for {Url}; too many requests in the last {Window}s.",
+                request.Url, (int)RateWindow.TotalSeconds);
+            await writer.WriteLineAsync("{\"ok\":false,\"error\":\"rate_limited\"}").ConfigureAwait(false);
+            return;
+        }
+
+        // Dedup: same URL within DedupWindow is silently accepted-then-ignored. We return ok
+        // so the extension counts it against its own rate limit and does not retry.
+        if (IsDuplicate(request.Url))
+        {
+            _logger.LogInformation("Ignoring duplicate browser download for {Url}", request.Url);
+            await writer.WriteLineAsync("{\"ok\":true,\"note\":\"duplicate\"}").ConfigureAwait(false);
+            return;
+        }
+
         try
         {
             await _handler(request).ConfigureAwait(false);
@@ -125,6 +160,31 @@ public sealed class DownloadRequestListener : IAsyncDisposable
             _logger.LogError(ex, "Failed to enqueue browser download for {Url}", request.Url);
             await writer.WriteLineAsync("{\"ok\":false,\"error\":\"enqueue_failed\"}").ConfigureAwait(false);
         }
+    }
+
+    private bool IsDuplicate(string url)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        // Amortized GC of old entries so the dictionary stays small.
+        if (_recentUrls.Count > 256)
+        {
+            foreach (KeyValuePair<string, DateTimeOffset> kv in _recentUrls)
+            {
+                if (now - kv.Value > DedupWindow)
+                {
+                    _recentUrls.TryRemove(kv.Key, out _);
+                }
+            }
+        }
+
+        if (_recentUrls.TryGetValue(url, out DateTimeOffset seenAt) && now - seenAt < DedupWindow)
+        {
+            return true;
+        }
+
+        _recentUrls[url] = now;
+        return false;
     }
 
     public async ValueTask DisposeAsync()
@@ -154,5 +214,52 @@ public sealed class DownloadRequestListener : IAsyncDisposable
         }
 
         _cts.Dispose();
+    }
+
+    /// <summary>
+    /// Simple thread-safe sliding-window rate limiter. Tracks the timestamps of the last
+    /// <paramref name="max"/> allowed events and rejects further requests once the window is
+    /// full. Public so unit tests can cover the algorithm independently of the pipe plumbing.
+    /// </summary>
+    internal sealed class RateLimiter
+    {
+        private readonly int _max;
+        private readonly TimeSpan _window;
+        private readonly Queue<DateTimeOffset> _timestamps = new();
+        private readonly object _gate = new();
+        private readonly Func<DateTimeOffset> _clock;
+
+        public RateLimiter(int max, TimeSpan window, Func<DateTimeOffset>? clock = null)
+        {
+            _max = max > 0 ? max : throw new ArgumentOutOfRangeException(nameof(max));
+            _window = window;
+            _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        }
+
+        /// <summary>
+        /// Returns true if the caller may proceed. Records the acquisition so subsequent
+        /// callers that push the window over <c>max</c> are rejected.
+        /// </summary>
+        public bool TryAcquire()
+        {
+            DateTimeOffset now = _clock();
+            DateTimeOffset cutoff = now - _window;
+
+            lock (_gate)
+            {
+                while (_timestamps.Count > 0 && _timestamps.Peek() < cutoff)
+                {
+                    _timestamps.Dequeue();
+                }
+
+                if (_timestamps.Count >= _max)
+                {
+                    return false;
+                }
+
+                _timestamps.Enqueue(now);
+                return true;
+            }
+        }
     }
 }

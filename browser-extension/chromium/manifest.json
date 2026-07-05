@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Perfect Download Manager Integration",
-  "version": "1.0.0",
+  "version": "1.0.9",
   "description": "Send downloads and links to Perfect Download Manager (PDM).",
   "permissions": [
     "downloads",

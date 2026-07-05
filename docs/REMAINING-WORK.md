@@ -26,6 +26,16 @@ browser integration, update launcher, packaging, and hardening.
 
 ## Recent releases
 
+- **1.0.9** — Fixed a critical extension flood. Prior versions of `background.js` forwarded
+  every `chrome.downloads.onCreated` event, which on Edge startup includes session-restored
+  downloads, prefetched/PWA resources, and event replays - leading to hundreds of "New
+  download detected" prompts and a hung UI thread. The extension now gates every capture
+  through SW-startup grace, `startTime` recency, `state == in_progress`, no-other-extension
+  origin, sliding-window rate limit, URL dedup, and a circuit breaker that auto-disables
+  interception on a burst. The auto-intercept toggle is reset to off on every extension
+  install/update so upgrading users are safe. Defense in depth: the app-side `DownloadRequestListener`
+  now enforces its own rate limit + dedup, and only one `NewDownloadDialog` can be visible
+  at a time (subsequent requests are dropped rather than stacked).
 - **1.0.8** — Fixed silent auto-update failure. Prior versions copied only `pdm-update.exe` to
   `%TEMP%`, but that exe was a framework-dependent stub that also needed `pdm-update.dll`,
   `pdm-update.deps.json`, and `pdm-update.runtimeconfig.json` alongside it - the .NET host

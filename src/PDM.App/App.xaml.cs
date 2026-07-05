@@ -133,9 +133,17 @@ public partial class App : Application
         _browserListener.Start();
     }
 
+    // Global gate so only ONE "New download detected" dialog is ever visible at a time.
+    // Even after the extension and pipe rate limits, we want a hard guarantee that a burst
+    // cannot stack modal dialogs and lock up the UI thread. Any request that arrives while
+    // a dialog is showing is dropped (the user still saw a prompt for the first URL in the
+    // burst; anything after it in the same second was almost certainly a replay anyway).
+    private static int s_promptShowing;
+
     /// <summary>
     /// Shows the "New download detected" prompt on the UI thread. Based on the user's choice,
-    /// starts the download, saves it for later (added paused), or does nothing.
+    /// starts the download, saves it for later (added paused), or does nothing. If a prompt is
+    /// already visible, this request is silently dropped so bursts can never stack dialogs.
     /// </summary>
     private static async Task ShowNewDownloadPromptAsync(Uri uri, string? suggestedFileName, string? directory)
     {
@@ -144,43 +152,57 @@ public partial class App : Application
             return;
         }
 
-        await Current.Dispatcher.InvokeAsync(async () =>
+        // Cheap CAS: 0 -> 1 means "we now own the dialog slot"; any other value means one is
+        // already showing and we bail out without queueing.
+        if (Interlocked.CompareExchange(ref s_promptShowing, 1, 0) != 0)
         {
-            var dialog = new Views.NewDownloadDialog(uri, suggestedFileName)
+            return;
+        }
+
+        try
+        {
+            await Current.Dispatcher.InvokeAsync(async () =>
             {
-                Owner = Current.MainWindow
-            };
+                var dialog = new Views.NewDownloadDialog(uri, suggestedFileName)
+                {
+                    Owner = Current.MainWindow
+                };
 
-            dialog.ShowDialog();
+                dialog.ShowDialog();
 
-            switch (dialog.UserChoice)
-            {
-                case Views.NewDownloadDialog.Choice.StartNow:
-                    try
-                    {
-                        await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName)
-                            .ConfigureAwait(false);
-                    }
-                    catch (Exception) { /* logged elsewhere */ }
-                    break;
+                switch (dialog.UserChoice)
+                {
+                    case Views.NewDownloadDialog.Choice.StartNow:
+                        try
+                        {
+                            await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName)
+                                .ConfigureAwait(false);
+                        }
+                        catch (Exception) { /* logged elsewhere */ }
+                        break;
 
-                case Views.NewDownloadDialog.Choice.SaveForLater:
-                    try
-                    {
-                        await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName,
-                            saveForLater: true).ConfigureAwait(false);
-                        Host.Notifications.ShowInfo("Saved for later",
-                            dialog.FileName + " is in your queue, paused. Right-click Resume when you're ready.");
-                    }
-                    catch (Exception) { /* logged elsewhere */ }
-                    break;
+                    case Views.NewDownloadDialog.Choice.SaveForLater:
+                        try
+                        {
+                            await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName,
+                                saveForLater: true).ConfigureAwait(false);
+                            Host.Notifications.ShowInfo("Saved for later",
+                                dialog.FileName + " is in your queue, paused. Right-click Resume when you're ready.");
+                        }
+                        catch (Exception) { /* logged elsewhere */ }
+                        break;
 
-                case Views.NewDownloadDialog.Choice.Cancel:
-                default:
-                    // User dismissed; do nothing.
-                    break;
-            }
-        });
+                    case Views.NewDownloadDialog.Choice.Cancel:
+                    default:
+                        // User dismissed; do nothing.
+                        break;
+                }
+            });
+        }
+        finally
+        {
+            Interlocked.Exchange(ref s_promptShowing, 0);
+        }
     }
 
     protected override async void OnExit(ExitEventArgs e)
