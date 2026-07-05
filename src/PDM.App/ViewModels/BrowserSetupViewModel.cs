@@ -64,13 +64,31 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
 
     [ObservableProperty] private string _summaryText = string.Empty;
 
-    /// <summary>Opens the extension install page in the row's browser.</summary>
+    /// <summary>
+    /// Opens the browser's own extensions page (chrome://extensions etc.) and copies the
+    /// packaged extension folder path to the clipboard so the user can immediately paste it
+    /// into "Load unpacked". Once the extension is published to stores, this can be swapped
+    /// to a direct store URL.
+    /// </summary>
     [RelayCommand]
     private void OpenStorePage(BrowserRowViewModel? row)
     {
         if (row is null)
         {
             return;
+        }
+
+        string extensionFolder = FindExtensionFolder();
+        try
+        {
+            if (!string.IsNullOrEmpty(extensionFolder) && Directory.Exists(extensionFolder))
+            {
+                System.Windows.Clipboard.SetText(extensionFolder);
+            }
+        }
+        catch (Exception)
+        {
+            // Clipboard access can be denied in unusual situations; the status text still helps.
         }
 
         try
@@ -80,12 +98,48 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
                 Arguments = row.StorePageUrl,
                 UseShellExecute = false
             });
-            row.Status = "Install the extension in the opened window, then paste its ID below.";
+
+            if (!string.IsNullOrEmpty(extensionFolder))
+            {
+                row.Status = "1) Enable Developer mode  2) Click 'Load unpacked' and paste the copied path  " +
+                             $"3) Copy the ID and paste it below. Extension folder: {extensionFolder}";
+            }
+            else
+            {
+                row.Status = "Enable Developer mode, click 'Load unpacked' and pick browser-extension\\chromium, " +
+                             "then paste the extension ID below.";
+            }
         }
         catch (Exception ex)
         {
             row.Status = "Could not open the browser: " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Locates the packaged Chromium extension folder. Prefers an install-adjacent folder
+    /// (the MSI ships it), falls back to the dev-time repo folder when running from source.
+    /// </summary>
+    private static string FindExtensionFolder()
+    {
+        string local = Path.Combine(AppContext.BaseDirectory, "browser-extension", "chromium");
+        if (Directory.Exists(local))
+        {
+            return local;
+        }
+
+        // Dev-mode fallback: look for the repo's browser-extension folder relative to the bin path.
+        DirectoryInfo? cursor = new(AppContext.BaseDirectory);
+        for (int i = 0; i < 6 && cursor is not null; i++, cursor = cursor.Parent)
+        {
+            string candidate = Path.Combine(cursor.FullName, "browser-extension", "chromium");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return string.Empty;
     }
 
     /// <summary>Registers the native host for the row using the pasted extension ID.</summary>
@@ -132,16 +186,18 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Store URL for each browser. Until the extension is published to public stores, this points
-    /// at the developer sideload instructions in our docs.
+    /// The URL each browser opens on "Install extension". Until the extension is published to
+    /// public stores, we open the browser's own extensions page - that's where the user drops
+    /// the packaged folder via "Load unpacked". The wizard also copies the folder path to the
+    /// clipboard and updates the row status with the exact next steps.
     /// </summary>
     private static string StoreUrlFor(SupportedBrowser kind) => kind switch
     {
-        // Firefox will use AMO when we submit. Chrome/Edge/Brave share the Chrome Web Store URL
-        // once the extension is published; until then we open the sideload instructions.
-        SupportedBrowser.Firefox =>
-            "https://github.com/perfectdownloadmanager/pdm/blob/main/docs/BROWSER-EXTENSION.md#firefox",
-        _ => "https://github.com/perfectdownloadmanager/pdm/blob/main/docs/BROWSER-EXTENSION.md"
+        SupportedBrowser.Chrome => "chrome://extensions",
+        SupportedBrowser.Edge => "edge://extensions",
+        SupportedBrowser.Brave => "brave://extensions",
+        SupportedBrowser.Firefox => "about:debugging#/runtime/this-firefox",
+        _ => "chrome://extensions"
     };
 
     private static bool IsPlausibleExtensionId(string id) =>

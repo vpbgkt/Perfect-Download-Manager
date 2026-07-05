@@ -34,6 +34,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private DownloadItemViewModel? _selectedItem;
 
+    /// <summary>True when the filtered list is empty; drives the empty-state overlay.</summary>
+    [ObservableProperty] private bool _isListEmpty;
+
+    /// <summary>Human-readable line shown as the empty-state title.</summary>
+    [ObservableProperty] private string _emptyStateTitle = string.Empty;
+
+    /// <summary>Second-line hint under the empty-state title.</summary>
+    [ObservableProperty] private string _emptyStateHint = string.Empty;
+
     /// <summary>Categories shown in the sidebar. The first entry is the "All Downloads" view.</summary>
     public IReadOnlyList<CategoryFilterItem> Categories { get; } = new[]
     {
@@ -72,11 +81,62 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _host.DownloadManager.DownloadChanged += OnDownloadChanged;
         _host.DownloadManager.DownloadRemoved += OnDownloadRemoved;
         _host.DownloadManager.ProgressUpdated += OnProgressUpdated;
+
+        UpdateEmptyState();
     }
 
-    partial void OnSelectedCategoryChanged(CategoryFilterItem value) => Downloads.Refresh();
+    /// <summary>
+    /// Recomputes <see cref="IsListEmpty"/> plus the empty-state title/hint. The title changes
+    /// with the active category so the user always sees "No Videos downloaded yet" (etc.)
+    /// rather than a generic empty grid.
+    /// </summary>
+    private void UpdateEmptyState()
+    {
+        int visibleCount = 0;
+        foreach (object _ in Downloads)
+        {
+            visibleCount++;
+        }
+        IsListEmpty = visibleCount == 0;
 
-    partial void OnSearchTextChanged(string value) => Downloads.Refresh();
+        if (!IsListEmpty)
+        {
+            EmptyStateTitle = string.Empty;
+            EmptyStateHint = string.Empty;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            EmptyStateTitle = $"No downloads match \"{SearchText}\"";
+            EmptyStateHint = "Try a shorter search term or clear the filter.";
+            return;
+        }
+
+        DownloadCategory? cat = SelectedCategory?.Category;
+        if (cat is null)
+        {
+            EmptyStateTitle = "No downloads yet";
+            EmptyStateHint = "Click Add Download or drop a URL here to get started.";
+        }
+        else
+        {
+            EmptyStateTitle = $"No {cat.Value} downloaded yet";
+            EmptyStateHint = $"Files you add to the {cat.Value} category will appear here.";
+        }
+    }
+
+    partial void OnSelectedCategoryChanged(CategoryFilterItem value)
+    {
+        Downloads.Refresh();
+        UpdateEmptyState();
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        Downloads.Refresh();
+        UpdateEmptyState();
+    }
 
     private bool FilterItem(object obj)
     {
@@ -114,7 +174,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnDownloadAdded(object? sender, DownloadEventArgs e)
     {
-        RunOnUi(() => AddItem(e.Download));
+        RunOnUi(() =>
+        {
+            AddItem(e.Download);
+            UpdateEmptyState();
+        });
     }
 
     private void OnDownloadChanged(object? sender, DownloadEventArgs e)
@@ -136,6 +200,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 _all.Remove(vm);
             }
+            UpdateEmptyState();
         });
     }
 

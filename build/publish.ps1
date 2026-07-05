@@ -42,6 +42,16 @@ $assets = Join-Path $appOut "Assets"
 New-Item -ItemType Directory -Path $assets -Force | Out-Null
 Copy-Item (Join-Path $repo "src/PDM.App/Assets/pdm.ico") (Join-Path $assets "pdm.ico") -Force
 
+# Ship the Chromium browser extension folder so the in-app Browser Setup wizard has a stable
+# on-disk path to point users at (Load unpacked). This is temporary until the extension is
+# published to the Chrome Web Store.
+$extSource = Join-Path $repo "browser-extension/chromium"
+$extTarget = Join-Path $appOut "browser-extension/chromium"
+if (Test-Path $extSource) {
+    New-Item -ItemType Directory -Path $extTarget -Force | Out-Null
+    Copy-Item (Join-Path $extSource "*") $extTarget -Recurse -Force
+}
+
 $zip = Join-Path $dist "PDM-$Version.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $appOut "*") -DestinationPath $zip

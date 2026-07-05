@@ -71,6 +71,15 @@ public partial class MainWindow : FluentWindow
         }
     }
 
+    private void OnMoreMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.ContextMenu is not null)
+        {
+            fe.ContextMenu.PlacementTarget = fe;
+            fe.ContextMenu.IsOpen = true;
+        }
+    }
+
     private async void OnRemoveSelected(object sender, RoutedEventArgs e)
     {
         if (_viewModel.SelectedItem is not { } item)

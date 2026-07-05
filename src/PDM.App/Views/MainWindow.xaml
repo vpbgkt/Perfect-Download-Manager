@@ -118,53 +118,56 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Toolbar -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,8,0,8">
-                    <ui:Button Content="Add Download"
-                               Appearance="Primary"
-                               Icon="{ui:SymbolIcon Add24}"
-                               Click="OnAddDownload" />
-                    <ui:Button Content="Add Many"
+                <!--
+                  Toolbar - the primary download actions live on the left; less-frequent
+                  actions (Settings, License, Browser Setup, Updates) live under a "More"
+                  menu on the right so the row never overflows when the window shrinks.
+                -->
+                <DockPanel Grid.Row="0" Margin="0,8,0,8" LastChildFill="False">
+                    <ui:Button DockPanel.Dock="Right"
+                               x:Name="MoreMenuButton"
+                               Content="More"
                                Appearance="Secondary"
-                               Margin="8,0,0,0"
-                               Icon="{ui:SymbolIcon AddCircle24}"
-                               Click="OnBulkAdd" />
-                    <ui:Button Margin="8,0,0,0"
-                               Content="Resume"
-                               Icon="{ui:SymbolIcon Play24}"
-                               Command="{Binding ResumeCommand}"
-                               CommandParameter="{Binding SelectedItem}" />
-                    <ui:Button Margin="8,0,0,0"
-                               Content="Pause"
-                               Icon="{ui:SymbolIcon Pause24}"
-                               Command="{Binding PauseCommand}"
-                               CommandParameter="{Binding SelectedItem}" />
-                    <ui:Button Margin="8,0,0,0"
-                               Content="Remove"
-                               Appearance="Secondary"
-                               Icon="{ui:SymbolIcon Delete24}"
-                               Click="OnRemoveSelected" />
-                    <ui:Button Margin="8,0,0,0"
-                               Content="Settings"
-                               Appearance="Secondary"
-                               Icon="{ui:SymbolIcon Settings24}"
-                               Click="OnOpenSettings" />
-                    <ui:Button Margin="8,0,0,0"
-                               Content="License"
-                               Appearance="Secondary"
-                               Icon="{ui:SymbolIcon Key24}"
-                               Click="OnOpenLicense" />
-                    <ui:Button Margin="8,0,0,0"
-                               Content="Browser Setup"
-                               Appearance="Secondary"
-                               Icon="{ui:SymbolIcon Globe24}"
-                               Click="OnBrowserSetup" />
-                    <ui:Button Margin="8,0,0,0"
-                               Content="Check for Updates"
-                               Appearance="Secondary"
-                               Icon="{ui:SymbolIcon ArrowDownload24}"
-                               Click="OnCheckForUpdates" />
-                </StackPanel>
+                               Icon="{ui:SymbolIcon MoreHorizontal24}"
+                               Click="OnMoreMenu">
+                        <ui:Button.ContextMenu>
+                            <ContextMenu Placement="Bottom">
+                                <MenuItem Header="Settings" Click="OnOpenSettings" />
+                                <MenuItem Header="License" Click="OnOpenLicense" />
+                                <MenuItem Header="Browser Setup" Click="OnBrowserSetup" />
+                                <Separator />
+                                <MenuItem Header="Check for Updates" Click="OnCheckForUpdates" />
+                            </ContextMenu>
+                        </ui:Button.ContextMenu>
+                    </ui:Button>
+
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Add Download"
+                                   Appearance="Primary"
+                                   Icon="{ui:SymbolIcon Add24}"
+                                   Click="OnAddDownload" />
+                        <ui:Button Content="Add Many"
+                                   Appearance="Secondary"
+                                   Margin="8,0,0,0"
+                                   Icon="{ui:SymbolIcon AddCircle24}"
+                                   Click="OnBulkAdd" />
+                        <ui:Button Margin="8,0,0,0"
+                                   Content="Resume"
+                                   Icon="{ui:SymbolIcon Play24}"
+                                   Command="{Binding ResumeCommand}"
+                                   CommandParameter="{Binding SelectedItem}" />
+                        <ui:Button Margin="8,0,0,0"
+                                   Content="Pause"
+                                   Icon="{ui:SymbolIcon Pause24}"
+                                   Command="{Binding PauseCommand}"
+                                   CommandParameter="{Binding SelectedItem}" />
+                        <ui:Button Margin="8,0,0,0"
+                                   Content="Remove"
+                                   Appearance="Secondary"
+                                   Icon="{ui:SymbolIcon Delete24}"
+                                   Click="OnRemoveSelected" />
+                    </StackPanel>
+                </DockPanel>
 
                 <!--
                   Search box - narrow (about 40% of the toolbar width), left-aligned, with a
@@ -179,13 +182,21 @@
                             HorizontalAlignment="Left"
                             Margin="0,0,0,8" />
 
-                <!-- Downloads grid -->
-                <DataGrid Grid.Row="2"
+                <!-- The grid + empty-state overlay share Row 2. The overlay appears when
+                     the filtered view has no rows (per category, per search). -->
+                <Grid Grid.Row="2">
+
+                <!-- Downloads grid. Both horizontal and vertical grid lines are drawn in a
+                     subtle stroke colour so rows and columns are easier to scan without
+                     overwhelming the Fluent look. -->
+                <DataGrid x:Name="DownloadsGrid"
                           ItemsSource="{Binding Downloads}"
                           SelectedItem="{Binding SelectedItem}"
                           AutoGenerateColumns="False"
                           HeadersVisibility="Column"
-                          GridLinesVisibility="Horizontal"
+                          GridLinesVisibility="All"
+                          HorizontalGridLinesBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                          VerticalGridLinesBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"
                           CanUserResizeRows="False"
@@ -240,6 +251,25 @@
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                 </DataGrid>
+
+                <!-- Empty-state overlay, shown when the filtered list has no rows. -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                            IsHitTestVisible="False"
+                            Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVis}}">
+                    <ui:SymbolIcon Symbol="Box24"
+                                   FontSize="48"
+                                   Opacity="0.35"
+                                   HorizontalAlignment="Center" />
+                    <ui:TextBlock FontTypography="Subtitle"
+                                  HorizontalAlignment="Center"
+                                  Margin="0,8,0,4"
+                                  Text="{Binding EmptyStateTitle}" />
+                    <ui:TextBlock Opacity="0.7"
+                                  HorizontalAlignment="Center"
+                                  Text="{Binding EmptyStateHint}" />
+                </StackPanel>
+
+                </Grid>
             </Grid>
         </Grid>
     </Grid>
