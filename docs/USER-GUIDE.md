@@ -33,7 +33,8 @@ To uninstall: use **Settings → Apps** in Windows, or run `msiexec /x PDM-1.0.0
 - **Add a single URL**: click **Add Download**, paste the URL, hit Enter.
 - **Add many URLs at once**: click **Add Many**, paste one URL per line.
 - **From your browser**: drag any link onto the PDM window, or install the browser extension
-  (see [BROWSER-EXTENSION.md](BROWSER-EXTENSION.md)) and use right-click → *Download with PDM*.
+  via **toolbar → Browser Setup** (guided wizard — see [BROWSER-EXTENSION.md](BROWSER-EXTENSION.md)).
+  After the extension is installed you can right-click → *Download with PDM* on any link.
 - Downloads split into multiple parallel connections automatically, resume after interruptions,
   and land in category-specific folders under `%USERPROFILE%\Downloads\PDM\` by default.
 
@@ -76,12 +77,20 @@ your machine is offline, PDM keeps working for up to the token expiry (typically
 
 ## Auto-update
 
-PDM checks for updates on demand (toolbar → **Check for Updates**). Updates are
-cryptographically signed; a tampered package cannot install. When an update is available:
+PDM checks for updates in two places:
 
-1. PDM downloads it in the background and verifies its SHA-256.
-2. On your next launch the small helper `pdm-update.exe` swaps in the new files. If anything
-   fails, the previous version is restored automatically.
+- **Silently on startup** — 30 seconds after launch, PDM checks the update server in the
+  background. If a newer version is available, an "Update Available" dialog appears once with
+  release notes and a **Download and Install** button. Click **Later** to defer.
+- **On demand** via toolbar → **Check for Updates**.
+
+The flow is one click: PDM downloads the signed package in the background, verifies its
+SHA-256 hash matches the cryptographically-signed manifest, then relaunches to apply the update
+via the small helper `pdm-update.exe`. If anything fails during the swap, the previous version
+is restored automatically.
+
+Updates are ECDSA-signed with a private key held only in AWS — a compromised host cannot force
+malicious updates.
 
 ## Where PDM keeps things
 

@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Perfect Download Manager - update hosting.
+  Creates a public-read S3 bucket for the signed manifest.json + release .zip packages.
+  The ECDSA update-signing private key lives in SSM SecureString (server-side); only the
+  public key ships embedded in the client at compile time.
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket that hosts updates.
+    Default: pdm-updates
+
+Resources:
+  UpdatesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: false
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [GET, HEAD]
+            AllowedOrigins: ['*']
+            AllowedHeaders: ['*']
+            MaxAge: 3600
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-packages
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 180
+      VersioningConfiguration:
+        Status: Enabled
+
+  UpdatesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UpdatesBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${UpdatesBucket.Arn}/*"
+
+Outputs:
+  BucketName:
+    Value: !Ref UpdatesBucket
+  ManifestUrlStable:
+    Description: URL of the stable-channel manifest (set AppSettings.UpdateManifestUrl to this).
+    Value: !Sub "https://${UpdatesBucket}.s3.${AWS::Region}.amazonaws.com/stable/manifest.json"
+  ManifestUrlBeta:
+    Value: !Sub "https://${UpdatesBucket}.s3.${AWS::Region}.amazonaws.com/beta/manifest.json"

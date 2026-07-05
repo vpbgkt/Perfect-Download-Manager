@@ -57,6 +57,40 @@ public partial class App : Application
         mainWindow.Show();
 
         StartBrowserListener();
+        _ = StartBackgroundUpdateCheckAsync(mainWindow);
+    }
+
+    /// <summary>
+    /// After the UI is ready, waits briefly and then quietly checks for updates. If one is
+    /// available, offers it once - the user can defer with "Later". Never blocks startup and
+    /// never nags: a single non-modal offer per launch.
+    /// </summary>
+    private static async Task StartBackgroundUpdateCheckAsync(MainWindow window)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+
+            if (Host is null)
+            {
+                return;
+            }
+
+            var orchestrator = new Services.UpdateOrchestrator(Host);
+            PDM.Updater.UpdateCheckResult result = await orchestrator.CheckAsync().ConfigureAwait(true);
+            if (result.Availability != PDM.Updater.UpdateAvailability.UpdateAvailable)
+            {
+                return;
+            }
+
+            var vm = new ViewModels.UpdateAvailableViewModel(orchestrator, result.Manifest!);
+            var dialog = new Views.UpdateAvailableDialog(vm, orchestrator) { Owner = window };
+            dialog.ShowDialog();
+        }
+        catch (Exception)
+        {
+            // Background checks must never crash the app; anything unexpected is logged.
+        }
     }
 
     private void StartBrowserListener()

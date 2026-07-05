@@ -24,29 +24,43 @@ machine; there is no cloud dependency for browser capture.
 - PDM open at least once, so its named-pipe listener is running. If PDM is closed when you
   trigger a capture, the native host will start it automatically.
 
-## Install (side-load, for development or private use)
+## Install — using PDM's built-in Browser Setup wizard (recommended)
 
-Public store submissions are pending; today you install the extension unpacked.
+The easiest way. **No PowerShell needed.**
 
-1. Open the extensions page in your browser:
-   - Chrome: `chrome://extensions`
-   - Edge: `edge://extensions`
-   - Brave: `brave://extensions`
-2. Enable **Developer mode** (top-right toggle in Chrome/Brave; left panel in Edge).
-3. Click **Load unpacked** and pick the folder `browser-extension/chromium/` from this repo.
-4. Copy the extension's **ID** shown on the extensions page — it looks like
-   `abcdefghijklmnopabcdefghijklmnop`.
-5. Open a PowerShell prompt and register the native messaging host with that ID:
-   ```powershell
-   ./browser-extension/install-native-host.ps1 `
-     -HostExe "$env:LOCALAPPDATA\Perfect Download Manager\pdm-native-host.exe" `
-     -ExtensionIds "abcdefghijklmnopabcdefghijklmnop"
-   ```
-   The script writes the host manifest to
-   `%LOCALAPPDATA%\PerfectDownloadManager\native-host\com.pdm.host.json` and registers it under
-   `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.pdm.host` (plus the Edge and Brave
-   equivalents).
-6. **Restart the browser** for the registration to take effect.
+1. Open PDM → toolbar → **Browser Setup**. The wizard detects all Chromium browsers you have
+   installed (Chrome, Edge, Brave) and lists one row per browser.
+2. For each browser: click **1. Install extension** — the wizard launches that specific browser
+   at the extension install page. Click "Add to Chrome/Edge/Brave" as usual.
+3. Open the extensions page in that browser (`chrome://extensions` etc.) and **copy the
+   extension ID** (32 lowercase letters).
+4. Paste the ID into the wizard's text box and click **2. Register with PDM**. PDM writes the
+   native-messaging host manifest and the required registry entries in one shot.
+5. Restart the browser once. Done — right-click → *Download with PDM* now works.
+
+You can revoke everything with **Remove PDM from all browsers** at the bottom of the wizard.
+
+**Why do I need to click "Add to Chrome"?** Modern browsers require explicit user consent to
+install extensions — no app is allowed to silently drop an extension into your browser. The
+wizard reduces the process to three clicks per browser.
+
+## Install — sideload for development
+
+If you're building PDM yourself or don't want to use a public store version:
+
+1. Open `chrome://extensions` (or edge/brave equivalents), enable **Developer mode**.
+2. Click **Load unpacked**, pick `browser-extension/chromium/` from the repo.
+3. Follow steps 3–5 of the wizard flow above.
+
+## Install — PowerShell (advanced)
+
+The wizard does this for you, but if you want to script it:
+
+```powershell
+./browser-extension/install-native-host.ps1 `
+  -HostExe "$env:LOCALAPPDATA\Perfect Download Manager\pdm-native-host.exe" `
+  -ExtensionIds "abcdefghijklmnopabcdefghijklmnop"
+```
 
 ## Use
 

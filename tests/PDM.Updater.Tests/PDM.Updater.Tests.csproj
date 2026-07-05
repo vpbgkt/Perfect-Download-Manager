@@ -24,4 +24,10 @@
     <ProjectReference Include="..\PDM.TestSupport\PDM.TestSupport.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="live-manifest.json;live-pubkey.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

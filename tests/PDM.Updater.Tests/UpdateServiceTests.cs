@@ -24,7 +24,7 @@ public sealed class UpdateServiceTests : IDisposable
             PackageUrl = new Uri("https://updates.pdm.test/pkg.msi"),
             PackageSizeBytes = package.LongLength,
             PackageSha256 = Convert.ToHexString(hash).ToLowerInvariant(),
-            ReleasedUtc = DateTimeOffset.UtcNow
+            ReleasedUtc = DateTimeOffset.UtcNow.ToString("O")
         };
     }
 

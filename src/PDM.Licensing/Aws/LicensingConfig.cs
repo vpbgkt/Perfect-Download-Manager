@@ -29,7 +29,31 @@ public static class LicensingConfig
     public const string PublicKeyHash =
         "B58E82BB16FC426218A5D6842DA8FAF223C44F278D2F00C4E2A5C686DBBACF0A";
 
+    /// <summary>
+    /// Manifest URL for the stable auto-update channel. The client fetches this on every
+    /// "Check for Updates" and on startup; the manifest is ECDSA-signed with the update key
+    /// below. Set at build time by backend/updates/deploy.ps1.
+    /// </summary>
+    public const string UpdateManifestUrlStable =
+        "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/manifest.json";
+
+    /// <summary>Beta channel manifest URL. Currently the same bucket, different prefix.</summary>
+    public const string UpdateManifestUrlBeta =
+        "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/beta/manifest.json";
+
+    /// <summary>
+    /// ECDSA P-256 public key (SubjectPublicKeyInfo, base64) that verifies update manifests.
+    /// Distinct from the licensing key so update signing and license signing can be rotated
+    /// independently. The private half never leaves AWS SSM.
+    /// </summary>
+    public const string UpdatePublicKeyBase64 =
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE36qKqcbwtiJd60wJQiwGaT+vCLGXEnWcrk6Na18K8iYgEQeUKs+s7DgVRPP5Awz7p0hmjoZSUvWzjb0L1bmW5g==";
+
     /// <summary>True when the app was built with a configured licensing backend.</summary>
     public static bool IsConfigured =>
         ApiBaseUrl.Length > 0 && PublicKeyBase64.Length > 0;
+
+    /// <summary>True when auto-update is configured (manifest URL + update public key both set).</summary>
+    public static bool IsUpdateConfigured =>
+        UpdateManifestUrlStable.Length > 0 && UpdatePublicKeyBase64.Length > 0;
 }

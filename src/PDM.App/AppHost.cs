@@ -53,35 +53,8 @@ public sealed class AppHost : IAsyncDisposable
     /// <summary>Snapshot of the license at app start; refresh via <see cref="LicenseService"/>.</summary>
     public LicenseSnapshot License { get; set; }
 
-    /// <summary>
-    /// Returns a configured <see cref="UpdateService"/> when the app's settings include a
-    /// manifest URL and public key. Null when auto-update is not configured for this build.
-    /// </summary>
-    public UpdateService? CreateUpdateService()
-    {
-        if (string.IsNullOrWhiteSpace(Settings.UpdateManifestUrl) ||
-            string.IsNullOrWhiteSpace(Settings.UpdatePublicKeyBase64))
-        {
-            return null;
-        }
-
-        ManifestSignatureVerifier verifier;
-        try
-        {
-            verifier = ManifestSignatureVerifier.FromBase64(Settings.UpdatePublicKeyBase64);
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
-
-        string staging = Path.Combine(AppPaths.Root, "updates");
-        return new UpdateService(HttpClientProvider.Client, verifier, staging);
-    }
-
-    /// <summary>Returns the currently-running assembly version, used to compare with the manifest.</summary>
-    public static Version CurrentVersion =>
-        typeof(AppHost).Assembly.GetName().Version ?? new Version(0, 0, 0);
+    // Auto-update is orchestrated by PDM.App.Services.UpdateOrchestrator, which uses the
+    // manifest URL + public key embedded at compile time in LicensingConfig.
 
     /// <summary>Live application settings.</summary>
     public AppSettings Settings { get; }

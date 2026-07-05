@@ -102,6 +102,14 @@ public partial class MainWindow : FluentWindow
         _viewModel.LicenseBanner.Refresh();
     }
 
+    private void OnBrowserSetup(object sender, RoutedEventArgs e)
+    {
+        string host = System.IO.Path.Combine(AppContext.BaseDirectory, "pdm-native-host.exe");
+        var vm = new PDM.App.ViewModels.BrowserSetupViewModel(host);
+        var dlg = new BrowserSetupWindow(vm) { Owner = this };
+        dlg.ShowDialog();
+    }
+
     private async void OnCheckForUpdates(object sender, RoutedEventArgs e)
     {
         if (App.Host is null)
@@ -109,24 +117,8 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        PDM.Updater.UpdateService? updater = App.Host.CreateUpdateService();
-        if (updater is null)
-        {
-            MessageBox.Show(this,
-                "Auto-update is not configured for this build. Set an Update manifest URL and public key in Settings to enable it.",
-                "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        PDM.Updater.ReleaseChannel channel =
-            Enum.TryParse(App.Host.Settings.UpdateChannel, ignoreCase: true, out PDM.Updater.ReleaseChannel c)
-                ? c
-                : PDM.Updater.ReleaseChannel.Stable;
-
-        var manifestUri = new Uri(App.Host.Settings.UpdateManifestUrl!);
-        PDM.Updater.UpdateCheckResult result = await updater
-            .CheckAsync(manifestUri, channel, AppHost.CurrentVersion)
-            .ConfigureAwait(true);
+        var orchestrator = new PDM.App.Services.UpdateOrchestrator(App.Host);
+        PDM.Updater.UpdateCheckResult result = await orchestrator.CheckAsync().ConfigureAwait(true);
 
         switch (result.Availability)
         {
@@ -136,12 +128,12 @@ public partial class MainWindow : FluentWindow
                 break;
 
             case PDM.Updater.UpdateAvailability.UpdateAvailable:
-                MessageBox.Show(this,
-                    $"Version {result.Manifest!.Version} is available.\n\n" +
-                    "Downloading the update in the background; it will be applied on next launch.",
-                    "Update Available", MessageBoxButton.OK, MessageBoxImage.Information);
-                _ = Task.Run(() => updater.DownloadAsync(result.Manifest));
-                break;
+                {
+                    var vm = new UpdateAvailableViewModel(orchestrator, result.Manifest!);
+                    var dlg = new UpdateAvailableDialog(vm, orchestrator) { Owner = this };
+                    dlg.ShowDialog();
+                    break;
+                }
 
             case PDM.Updater.UpdateAvailability.CheckFailed:
                 MessageBox.Show(this, result.Message ?? "Update check failed.",

@@ -36,8 +36,12 @@ public sealed class UpdateManifest
     /// <summary>SHA-256 of the package payload as a lowercase hex string.</summary>
     public required string PackageSha256 { get; init; }
 
-    /// <summary>UTC release timestamp.</summary>
-    public required DateTimeOffset ReleasedUtc { get; init; }
+    /// <summary>
+    /// UTC release timestamp as an ISO-8601 string. Stored as a raw string (not a DateTimeOffset)
+    /// so that server and client agree byte-for-byte on the signed bytes — different languages
+    /// serialize DateTimeOffset in slightly different formats which breaks the signature.
+    /// </summary>
+    public required string ReleasedUtc { get; init; }
 
     /// <summary>Release notes in plain text or Markdown.</summary>
     public string? ReleaseNotes { get; init; }

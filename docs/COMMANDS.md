@@ -139,6 +139,43 @@ aws cloudformation delete-stack --stack-name pdm-licensing --region ap-south-1
 # The SSM signing key parameter and the S3 deploy bucket are NOT auto-deleted; remove manually if you're done for good.
 ```
 
+## Auto-update — deploy & operate
+
+**One-time**: create the S3 bucket + update-signing key pair (region ap-south-1):
+```powershell
+./backend/updates/deploy.ps1
+# Prints the update public key - embed in LicensingConfig.UpdatePublicKeyBase64 and rebuild.
+```
+
+**Publish a new release** (this is the whole workflow — three commands):
+```powershell
+# 1. Build + publish (produces dist/PDM-<version>.zip)
+./build/publish.ps1 -Version 1.2.0
+
+# 2. Sign the manifest + upload manifest + zip to S3
+./backend/updates/sign-release.ps1 -Version 1.2.0 -Channel Stable `
+  -ReleaseNotes "What's new in 1.2.0..."
+
+# 3. Optionally build a signed MSI for direct download links
+./build/build-installer.ps1 -Version 1.2.0.0
+```
+
+Existing installations pick up the new version on their next Check for Updates (silent on
+startup, or manual via toolbar).
+
+**Rollback a bad release**: re-publish an earlier version with a version number higher than the
+bad one (e.g. bad `1.2.0` → publish `1.2.1` = older code). Or edit the manifest directly:
+```powershell
+aws s3 cp dist/manifest-Stable-1.1.5.json `
+  s3://pdm-updates-<accountid>-aps1/stable/manifest.json --region ap-south-1
+```
+
+**Rotate the update signing key** (invalidates existing signatures):
+```powershell
+./backend/updates/deploy.ps1 -RotateKeys
+# Update LicensingConfig.UpdatePublicKeyBase64 and rebuild before publishing next release.
+```
+
 ## Browser extension
 
 See [BROWSER-EXTENSION.md](BROWSER-EXTENSION.md) for step-by-step install. Quick commands:

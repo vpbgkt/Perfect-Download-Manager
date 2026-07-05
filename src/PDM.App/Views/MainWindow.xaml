@@ -148,6 +148,11 @@
                                Icon="{ui:SymbolIcon Key24}"
                                Click="OnOpenLicense" />
                     <ui:Button Margin="8,0,0,0"
+                               Content="Browser Setup"
+                               Appearance="Secondary"
+                               Icon="{ui:SymbolIcon Globe24}"
+                               Click="OnBrowserSetup" />
+                    <ui:Button Margin="8,0,0,0"
                                Content="Check for Updates"
                                Appearance="Secondary"
                                Icon="{ui:SymbolIcon ArrowDownload24}"

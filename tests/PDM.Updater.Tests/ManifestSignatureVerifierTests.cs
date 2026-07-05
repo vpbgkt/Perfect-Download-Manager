@@ -11,7 +11,7 @@ public sealed class ManifestSignatureVerifierTests
         PackageUrl = new Uri("https://updates.example.com/pdm-1.2.3.msi"),
         PackageSizeBytes = 12345,
         PackageSha256 = new string('a', 64),
-        ReleasedUtc = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero),
+        ReleasedUtc = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero).ToString("O"),
         ReleaseNotes = "First proper release."
     };
 
