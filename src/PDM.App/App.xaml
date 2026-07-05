@@ -12,6 +12,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <local:BooleanToVisibilityConverter x:Key="BoolToVis" />
+            <local:NullToVisibilityConverter x:Key="NullToVis" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

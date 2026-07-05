@@ -26,6 +26,33 @@ public sealed class ManifestSignatureVerifierTests
         Assert.True(verifier.Verify(manifest));
     }
 
+    [Theory]
+    [InlineData("Simple release, no special characters.")]
+    [InlineData("Fix: helper's file locks. You can't have those.")]  // apostrophes
+    [InlineData("Includes 'quoted' text and <br> markup + & ampersands.")]  // ', <, >, &, +
+    [InlineData("Newlines\nand\ttabs and \"escaped quotes\"")]
+    public void Verify_HandlesSpecialCharactersInReleaseNotes(string notes)
+    {
+        // Regression coverage for the "Update manifest signature is invalid" bug: apostrophes
+        // and other HTML-sensitive characters used to make the .NET canonical form diverge
+        // from Node's JSON.stringify. The canonical encoder now matches Node.
+        using var signer = new ManifestSigner();
+        var manifest = new UpdateManifest
+        {
+            Version = "1.0.7",
+            Channel = ReleaseChannel.Stable,
+            PackageUrl = new Uri("https://example.com/pdm.zip"),
+            PackageSizeBytes = 1000,
+            PackageSha256 = new string('c', 64),
+            ReleasedUtc = "2026-07-08T12:00:00.000Z",
+            ReleaseNotes = notes
+        };
+        signer.Sign(manifest);
+
+        var verifier = new ManifestSignatureVerifier(signer.PublicKeySpki);
+        Assert.True(verifier.Verify(manifest), $"Signature should verify for notes: {notes}");
+    }
+
     [Fact]
     public void Verify_FalseWhenSignatureMissing()
     {

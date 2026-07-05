@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -20,6 +21,11 @@ public sealed class ManifestSignatureVerifier
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // Match Node's JSON.stringify byte-for-byte. STJ's default HTML-safe encoder escapes
+        // characters like ' + < > & as \uXXXX; Node leaves them alone. When the server signs
+        // Node output and the client verifies with STJ default, an apostrophe in release notes
+        // causes the two canonical forms to diverge and the signature check to fail.
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         Converters = { new JsonStringEnumConverter() }
     };
 

@@ -4,6 +4,16 @@ using System.Windows.Data;
 
 namespace PDM.App;
 
+/// <summary>Collapses a control when the bound value is null.</summary>
+public sealed class NullToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>Boolean-to-<see cref="Visibility"/> with support for inversion via parameter="invert".</summary>
 public sealed class BooleanToVisibilityConverter : IValueConverter
 {

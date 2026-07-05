@@ -1,1 +1,10 @@
-{   "Version": "1.0.0",   "Channel": "Stable",   "PackageUrl": "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-1.0.0.zip",   "PackageSizeBytes": 10974647,   "PackageSha256": "10fe06283e95b0c6ab4bf485b70b26a7d24a0f63bfb8ee09670f1b83d9bd789c",   "ReleasedUtc": "2026-07-05T13:15:05.802Z",   "ReleaseNotes": "Initial live-hosted release. In-app auto-update flow is enabled.",   "Signature": "MEUCIDADC4lsiJZg/N5dDqfsfuFsIJ276tKUUZ+/uAALkflPAiEAqA0IDdjZOmpYfjM+OWEwkSkXsXr7bRo4CuMvIIp+hDI=" }
+{
+  "Version": "1.0.7",
+  "Channel": "Stable",
+  "PackageUrl": "https://updates.pdm.test/pdm-1.0.7.zip",
+  "PackageSizeBytes": 12345,
+  "PackageSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "ReleasedUtc": "2026-07-08T12:00:00.000Z",
+  "ReleaseNotes": "Fix: helper's launcher now uses <temp>. Handles 'quotes' & ampersands + plus.",
+  "Signature": "MEUCIQCW+cpVEqelBeQlyXafi59SvE9WJjMj9g/Ky7nVwOoQqAIgbfz1CQW8rGwFzATr1DUwgjWll2e2LW5ANq5zkgPtxvY="
+}

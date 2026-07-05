@@ -155,20 +155,30 @@
                                    Margin="8,0,0,0"
                                    Icon="{ui:SymbolIcon AddCircle24}"
                                    Click="OnBulkAdd" />
+                        <!--
+                          Smart buttons: Resume/Pause appear only when the selected download
+                          is in a state where the action makes sense. When nothing is selected,
+                          SelectedItem is null and the bound bool falls back to false ->
+                          Visibility Collapsed via BoolToVis. Remove appears whenever a row is
+                          selected.
+                        -->
                         <ui:Button Margin="8,0,0,0"
                                    Content="Resume"
                                    Icon="{ui:SymbolIcon Play24}"
+                                   Visibility="{Binding SelectedItem.CanResume, Converter={StaticResource BoolToVis}}"
                                    Command="{Binding ResumeCommand}"
                                    CommandParameter="{Binding SelectedItem}" />
                         <ui:Button Margin="8,0,0,0"
                                    Content="Pause"
                                    Icon="{ui:SymbolIcon Pause24}"
+                                   Visibility="{Binding SelectedItem.CanPause, Converter={StaticResource BoolToVis}}"
                                    Command="{Binding PauseCommand}"
                                    CommandParameter="{Binding SelectedItem}" />
                         <ui:Button Margin="8,0,0,0"
                                    Content="Remove"
                                    Appearance="Secondary"
                                    Icon="{ui:SymbolIcon Delete24}"
+                                   Visibility="{Binding SelectedItem, Converter={StaticResource NullToVis}}"
                                    Click="OnRemoveSelected" />
                     </StackPanel>
                 </DockPanel>
@@ -208,14 +218,54 @@
                           SelectionMode="Single"
                           RowHeight="42">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Name" Binding="{Binding FileName}" Width="2*" />
+                        <!-- Name column takes the majority of the row width with a sensible
+                             minimum so long file names stay readable even in narrow windows. -->
+                        <DataGridTextColumn Header="Name"
+                                            Binding="{Binding FileName}"
+                                            Width="4*"
+                                            MinWidth="220" />
                         <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="90" />
+                        <!--
+                          Progress column: coloured by status.
+                            Downloading / Connecting / Assembling / Verifying: orange (active)
+                            Completed: green
+                            Failed:    red
+                            Paused / Queued / Canceled: grey (idle)
+                          Status-based DataTriggers ride on the Downloading default; other states
+                          override it. Uses solid brushes rather than the app accent so the state
+                          is obvious at a glance in both light and dark themes.
+                        -->
                         <DataGridTemplateColumn Header="Progress" Width="220">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Grid VerticalAlignment="Center">
-                                        <ProgressBar Height="6" Minimum="0" Maximum="100"
-                                                     Value="{Binding ProgressPercent, Mode=OneWay}" />
+                                        <ProgressBar Height="6"
+                                                     Minimum="0" Maximum="100"
+                                                     Value="{Binding ProgressPercent, Mode=OneWay}">
+                                            <ProgressBar.Style>
+                                                <Style TargetType="ProgressBar">
+                                                    <!-- default = active/orange -->
+                                                    <Setter Property="Foreground" Value="#E38B00" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Completed">
+                                                            <Setter Property="Foreground" Value="#2CB84A" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                            <Setter Property="Foreground" Value="#D93A3A" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Paused">
+                                                            <Setter Property="Foreground" Value="#8A8A8A" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Queued">
+                                                            <Setter Property="Foreground" Value="#8A8A8A" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Canceled">
+                                                            <Setter Property="Foreground" Value="#8A8A8A" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ProgressBar.Style>
+                                        </ProgressBar>
                                     </Grid>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
