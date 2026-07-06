@@ -26,6 +26,17 @@ browser integration, update launcher, packaging, and hardening.
 
 ## Recent releases
 
+- **1.0.10** — Second-round fix for the extension flood. 1.0.9's gates relied on
+  `startTime` recency and a 4-second SW-startup grace, both of which can be bypassed by
+  Edge's session-resume behaviour (Edge assigns a fresh startTime when it reissues a
+  paused download's HTTP request, and cold-start events can fire well past a 4-second
+  grace). This release adopts IDM-style filtering: a `bytesReceived === 0` gate (fresh
+  downloads only, never a session resume), a `!paused` gate, a widened 15-second startup
+  grace, a strict downloadable-content allow-list (specific MIME patterns + file
+  extensions), and a browser-internal-host reject list. The intercept toggle is now
+  remediated by a build-marker check on every service-worker startup, so an in-place
+  extension reload where the browser skips `onInstalled` still resets to safe defaults.
+  The circuit breaker was tightened from 15 to 8 events in a 5-second window.
 - **1.0.9** — Fixed a critical extension flood. Prior versions of `background.js` forwarded
   every `chrome.downloads.onCreated` event, which on Edge startup includes session-restored
   downloads, prefetched/PWA resources, and event replays - leading to hundreds of "New

@@ -101,7 +101,18 @@ public sealed class DownloadManagerTests : IAsyncLifetime, IDisposable
         await WaitForStatusAsync(download, DownloadStatus.Completed);
 
         Assert.Equal(content.Length, new FileInfo(download.State.DestinationPath).Length);
-        DownloadState? persisted = await repo.GetAsync(download.Id);
+
+        // The in-memory status flips to Completed slightly before the persistence layer
+        // finishes writing the DB row (the manager fires the state event then persists in
+        // the same handler). Poll briefly so the test is not racing that write.
+        DownloadState? persisted = null;
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            persisted = await repo.GetAsync(download.Id);
+            if (persisted is not null && persisted.Status == DownloadStatus.Completed) break;
+            await Task.Delay(20);
+        }
         Assert.NotNull(persisted);
         Assert.Equal(DownloadStatus.Completed, persisted!.Status);
     }
