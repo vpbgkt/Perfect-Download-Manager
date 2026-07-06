@@ -1,0 +1,270 @@
+# Publishing the PDM extension to the Chrome Web Store
+
+Everything you need to submit the extension: how to package it, what to paste into each field
+on the developer console, permission justifications, privacy disclosures, and the post-approval
+steps to wire the store-assigned extension ID into the PDM installer.
+
+The same package works on Microsoft Edge Add-ons; see the [Edge section](#microsoft-edge-add-ons)
+at the bottom.
+
+## 1. Package the extension
+
+Run the pack script from the repo root:
+
+```powershell
+./build/pack-extension.ps1
+```
+
+This produces `dist/pdm-extension-1.0.9.zip`. It sanity-checks that all icons and required
+files are present, and packs them at the root of the archive (Chrome Web Store rejects zips
+that contain a top-level folder).
+
+## 2. Upload
+
+1. Open [chrome.google.com/webstore/devconsole](https://chrome.google.com/webstore/devconsole).
+   (Requires a one-time $5 developer registration fee, which you already paid.)
+2. Click **New item**.
+3. Drop `dist/pdm-extension-1.0.9.zip` onto the upload area.
+4. When it finishes, you land on the store listing form. All the tabs on the left
+   (Store listing, Privacy practices, Distribution) must be green before you can submit.
+
+## 3. Store listing — copy/paste text
+
+### Extension name
+```
+Perfect Download Manager Integration
+```
+
+### Summary (max 132 characters)
+```
+Send downloads and links to Perfect Download Manager for faster, resumable, multi-connection downloads.
+```
+
+### Description (paste in the Description field)
+```
+Perfect Download Manager Integration hands off downloads from Chrome to Perfect Download Manager (PDM), a free Windows download manager that splits every file into multiple parallel connections, resumes interrupted downloads reliably, and organises everything by type.
+
+What this extension does
+- Adds a "Download with PDM" right-click menu on every link, image, video and audio element.
+- Optionally intercepts your browser's downloads and hands them to PDM instead. This is off by default and you can toggle it from the popup at any time.
+- Sends the download URL, referrer, and suggested filename to the PDM desktop app over a secure local channel (Chrome Native Messaging + a per-user Windows named pipe). Nothing is sent to any remote server by the extension.
+
+Requirements
+- Perfect Download Manager for Windows must be installed. You can grab the latest MSI from https://github.com/vpbgkt/Perfect-Download-Manager/releases
+
+Privacy
+- The extension never uploads your browsing history, download list, or any personal data to a remote server. Every download URL you send stays on your machine, going only to the local PDM app.
+- The auto-intercept toggle is stored locally with chrome.storage.local. No telemetry, no analytics.
+
+Bugs and feedback
+- Please file issues at https://github.com/vpbgkt/Perfect-Download-Manager/issues
+```
+
+### Category
+- Primary: **Productivity**
+
+### Language
+- Default: **English**
+
+### Store icon
+Upload `browser-extension/chromium/icons/icon128.png`.
+
+### Screenshots (at least one; recommend three)
+Chrome Web Store accepts **1280×800** or **640×400** PNG/JPEG.
+
+Suggested captures:
+1. The right-click "Download with PDM" menu on a link.
+2. The PDM app receiving the download (New Download prompt visible).
+3. PDM's main window with a completed multi-connection download.
+
+Screen-capture with the Windows Snipping Tool (Win+Shift+S), then resize/pad to 1280×800 in
+Paint 3D or any image editor. Save PNG for lossless quality.
+
+### Promotional images (optional but improve visibility)
+- Small tile: **440×280**
+- Large tile: **920×680**
+- Marquee: **1400×560**
+
+### Homepage URL
+```
+https://github.com/vpbgkt/Perfect-Download-Manager
+```
+
+### Support URL
+```
+https://github.com/vpbgkt/Perfect-Download-Manager/issues
+```
+
+## 4. Privacy practices — copy/paste
+
+This section is where extensions live or die in review. Because we do not collect any user
+data ourselves, every disclosure below is honest and easy.
+
+### Single purpose
+```
+Send download URLs from the browser to the Perfect Download Manager desktop app so users can download files faster with multi-connection downloading, pause/resume support, and better organisation than the browser provides on its own.
+```
+
+### Permission justifications
+
+**downloads**
+```
+Required so the extension can offer to intercept the browser's own downloads and forward them to PDM. Users opt in to interception via a toggle in the popup; it is off by default.
+```
+
+**nativeMessaging**
+```
+The extension communicates with the Perfect Download Manager desktop app installed on the same machine via Chrome Native Messaging (host name com.pdm.host). The native host relays the download URL to PDM over a per-user local named pipe. No data leaves the user's machine through this channel.
+```
+
+**contextMenus**
+```
+Adds a "Download with PDM" right-click menu on links, images, audio and video elements so users can send a specific resource to PDM.
+```
+
+**notifications**
+```
+Shows a brief confirmation toast when a download is successfully forwarded to PDM, and warns the user if PDM is not running or reachable.
+```
+
+**storage**
+```
+Stores the user's auto-intercept toggle setting locally with chrome.storage.local. No remote storage or synchronisation is used.
+```
+
+**activeTab**
+```
+When the user clicks the extension icon, the popup reads the active tab's URL so it can offer a one-click "Send current tab to PDM" button. activeTab grants temporary access to the tab only in response to the user's click; the extension never reads tab URLs in the background.
+```
+
+### Data usage disclosures (all boxes UNCHECKED)
+- Personally identifiable information — **No**
+- Health information — **No**
+- Financial and payment information — **No**
+- Authentication information — **No**
+- Personal communications — **No**
+- Location — **No**
+- Web history — **No** (the extension does forward individual download URLs to a local app on the user's request, but it never records or transmits browsing history)
+- User activity — **No**
+- Website content — **No**
+
+### Certifications (check all three)
+- I do not sell or transfer user data to third parties, outside of the approved use cases.
+- I do not use or transfer user data for purposes that are unrelated to my item's single purpose.
+- I do not use or transfer user data to determine creditworthiness or for lending purposes.
+
+### Privacy policy URL
+Chrome Web Store requires a public URL. The simplest path is to add a short `PRIVACY.md`
+at the repo root and point the field at
+`https://github.com/vpbgkt/Perfect-Download-Manager/blob/main/PRIVACY.md`. A minimal, honest
+policy is included below — save it as `PRIVACY.md` in your repo before submitting:
+
+```markdown
+# Perfect Download Manager Extension — Privacy Policy
+
+Effective date: 2026-07-06
+
+The Perfect Download Manager Integration extension does not collect, store, transmit, or
+share any personal data with the developer or any third party.
+
+## What we do with data on your device
+
+- Download URLs, referrers, and suggested filenames are sent from the extension to a local
+  Perfect Download Manager desktop app running on the same computer. This communication
+  happens over Chrome Native Messaging and a per-user Windows named pipe. It never leaves
+  your machine.
+- Your interception preference (whether the browser's own downloads should be intercepted)
+  is stored locally with chrome.storage.local. It is not synced or transmitted anywhere.
+
+## What we do NOT do
+
+- We do not collect browsing history, form data, cookies, or any account information.
+- We do not use analytics, telemetry, crash reporting, or third-party tracking.
+- We do not sell or share data with anyone.
+
+## Questions
+
+Open an issue at https://github.com/vpbgkt/Perfect-Download-Manager/issues.
+```
+
+## 5. Distribution
+
+- **Visibility**: Public (recommended) or Unlisted while you test.
+- **Regions**: All regions.
+- **Pricing**: Free.
+
+## 6. Submit for review
+
+Click **Submit for review**. Turnaround is usually 1–3 business days for a new extension
+that requests `nativeMessaging`. Extensions with only `activeTab`-scoped permissions tend to
+clear review faster than those with broad host permissions, which is why we dropped
+`http://*/*` and `https://*/*` in this manifest.
+
+## 7. Post-approval — wire the assigned extension ID into PDM
+
+Once approved, the store gives your extension a permanent 32-character ID (e.g.
+`aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`). Everyone who installs from the store gets that same ID.
+
+You need this ID in two places on the user's machine:
+
+1. **Native messaging host manifest** at
+   `%LOCALAPPDATA%\Perfect Download Manager\pdm.host.json`, in the `allowed_origins` array:
+   ```json
+   "allowed_origins": [
+     "chrome-extension://YOUR_EXTENSION_ID/"
+   ]
+   ```
+
+2. Any documentation or in-app "Install Extension" flow that opens the Chrome Web Store
+   listing URL: `https://chrome.google.com/webstore/detail/YOUR_EXTENSION_ID`.
+
+### Baking the ID into the installer
+
+Edit `browser-extension/install-native-host.ps1` to include the Web Store ID by default:
+
+```powershell
+param(
+    [Parameter(Mandatory=$true)][string]$HostExe,
+    [string[]]$ExtensionIds = @("YOUR_EXTENSION_ID"),  # <— set this once approved
+    [switch]$Uninstall
+)
+```
+
+Then rebuild PDM and push a new release. From that release onwards, PDM users who install
+the extension from the Chrome Web Store will not need to sideload or run any registration
+script — the native host is pre-authorised for the store ID.
+
+### Updating the app's "Install Extension" button
+
+`src/PDM.App/Views/BrowserSetupWindow.xaml.cs` (or wherever the "Install extension"
+button's Click handler lives) currently opens the sideload folder. After store approval,
+change it to open the store listing URL directly:
+
+```csharp
+Process.Start(new ProcessStartInfo(
+    "https://chrome.google.com/webstore/detail/YOUR_EXTENSION_ID")
+    { UseShellExecute = true });
+```
+
+## Microsoft Edge Add-ons
+
+Edge accepts the same zip package. Steps:
+
+1. Register once at [partner.microsoft.com/dashboard/microsoftedge](https://partner.microsoft.com/dashboard/microsoftedge).
+2. Register a new extension, upload the same `dist/pdm-extension-1.0.9.zip`, and paste
+   the same listing text.
+3. Edge assigns a different permanent extension ID. Add it to `allowed_origins` in the
+   native host manifest alongside the Chrome Web Store ID.
+
+## Firefox (Chromium extension → Firefox port)
+
+Firefox supports MV3 but the service worker key and a few APIs need small tweaks. Out of
+scope for this doc; add later if there is demand.
+
+## Bumping the extension for future updates
+
+- Increment `version` in `browser-extension/chromium/manifest.json` (Chrome Web Store
+  requires a strictly higher version for every uploaded zip).
+- Run `./build/pack-extension.ps1` to produce a new `dist/pdm-extension-X.Y.Z.zip`.
+- On the dashboard, open the existing item, upload the new zip under **Package**, hit
+  **Submit for review**. Subsequent updates usually clear review in hours.

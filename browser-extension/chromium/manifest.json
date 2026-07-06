@@ -2,17 +2,17 @@
   "manifest_version": 3,
   "name": "Perfect Download Manager Integration",
   "version": "1.0.9",
-  "description": "Send downloads and links to Perfect Download Manager (PDM).",
+  "description": "Send downloads and links to Perfect Download Manager (PDM), a fast multi-connection download manager for Windows.",
+  "author": "Perfect Download Manager",
+  "homepage_url": "https://github.com/vpbgkt/Perfect-Download-Manager",
+  "minimum_chrome_version": "102",
   "permissions": [
     "downloads",
     "contextMenus",
     "nativeMessaging",
     "notifications",
-    "storage"
-  ],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "storage",
+    "activeTab"
   ],
   "background": {
     "service_worker": "background.js"
