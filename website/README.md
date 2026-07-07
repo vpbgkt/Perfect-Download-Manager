@@ -33,30 +33,54 @@ npx --yes serve website -p 8080
 
 Open http://localhost:8080 in your browser.
 
-## Deploy to Cloudflare Pages
+## Deploy to Cloudflare (Workers with Static Assets)
+
+Cloudflare's current unified "Create and deploy" flow (as of 2025) requires a build/deploy
+command even for static sites. We handle that with `wrangler.jsonc` at the repo root, which
+tells Wrangler that the deployable artefact is the `./website` folder and nothing needs
+compiling.
 
 One-time setup (5–10 minutes):
 
 1. Sign in to the [Cloudflare dashboard](https://dash.cloudflare.com).
-2. **Workers & Pages → Create → Pages → Connect to Git**.
-3. Select the `vpbgkt/Perfect-Download-Manager` repo. Authorise Cloudflare to read it.
-4. Configure the build:
-   - **Framework preset**: *None*
+2. **Workers & Pages → Create → Ship something new → Connect to Git**.
+3. Pick the `vpbgkt/Perfect-Download-Manager` repository. Authorise Cloudflare to read it.
+4. On the **"Set up your application"** screen, fill:
+   - **Project name**: `pdm-website` (matches `name` in `wrangler.jsonc`)
+   - **Production branch**: `main`
+   - **Root directory**: *(leave empty)*
    - **Build command**: *(leave empty)*
-   - **Build output directory**: `website`
-   - **Root directory**: *(leave empty; keep as repo root)*
-5. Click **Save and Deploy**. First deploy takes ~30 seconds.
+   - **Deploy command**: `npx wrangler deploy`
+   - **Non-production branch builds**: on (gives you preview URLs on PRs)
+   - **Create new token**: yes (Cloudflare provisions a scoped API token automatically)
+5. Click **Save and Deploy**. First deploy takes ~60 seconds. You'll see a
+   `pdm-website.<account>.workers.dev` URL to smoke-test.
 
-Bind the custom domain (same dashboard):
+Bind the custom domain:
 
-6. On the Pages project → **Custom domains → Set up a custom domain**.
-7. Enter `perfectdownloadmanager.com`. Cloudflare adds the required DNS records automatically
-   because the domain is already on your Cloudflare account.
-8. Add `www.perfectdownloadmanager.com` too if you want the `www` prefix to work. Cloudflare
-   will 301 it to the apex.
+6. On the project → **Settings → Domains and Routes → Add custom domain**.
+7. Enter `perfectdownloadmanager.com`. Cloudflare wires the DNS records for you because the
+   domain is already on your account.
+8. Add `www.perfectdownloadmanager.com` too if you want the `www` prefix to redirect to the
+   apex.
 
-From now on, every push to `main` that touches `website/` triggers a fresh deploy. Cloudflare
-Pages also creates a preview URL for every branch and pull request.
+From now on, every push to `main` that touches `website/` or `wrangler.jsonc` triggers a
+fresh deploy. Non-production branches get preview URLs on push.
+
+### Deploying manually from your machine
+
+If you ever want to deploy without going through GitHub:
+
+```powershell
+# One-time: install Wrangler globally (or use npx as below).
+npm install -g wrangler
+
+# Log in interactively (opens a browser).
+npx wrangler login
+
+# Deploy from the repo root.
+npx wrangler deploy
+```
 
 ## Update the download links
 
