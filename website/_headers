@@ -1,0 +1,17 @@
+# Cloudflare Pages response headers.
+# Reference: https://developers.cloudflare.com/pages/configuration/headers/
+
+# Every route: modern security baseline. HSTS is set by Cloudflare automatically
+# once the custom domain is bound and Full/Strict SSL is enabled, so we do not
+# need to duplicate it here.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+# Static assets get long cache lifetimes. Filenames are versioned in the release
+# process below so cache-busting for a new build is a matter of renaming.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

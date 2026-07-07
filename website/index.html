@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Perfect Download Manager — Faster downloads for Windows</title>
+    <meta name="description" content="Perfect Download Manager (PDM) is a free multi-connection download manager for Windows. Faster downloads, reliable resume, modern Fluent UI, and Chrome/Edge browser integration." />
+
+    <!-- Open Graph / Twitter Card -->
+    <meta property="og:title" content="Perfect Download Manager" />
+    <meta property="og:description" content="Faster downloads. Reliable resume. Modern Windows UI." />
+    <meta property="og:image" content="/assets/img/og-image.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://perfectdownloadmanager.com/" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/img/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png" />
+
+    <link rel="canonical" href="https://perfectdownloadmanager.com/" />
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="brand" aria-label="Perfect Download Manager home">
+                <img src="/assets/img/logo-48.png" alt="" width="36" height="36" />
+                <span class="brand-name">Perfect Download Manager</span>
+            </a>
+            <button class="nav-toggle" id="navToggle" aria-controls="siteNav" aria-expanded="false" aria-label="Toggle navigation menu">
+                <span></span><span></span><span></span>
+            </button>
+            <nav class="site-nav" id="siteNav" aria-label="Primary">
+                <a href="#features">Features</a>
+                <a href="#download">Download</a>
+                <a href="#extension">Extension</a>
+                <a href="#faq">FAQ</a>
+                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="top">
+        <!-- Hero -->
+        <section class="hero">
+            <div class="container hero-inner">
+                <div class="hero-copy">
+                    <span class="eyebrow">v1.0.10 · Free for Windows 10 &amp; 11</span>
+                    <h1>Faster downloads.<br /><span class="accent">Reliable resume.</span></h1>
+                    <p class="lede">
+                        PDM splits every file into up to 32 parallel connections, resumes reliably after any interruption, and hands off downloads from Chrome and Edge — all inside a modern Fluent-styled Windows UI.
+                    </p>
+                    <div class="cta-row">
+                        <a href="#download" class="btn btn-primary">Download for Windows</a>
+                        <a href="#features" class="btn btn-ghost">See what's inside</a>
+                    </div>
+                    <p class="hero-note">Free · No ads · No sign-in · Open source on GitHub</p>
+                </div>
+                <div class="hero-visual" aria-hidden="true">
+                    <div class="hero-card">
+                        <div class="hero-card-row">
+                            <span class="dot dot-red"></span>
+                            <span class="dot dot-amber"></span>
+                            <span class="dot dot-green"></span>
+                            <span class="hero-card-title">Perfect Download Manager</span>
+                        </div>
+                        <div class="hero-download">
+                            <div class="hero-file-row">
+                                <span class="hero-file">ubuntu-24.04-desktop-amd64.iso</span>
+                                <span class="hero-speed">18.4 MB/s</span>
+                            </div>
+                            <div class="progress"><div class="progress-fill" style="width: 72%"></div></div>
+                            <div class="hero-meta">
+                                <span>72% · 2.9 GB of 4.0 GB</span>
+                                <span>16 connections</span>
+                            </div>
+                        </div>
+                        <div class="hero-download">
+                            <div class="hero-file-row">
+                                <span class="hero-file">project-source.zip</span>
+                                <span class="hero-speed hero-speed-done">Completed</span>
+                            </div>
+                            <div class="progress"><div class="progress-fill progress-done" style="width: 100%"></div></div>
+                            <div class="hero-meta"><span>128 MB · finished 2 min ago</span></div>
+                        </div>
+                        <div class="hero-download">
+                            <div class="hero-file-row">
+                                <span class="hero-file">tutorial-video.mp4</span>
+                                <span class="hero-speed hero-speed-paused">Paused</span>
+                            </div>
+                            <div class="progress"><div class="progress-fill progress-paused" style="width: 34%"></div></div>
+                            <div class="hero-meta"><span>34% · resume any time</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section id="features" class="section">
+            <div class="container">
+                <h2 class="section-title">Everything a serious downloader needs</h2>
+                <p class="section-lede">
+                    Built ground-up for Windows 10 and 11, with the reliability of a mature engine and the polish of a modern app.
+                </p>
+                <div class="feature-grid">
+                    <div class="feature">
+                        <div class="feature-icon">⚡</div>
+                        <h3>Multi-connection engine</h3>
+                        <p>Split any file into parallel HTTP range requests so slow single-stream throughput isn't your bottleneck. Configurable up to 32 connections per download.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">⏸</div>
+                        <h3>Rock-solid resume</h3>
+                        <p>Every download is checkpointed to disk continuously. Kill the app, reboot, lose Wi-Fi — pick up exactly where you left off without redownloading a byte.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🌐</div>
+                        <h3>Chrome &amp; Edge integration</h3>
+                        <p>Install the browser extension and right-click any link to grab it with PDM. Optional auto-intercept with strict safety gates so nothing surprises you.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🎨</div>
+                        <h3>Modern Fluent UI</h3>
+                        <p>Dark and light themes, Mica-tinted title bar, smooth animations. Feels native on Windows 11 without giving up Windows 10 support.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">⏱</div>
+                        <h3>Scheduler with quiet hours</h3>
+                        <p>Queue big files for overnight. Set global bandwidth limits during work hours. Downloads respect your schedule without babysitting.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🗂</div>
+                        <h3>Categories that make sense</h3>
+                        <p>Videos land next to videos, archives next to archives. Or set a per-download destination. SQLite catalog keeps everything indexed and searchable.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🔒</div>
+                        <h3>Signed auto-updates</h3>
+                        <p>New releases are ECDSA-signed and SHA-256 verified before install. No unexpected code, no third-party update trackers.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🛡</div>
+                        <h3>Private by design</h3>
+                        <p>No telemetry, no analytics, no ads. Downloads stay on your machine; only your license key and a hardware fingerprint touch our servers.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Download -->
+        <section id="download" class="section section-alt">
+            <div class="container">
+                <h2 class="section-title">Download PDM 1.0.10</h2>
+                <p class="section-lede">
+                    Windows 10 and 11 · 64-bit · Requires .NET 10 Desktop Runtime (installer prompts if missing).
+                </p>
+                <div class="download-grid">
+                    <div class="download-card download-card-primary">
+                        <div class="download-badge">Recommended</div>
+                        <h3>Installer (MSI)</h3>
+                        <p>Standard Windows setup with Start Menu shortcut, per-user install, no admin required.</p>
+                        <a class="btn btn-primary btn-block" href="https://github.com/vpbgkt/Perfect-Download-Manager/releases/latest" rel="noopener" target="_blank">
+                            Download MSI · 39 MB
+                        </a>
+                        <p class="download-meta">SHA-256 available on the releases page</p>
+                    </div>
+                    <div class="download-card">
+                        <h3>Portable ZIP</h3>
+                        <p>Unzip anywhere and run <code>PDM.exe</code>. Great for USB sticks and testing.</p>
+                        <a class="btn btn-ghost btn-block" href="https://github.com/vpbgkt/Perfect-Download-Manager/releases/latest" rel="noopener" target="_blank">
+                            Download ZIP · 41 MB
+                        </a>
+                        <p class="download-meta">Same bytes as the MSI, just unpacked</p>
+                    </div>
+                </div>
+                <div class="install-steps">
+                    <h3>Install in three steps</h3>
+                    <ol>
+                        <li>Download the MSI and double-click to launch the installer.</li>
+                        <li>Follow the wizard — pick an install folder if you don't want the default.</li>
+                        <li>Launch PDM from the Start Menu. First run offers a free trial; you can activate a license from the toolbar any time.</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <!-- Browser extension -->
+        <section id="extension" class="section">
+            <div class="container">
+                <div class="split">
+                    <div class="split-copy">
+                        <h2 class="section-title">Grab downloads straight from the browser</h2>
+                        <p>
+                            The PDM browser extension adds a "Download with PDM" right-click menu on every link, image, and media element. Optional auto-intercept can hand off the browser's own downloads too — with IDM-style safety filters so old files and prefetched resources never leak through.
+                        </p>
+                        <ul class="check-list">
+                            <li>Manifest V3 compatible</li>
+                            <li>Chrome, Edge, and Brave supported today</li>
+                            <li>Firefox port planned</li>
+                            <li>No broad host permissions</li>
+                            <li>Chrome Web Store submission in progress</li>
+                        </ul>
+                        <div class="cta-row">
+                            <a class="btn btn-primary" href="https://github.com/vpbgkt/Perfect-Download-Manager/blob/main/docs/BROWSER-EXTENSION.md" rel="noopener" target="_blank">Extension setup guide</a>
+                        </div>
+                    </div>
+                    <div class="split-visual" aria-hidden="true">
+                        <div class="menu-card">
+                            <div class="menu-title">Right-click on any link</div>
+                            <div class="menu-item">Open link in new tab</div>
+                            <div class="menu-item">Copy link address</div>
+                            <div class="menu-item menu-item-highlight">
+                                <img src="/assets/img/logo-48.png" alt="" width="18" height="18" />
+                                Download with PDM
+                            </div>
+                            <div class="menu-item">Save link as…</div>
+                            <div class="menu-item">Inspect</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ -->
+        <section id="faq" class="section section-alt">
+            <div class="container">
+                <h2 class="section-title">Frequently asked questions</h2>
+                <div class="faq-list">
+                    <details class="faq">
+                        <summary>Is PDM free?</summary>
+                        <p>Yes. Version 1.0.10 is free for personal and commercial use while it's in early access. A paid tier with advanced features is planned; the current version will remain free.</p>
+                    </details>
+                    <details class="faq">
+                        <summary>Does it work on Windows 10?</summary>
+                        <p>Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It needs the .NET 10 Desktop Runtime, which the installer will prompt you to install if it isn't already present.</p>
+                    </details>
+                    <details class="faq">
+                        <summary>How is it different from Internet Download Manager (IDM)?</summary>
+                        <p>Same core idea (multi-connection, browser integration), a different implementation. PDM is built on modern .NET 10 with a Fluent-styled WPF UI, ships an MV3 browser extension with strict safety filters, and uses ECDSA-signed auto-updates. Free while in early access.</p>
+                    </details>
+                    <details class="faq">
+                        <summary>Does it phone home?</summary>
+                        <p>No telemetry, no analytics, no ads. The app contacts our servers only for two things: license validation (only if you activate a license) and checking for updates. Both requests are minimal and documented in our <a href="/privacy.html">privacy policy</a>.</p>
+                    </details>
+                    <details class="faq">
+                        <summary>Where do I report a bug?</summary>
+                        <p>Open an issue on <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">GitHub</a>. Bugs with logs attached (from <code>%LOCALAPPDATA%\PerfectDownloadManager\logs</code>) get fixed fastest.</p>
+                    </details>
+                    <details class="faq">
+                        <summary>Is my code signing certificate needed?</summary>
+                        <p>The MSI is currently unsigned, so Windows SmartScreen may warn you on first install — click "More info" then "Run anyway." Code signing is on the roadmap. The auto-updater itself is already safe: every update package is ECDSA-signed and SHA-256 verified before it runs.</p>
+                    </details>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-brand">
+                <img src="/assets/img/logo-48.png" alt="" width="28" height="28" />
+                <span>Perfect Download Manager</span>
+            </div>
+            <nav class="footer-nav" aria-label="Footer">
+                <a href="#features">Features</a>
+                <a href="#download">Download</a>
+                <a href="#extension">Extension</a>
+                <a href="/privacy.html">Privacy</a>
+                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
+                <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">Support</a>
+            </nav>
+            <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
+        </div>
+    </footer>
+
+    <script src="/assets/js/main.js" defer></script>
+</body>
+</html>

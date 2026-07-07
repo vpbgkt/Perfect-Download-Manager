@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — Perfect Download Manager</title>
+    <meta name="description" content="How Perfect Download Manager and its browser extension handle your data. Short answer: they don't collect any." />
+
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/img/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png" />
+
+    <link rel="canonical" href="https://perfectdownloadmanager.com/privacy.html" />
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="brand" aria-label="Perfect Download Manager home">
+                <img src="/assets/img/logo-48.png" alt="" width="36" height="36" />
+                <span class="brand-name">Perfect Download Manager</span>
+            </a>
+            <nav class="site-nav" aria-label="Primary">
+                <a href="/#features">Features</a>
+                <a href="/#download">Download</a>
+                <a href="/#extension">Extension</a>
+                <a href="/#faq">FAQ</a>
+                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="doc-content">
+        <h1>Privacy Policy</h1>
+        <p><em>Effective date: 2026-07-06</em></p>
+        <p>
+            Perfect Download Manager and the Perfect Download Manager Integration browser
+            extension do not collect, store, transmit, or share any personal data with the
+            developer or any third party.
+        </p>
+
+        <h2>What the extension does with data on your device</h2>
+        <ul>
+            <li>
+                <strong>Download URLs, referrers, and suggested filenames</strong> are sent from
+                the extension to a local Perfect Download Manager desktop app running on the
+                same computer. This communication happens over Chrome Native Messaging and a
+                per-user Windows named pipe. It never leaves your machine.
+            </li>
+            <li>
+                <strong>Your interception preference</strong> (whether the browser's own
+                downloads should be intercepted) is stored locally with
+                <code>chrome.storage.local</code>. It is not synced or transmitted anywhere.
+            </li>
+            <li>
+                <strong>The active tab URL</strong> is read only when you click the extension's
+                popup button "Send current tab URL to PDM". This uses Chrome's
+                <code>activeTab</code> permission, which grants access only in response to your
+                click.
+            </li>
+        </ul>
+
+        <h2>What the extension does NOT do</h2>
+        <ul>
+            <li>No collection of browsing history, form data, cookies, or account information.</li>
+            <li>No analytics, telemetry, crash reporting, or third-party tracking.</li>
+            <li>No selling or sharing of data with anyone.</li>
+            <li>
+                No remote network requests from the extension. All communication is with a
+                local desktop app on the same machine.
+            </li>
+        </ul>
+
+        <h2>The Perfect Download Manager desktop app</h2>
+        <p>
+            The desktop app itself contacts remote servers only for two purposes, both of which
+            are essential to the app's function:
+        </p>
+        <ol>
+            <li>
+                <strong>Downloading files</strong> — fetching the file bytes from the origin
+                server you requested.
+            </li>
+            <li>
+                <strong>License activation and auto-update checks</strong> — contacting our AWS
+                backend to validate your license key and check for new PDM releases. These
+                requests include only your license key (if any) and a hardware fingerprint
+                derived from your machine. They do not include any browsing history.
+            </li>
+        </ol>
+
+        <h2>Questions</h2>
+        <p>
+            Open an issue at
+            <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">github.com/vpbgkt/Perfect-Download-Manager/issues</a>.
+        </p>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-brand">
+                <img src="/assets/img/logo-48.png" alt="" width="28" height="28" />
+                <span>Perfect Download Manager</span>
+            </div>
+            <nav class="footer-nav" aria-label="Footer">
+                <a href="/#features">Features</a>
+                <a href="/#download">Download</a>
+                <a href="/#extension">Extension</a>
+                <a href="/privacy.html">Privacy</a>
+                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
+                <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">Support</a>
+            </nav>
+            <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
+        </div>
+    </footer>
+
+    <script src="/assets/js/main.js" defer></script>
+</body>
+</html>
