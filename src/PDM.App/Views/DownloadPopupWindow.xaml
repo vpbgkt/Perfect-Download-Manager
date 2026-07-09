@@ -1,0 +1,219 @@
+<ui:FluentWindow x:Class="PDM.App.Views.DownloadPopupWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:vm="clr-namespace:PDM.App.ViewModels"
+                 d:DataContext="{d:DesignInstance Type=vm:DownloadPopupViewModel}"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 mc:Ignorable="d"
+                 Title="{Binding FileNameDisplay}"
+                 Width="460" Height="440"
+                 MinWidth="420" MinHeight="380"
+                 MaxWidth="720" MaxHeight="640"
+                 ResizeMode="CanResize"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica">
+
+    <!--
+      IDM-style per-download popup. All chrome and controls come from the shared Wpf.Ui
+      themed resources merged in App.xaml (ThemesDictionary + ControlsDictionary), so the
+      window inherits the shared style/font/color resources rather than falling back to
+      default WPF control styles (Req 7.1). The layout uses a proportional Grid with text
+      wrapping/trimming so content reflows without clipping within the allowed size range
+      (Req 7.5, 7.6).
+    -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Title bar with the download's file name and the PDM icon (Req 1.4, 4.1, 5.1).
+             The Wpf.Ui TitleBar supplies the minimize/maximize/close chrome. -->
+        <ui:TitleBar Grid.Row="0" Title="{Binding FileNameDisplay}">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="pack://application:,,,/Assets/pdm.ico" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <!-- Body. A ScrollViewer guarantees every element stays reachable when the window is
+             sized toward its minimum, complementing the wrapping/trimming below (Req 7.6). -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="16,8,16,16">
+            <StackPanel>
+
+                <!-- Identity: file name + source URL. Both wrap/trim so long values never
+                     clip or overlap (Req 1.4, 1.5, 7.6). -->
+                <ui:TextBlock FontTypography="Subtitle"
+                              TextWrapping="Wrap"
+                              TextTrimming="CharacterEllipsis"
+                              MaxHeight="48"
+                              Text="{Binding FileNameDisplay}" />
+                <ui:TextBlock FontSize="12"
+                              Opacity="0.7"
+                              Margin="0,2,0,0"
+                              TextWrapping="Wrap"
+                              TextTrimming="CharacterEllipsis"
+                              MaxHeight="34"
+                              Text="{Binding SourceUrlDisplay}" />
+
+                <!-- Status label (Req 1.4, 3.6). -->
+                <ui:TextBlock FontTypography="BodyStrong"
+                              Margin="0,12,0,0"
+                              Text="{Binding StatusLabel}" />
+
+                <!-- Failure banner: visible only when the download has failed, showing the
+                     recorded error message or a generic message (Req 8.2, 8.3). -->
+                <Border Margin="0,10,0,0"
+                        Padding="12,8"
+                        CornerRadius="6"
+                        Background="#33D93A3A"
+                        BorderBrush="#D93A3A"
+                        BorderThickness="1"
+                        Visibility="{Binding IsFailed, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ui:SymbolIcon Grid.Column="0"
+                                       Symbol="ErrorCircle24"
+                                       Foreground="#D93A3A"
+                                       Margin="0,0,10,0"
+                                       VerticalAlignment="Top" />
+                        <ui:TextBlock Grid.Column="1"
+                                      TextWrapping="Wrap"
+                                      Text="{Binding FailureMessage}" />
+                    </Grid>
+                </Border>
+
+                <!-- Progress bar, colored by status using the same palette as MainWindow:
+                     active orange, completed green, failed red, idle grey. Binds Value to
+                     ProgressPercent and IsIndeterminate for unknown-total downloads
+                     (Req 2.1, 2.2, 2.7, 2.9, 7.7). -->
+                <ProgressBar Height="8"
+                             Margin="0,14,0,0"
+                             Minimum="0" Maximum="100"
+                             Value="{Binding ProgressPercent, Mode=OneWay}"
+                             IsIndeterminate="{Binding IsIndeterminate}">
+                    <ProgressBar.Style>
+                        <Style TargetType="ProgressBar">
+                            <!-- default = active/orange -->
+                            <Setter Property="Foreground" Value="#E38B00" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Status}" Value="Completed">
+                                    <Setter Property="Foreground" Value="#2CB84A" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                    <Setter Property="Foreground" Value="#D93A3A" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="Paused">
+                                    <Setter Property="Foreground" Value="#8A8A8A" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="Queued">
+                                    <Setter Property="Foreground" Value="#8A8A8A" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="Canceled">
+                                    <Setter Property="Foreground" Value="#8A8A8A" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ProgressBar.Style>
+                </ProgressBar>
+
+                <!-- Numeric percentage, suppressed while the total size is unknown so the
+                     indeterminate bar is the only progress indication (Req 2.7). -->
+                <ui:TextBlock Margin="0,6,0,0"
+                              HorizontalAlignment="Right"
+                              FontSize="12"
+                              Opacity="0.85"
+                              Text="{Binding ProgressPercent, StringFormat={}{0:0}%}">
+                    <ui:TextBlock.Style>
+                        <Style TargetType="ui:TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsIndeterminate}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ui:TextBlock.Style>
+                </ui:TextBlock>
+
+                <!-- Live metrics. A WrapPanel lets the metric tiles reflow onto additional
+                     rows as the window narrows, avoiding clipping/overlap (Req 2.1, 2.3-2.8, 7.6). -->
+                <WrapPanel Margin="0,10,0,0" ItemWidth="200">
+                    <StackPanel Margin="0,0,16,10">
+                        <ui:TextBlock FontSize="11" Opacity="0.6" Text="Downloaded" />
+                        <ui:TextBlock FontTypography="BodyStrong"
+                                      TextTrimming="CharacterEllipsis"
+                                      Text="{Binding DownloadedText}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,16,10">
+                        <ui:TextBlock FontSize="11" Opacity="0.6" Text="Speed" />
+                        <ui:TextBlock FontTypography="BodyStrong"
+                                      TextTrimming="CharacterEllipsis"
+                                      Text="{Binding SpeedText}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,16,10">
+                        <ui:TextBlock FontSize="11" Opacity="0.6" Text="Time left" />
+                        <ui:TextBlock FontTypography="BodyStrong"
+                                      TextTrimming="CharacterEllipsis"
+                                      Text="{Binding EtaText}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,16,10">
+                        <ui:TextBlock FontSize="11" Opacity="0.6" Text="Connections" />
+                        <ui:TextBlock FontTypography="BodyStrong"
+                                      TextTrimming="CharacterEllipsis"
+                                      Text="{Binding ConnectionsText}" />
+                    </StackPanel>
+                </WrapPanel>
+
+                <!-- Primary controls: Pause/Resume/Cancel. Enablement is driven purely by the
+                     bound download status (Req 3.3, 3.4, 3.5, 3.6). Commands are added to the
+                     view-model in task 4.x. A WrapPanel keeps buttons visible when narrow. -->
+                <WrapPanel Margin="0,8,0,0">
+                    <ui:Button Content="Pause"
+                               Appearance="Secondary"
+                               Icon="{ui:SymbolIcon Pause24}"
+                               Margin="0,0,8,8"
+                               IsEnabled="{Binding CanPause}"
+                               Command="{Binding PauseCommand}" />
+                    <ui:Button Content="Resume"
+                               Appearance="Secondary"
+                               Icon="{ui:SymbolIcon Play24}"
+                               Margin="0,0,8,8"
+                               IsEnabled="{Binding CanResume}"
+                               Command="{Binding ResumeCommand}" />
+                    <ui:Button Content="Cancel"
+                               Appearance="Secondary"
+                               Icon="{ui:SymbolIcon Dismiss24}"
+                               Margin="0,0,8,8"
+                               IsEnabled="{Binding CanCancel}"
+                               Command="{Binding CancelCommand}" />
+                </WrapPanel>
+
+                <!-- Terminal affordances: open the completed file or its containing folder.
+                     Enabled only when the download has completed (Req 8.1). -->
+                <WrapPanel Margin="0,4,0,0">
+                    <ui:Button Content="Open File"
+                               Appearance="Primary"
+                               Icon="{ui:SymbolIcon Open24}"
+                               Margin="0,0,8,8"
+                               IsEnabled="{Binding CanOpenFile}"
+                               Command="{Binding OpenFileCommand}" />
+                    <ui:Button Content="Open Folder"
+                               Appearance="Secondary"
+                               Icon="{ui:SymbolIcon FolderOpen24}"
+                               Margin="0,0,8,8"
+                               IsEnabled="{Binding CanOpenFolder}"
+                               Command="{Binding OpenFolderCommand}" />
+                </WrapPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</ui:FluentWindow>

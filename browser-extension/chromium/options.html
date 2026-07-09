@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Perfect Download Manager — Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+
+<body>
+  <main class="wrap">
+    <header class="hdr">
+      <img src="icons/icon48.png" alt="" width="36" height="36" class="logo" />
+      <div>
+        <h1>Perfect Download Manager</h1>
+        <p class="sub">Browser integration settings</p>
+      </div>
+    </header>
+
+    <section class="group">
+      <h2>Download interception</h2>
+
+      <label class="opt">
+        <span>
+          <span class="opt-title">Automatically send downloads to PDM</span>
+          <span class="opt-desc">When the browser starts a download, hand it to PDM instead. Off by default.</span>
+        </span>
+        <input type="checkbox" id="intercept" />
+      </label>
+
+      <label class="opt">
+        <span>
+          <span class="opt-title">Cancel the browser's own download after handoff</span>
+          <span class="opt-desc">Prevents the file downloading twice. Recommended.</span>
+        </span>
+        <input type="checkbox" id="cancelBrowserDownload" />
+      </label>
+
+      <label class="opt">
+        <span>
+          <span class="opt-title">Intercept every file type</span>
+          <span class="opt-desc">Bypass the built-in file-type filter and forward all downloads. Advanced.</span>
+        </span>
+        <input type="checkbox" id="interceptAllTypes" />
+      </label>
+    </section>
+
+    <section class="group">
+      <h2>Notifications</h2>
+      <label class="opt">
+        <span>
+          <span class="opt-title">Show a toast when a download is sent</span>
+          <span class="opt-desc">A brief confirmation each time PDM accepts a download.</span>
+        </span>
+        <input type="checkbox" id="notifications" />
+      </label>
+    </section>
+
+    <p id="saved" class="saved hidden">Saved ✓</p>
+
+    <footer class="ftr">
+      Perfect Download Manager must be installed and run at least once.
+      <a href="https://github.com/vpbgkt/Perfect-Download-Manager" target="_blank" rel="noopener">Learn more</a>
+    </footer>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+
+</html>

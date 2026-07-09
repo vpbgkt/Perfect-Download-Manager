@@ -76,6 +76,21 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
             SummaryText = $"Detected {Browsers.Count} browser(s): "
                           + string.Join(", ", Browsers.Select(x => x.DisplayName));
         }
+
+        // Reflect any existing registration so reopening the wizard after an app restart shows
+        // the real state instead of always "Not configured". The native-host manifest is the
+        // source of truth: if it lists an extension ID, the integration is set up.
+        IReadOnlyList<string> registeredIds = NativeHostRegistrar.GetRegisteredExtensionIds();
+        if (registeredIds.Count > 0)
+        {
+            string primaryId = registeredIds[0];
+            foreach (BrowserRowViewModel row in Browsers)
+            {
+                row.ExtensionId = primaryId;
+                row.IsConfigured = true;
+                row.Status = "Configured.";
+            }
+        }
     }
 
     public ObservableCollection<BrowserRowViewModel> Browsers { get; } = new();

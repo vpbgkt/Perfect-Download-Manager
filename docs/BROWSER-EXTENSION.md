@@ -11,11 +11,19 @@ machine; there is no cloud dependency for browser capture.
 
 ## What it gives you
 
-- **Right-click "Download with PDM"** on any link, image, video, audio, or the current page.
-- **Optional interception** of every browser download so PDM handles it instead (toggle in the
-  popup). When enabled, PDM cancels the browser's own download to avoid duplicates.
-- A **popup** (click the toolbar icon) with a "Send current tab URL to PDM" button and the
-  interception toggle.
+- **Right-click "Download with PDM"** on any link, image, video, audio, or selection, plus a
+  "Send this page to PDM" item on the page context menu.
+- **A polished popup** (click the toolbar icon) with:
+  - a live **connection indicator** (green when PDM's native host is reachable),
+  - the auto-intercept **toggle**,
+  - **"Send this page to PDM"**, and
+  - **"Scan page for media & links"** — lists every downloadable file link and video/audio
+    source on the page so you can send one or all of them (IDM-style).
+- **Keyboard shortcut** (Alt+Shift+P by default) to send the current tab.
+- A **Settings page** (popup → Settings) for interception, notifications, cancelling the
+  browser's own download after handoff, and an "intercept every file type" override.
+- **Optional interception** of every browser download so PDM handles it instead. When enabled,
+  PDM cancels the browser's own download to avoid duplicates.
 - Chrome notification confirming each capture landed.
 
 ## Prerequisites

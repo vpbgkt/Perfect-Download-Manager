@@ -214,6 +214,52 @@ public sealed class DownloadManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Cancels a download, transitioning it to <see cref="DownloadStatus.Canceled"/> without
+    /// removing it from the catalog. Any in-flight run is cancelled first (mirroring
+    /// <see cref="PauseAsync"/>/<see cref="RemoveAsync"/>), then the state is persisted and a
+    /// <see cref="DownloadChanged"/> event is raised (not <see cref="DownloadRemoved"/>), so any
+    /// bound UI can keep showing a canceled indication. No-op when the download is already
+    /// <see cref="DownloadStatus.Completed"/> or <see cref="DownloadStatus.Canceled"/>.
+    /// </summary>
+    public async Task CancelAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        if (!_downloads.TryGetValue(id, out ManagedDownload? managed))
+        {
+            return;
+        }
+
+        if (managed.State.Status is DownloadStatus.Completed or DownloadStatus.Canceled)
+        {
+            return;
+        }
+
+        if (_running.TryGetValue(id, out RunningEntry? entry))
+        {
+            entry.Cts.Cancel();
+            // The running task will settle (typically to Paused via OperationCanceledException);
+            // wait for it to unwind before we overwrite the status with Canceled.
+            try
+            {
+                await entry.Task.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected — this is how in-flight cancellation is delivered.
+            }
+            catch (DownloadException)
+            {
+                // A failed transfer during cancellation is superseded by the Canceled status below.
+            }
+        }
+
+        managed.State.Status = DownloadStatus.Canceled;
+        managed.State.CompletedUtc = DateTimeOffset.UtcNow;
+        await _repository.UpsertAsync(managed.State, cancellationToken).ConfigureAwait(false);
+        DownloadChanged?.Invoke(this, new DownloadEventArgs(managed));
+        Signal();
+    }
+
+    /// <summary>
     /// Removes a download from the manager. When <paramref name="deleteFiles"/> is true the
     /// part file and any completed destination file are also deleted.
     /// </summary>

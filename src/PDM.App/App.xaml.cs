@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using PDM.App.Services;
 using PDM.App.ViewModels;
 using PDM.App.Views;
+using PDM.Infrastructure;
 using Wpf.Ui.Appearance;
 
 namespace PDM.App;
@@ -53,7 +54,39 @@ public partial class App : Application
 
         ApplyTheme(Host.Settings.Theme);
 
-        var mainWindow = new MainWindow(new MainViewModel(Host));
+        var mainViewModel = new MainViewModel(Host);
+
+        // Wire the IDM-style per-download popup windows. The PopupManager owns the popup
+        // lifecycle and event routing; the window factory builds a fully-wired popup (view-model
+        // + FluentWindow) for a given download and shows it. PopupManager never calls Show()
+        // itself, so the factory is responsible for making the window visible.
+        PopupManager? popupManager = null;
+        Func<ManagedDownload, IDownloadPopup> popupFactory = managed =>
+        {
+            // The view-model's confirmCancel delegate must call back into the window that hosts it,
+            // so the window is captured and assigned after construction (the view-model does not
+            // invoke confirmCancel during construction).
+            DownloadPopupWindow? window = null;
+            var viewModel = new DownloadPopupViewModel(
+                managed,
+                Host!.DownloadManager,
+                confirmCancel: message => window!.ConfirmCancel(message),
+                showError: message => Host!.Notifications.ShowError("Download", message));
+
+            window = new DownloadPopupWindow(viewModel, id => popupManager!.NotifyPopupClosed(id));
+            window.Show();
+            return window;
+        };
+
+        popupManager = new PopupManager(
+            Host.DownloadManager,
+            popupFactory,
+            showError: message => Host!.Notifications.ShowError("Download", message),
+            logger: Host.LoggerFactory.CreateLogger<PopupManager>());
+        popupManager.Start();
+        mainViewModel.PopupManager = popupManager;
+
+        var mainWindow = new MainWindow(mainViewModel);
         MainWindow = mainWindow;
         mainWindow.Show();
 

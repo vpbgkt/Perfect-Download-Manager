@@ -26,6 +26,27 @@ browser integration, update launcher, packaging, and hardening.
 
 ## Recent releases
 
+- **1.1.2** — Eliminated the startup "auto-interception paused" notification and the
+  root cause behind it. The circuit breaker counted *every* raw `chrome.downloads.onCreated`
+  event before filtering, so the burst of session-restore events the browser replays on
+  launch tripped it and fired a notification (and in older builds, disabled the toggle).
+  The breaker is removed entirely; flood protection is now a silent forward-cap that only
+  counts genuinely forward-eligible downloads. Session-restore replays are rejected by the
+  per-item property gates (`bytesReceived === 0`, `!paused`, `state === in_progress`,
+  `!byExtensionId`, `exists !== false`) plus a startup-window recency check, so they never
+  reach the cap and never notify. Auto-interception is now silent (toolbar badge only, no
+  toast) to match IDM; user-initiated captures still toast. Settings are cached in memory and
+  refreshed via `storage.onChanged`, removing a storage round-trip per download event.
+- **1.1.1** — Rebranded the extension to the official PDM app logo and orange (#E38B00)
+  theme; "Intercept every file type" now defaults on. Fixed Browser Setup showing
+  "Not configured" after an app restart (it now reads the native-host manifest's
+  `allowed_origins` on load via `NativeHostRegistrar.GetRegisteredExtensionIds`).
+- **1.1.0** — Reliability + UX overhaul. Removed the MV3 footgun where the SW-startup grace
+  and the `downloads.search` pre-existing snapshot dropped every download that woke a cold
+  service worker (interception "worked once then stopped"). Startup suppression is now keyed
+  to the real browser launch (`chrome.runtime.onStartup` + `storage.session`), not SW age.
+  Added a redesigned popup (live connection status, media/link scanner), an options page,
+  a keyboard shortcut, and native-host status ping.
 - **1.0.10** — Second-round fix for the extension flood. 1.0.9's gates relied on
   `startTime` recency and a 4-second SW-startup grace, both of which can be bypassed by
   Edge's session-resume behaviour (Edge assigns a fresh startTime when it reissues a

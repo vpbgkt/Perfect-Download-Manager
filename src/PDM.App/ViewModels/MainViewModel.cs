@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PDM.App.Services;
 using PDM.Core.Downloading;
 using PDM.Core.Models;
 using PDM.Infrastructure;
@@ -68,6 +69,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>License banner shown at the top of the main window.</summary>
     public LicenseBannerViewModel LicenseBanner { get; }
+
+    /// <summary>
+    /// Reopens (or foregrounds) the per-download popup window for a selected download. Set during
+    /// app startup (see <c>App.OnStartup</c>) once the manager has been constructed; left null in
+    /// contexts where popups are not wired up, in which case the "Show popup" command is a no-op.
+    /// </summary>
+    public PopupManager? PopupManager { get; set; }
 
     public MainViewModel(AppHost host)
     {
@@ -236,6 +244,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             dispatcher.BeginInvoke(action);
         }
+    }
+
+    /// <summary>
+    /// Reopens (or brings to the foreground) the per-download popup window for the given download,
+    /// falling back to the currently selected row when no explicit item is supplied. Wired to the
+    /// toolbar button and the downloads-grid context menu (Requirement 5.4). No-op when popups are
+    /// not wired up or no download is targeted.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanShowPopup))]
+    private void ShowPopup(DownloadItemViewModel? item)
+    {
+        DownloadItemViewModel? target = item ?? SelectedItem;
+        if (target is null)
+        {
+            return;
+        }
+
+        PopupManager?.ShowPopupFor(target.Id);
+    }
+
+    /// <summary>The toolbar button is enabled only when a download row is selected.</summary>
+    private bool CanShowPopup(DownloadItemViewModel? item) => (item ?? SelectedItem) is not null;
+
+    partial void OnSelectedItemChanged(DownloadItemViewModel? value)
+    {
+        ShowPopupCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]

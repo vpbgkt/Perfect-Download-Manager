@@ -1,28 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
-  <style>
-    body { font-family: "Segoe UI", sans-serif; width: 260px; margin: 0; padding: 14px; }
-    h1 { font-size: 14px; margin: 0 0 10px; }
-    label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-    .row { margin: 10px 0; }
-    button { width: 100%; padding: 8px; font-size: 13px; cursor: pointer; }
-    .hint { font-size: 11px; color: #666; margin-top: 8px; }
-  </style>
+  <meta name="color-scheme" content="light dark" />
+  <link rel="stylesheet" href="popup.css" />
 </head>
+
 <body>
-  <h1>Perfect Download Manager</h1>
-  <div class="row">
-    <label>
-      <input type="checkbox" id="intercept" />
-      Automatically send downloads to PDM
+  <header class="hdr">
+    <img class="logo" src="icons/icon48.png" alt="" width="28" height="28" />
+    <div class="hdr-text">
+      <div class="title">Perfect Download Manager</div>
+      <div class="subtitle">Browser integration</div>
+    </div>
+  </header>
+
+  <div id="status" class="status status--checking">
+    <span class="dot"></span>
+    <span id="status-text">Checking connection…</span>
+  </div>
+
+  <div class="card">
+    <label class="switch-row">
+      <span class="switch-label">
+        Automatically send downloads to PDM
+        <span class="switch-hint">Intercept the browser's own downloads</span>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="intercept" />
+        <span class="slider"></span>
+      </span>
     </label>
   </div>
-  <div class="row">
-    <button id="test">Send current tab URL to PDM</button>
+
+  <div class="actions">
+    <button id="send-page" class="btn btn--primary">
+      <svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+      Send this page to PDM
+    </button>
+    <button id="scan" class="btn btn--ghost">
+      <svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+      Scan page for media &amp; links
+    </button>
   </div>
-  <div class="hint">Right-click any link and choose "Download with PDM".</div>
+
+  <div id="scan-results" class="scan hidden">
+    <div class="scan-head">
+      <span id="scan-count">0 items found</span>
+      <button id="send-all" class="link-btn">Send all</button>
+    </div>
+    <ul id="scan-list" class="scan-list"></ul>
+  </div>
+
+  <footer class="ftr">
+    <span class="hint">Right-click any link → “Download with PDM”.</span>
+    <button id="open-options" class="link-btn">Settings</button>
+  </footer>
+
   <script src="popup.js"></script>
 </body>
+
 </html>

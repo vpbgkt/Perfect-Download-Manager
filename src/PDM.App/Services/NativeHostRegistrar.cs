@@ -43,6 +43,58 @@ public static class NativeHostRegistrar
         }
     }
 
+    /// <summary>
+    /// Returns the extension IDs currently registered in the native-host manifest, or an empty
+    /// list if the host has not been registered yet. Lets the UI reflect existing configuration
+    /// after an app restart instead of always showing "Not configured".
+    /// </summary>
+    public static IReadOnlyList<string> GetRegisteredExtensionIds()
+    {
+        string manifestPath = ManifestPath();
+        if (!File.Exists(manifestPath))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            using FileStream fs = File.OpenRead(manifestPath);
+            using JsonDocument doc = JsonDocument.Parse(fs);
+            if (!doc.RootElement.TryGetProperty("allowed_origins", out JsonElement origins) ||
+                origins.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<string>();
+            }
+
+            const string prefix = "chrome-extension://";
+            var ids = new List<string>();
+            foreach (JsonElement origin in origins.EnumerateArray())
+            {
+                string? value = origin.GetString();
+                if (string.IsNullOrEmpty(value) ||
+                    !value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string id = value[prefix.Length..].TrimEnd('/');
+                if (id.Length > 0)
+                {
+                    ids.Add(id);
+                }
+            }
+
+            return ids;
+        }
+        catch (Exception)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>True when the native host manifest is present and lists at least one extension ID.</summary>
+    public static bool IsRegistered() => GetRegisteredExtensionIds().Count > 0;
+
     /// <summary>Removes the native host manifest + all registry entries for Chromium browsers.</summary>
     public static void UnregisterChromium()
     {

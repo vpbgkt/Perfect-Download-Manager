@@ -174,6 +174,17 @@
                                    Visibility="{Binding SelectedItem.CanPause, Converter={StaticResource BoolToVis}}"
                                    Command="{Binding PauseCommand}"
                                    CommandParameter="{Binding SelectedItem}" />
+                        <!--
+                          Show popup: reopens the per-download popup window for the selected
+                          row. The command's CanExecute ties IsEnabled to the current selection,
+                          so the button greys out when nothing is selected.
+                        -->
+                        <ui:Button Margin="8,0,0,0"
+                                   Content="Show popup"
+                                   Appearance="Secondary"
+                                   Icon="{ui:SymbolIcon WindowNew24}"
+                                   Command="{Binding ShowPopupCommand}"
+                                   CommandParameter="{Binding SelectedItem}" />
                         <ui:Button Margin="8,0,0,0"
                                    Content="Remove"
                                    Appearance="Secondary"
@@ -297,6 +308,12 @@
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             <MenuItem Header="Show in folder"
                                       Command="{Binding PlacementTarget.DataContext.OpenFolderCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.SelectedItem,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            <Separator />
+                            <MenuItem Header="Show popup"
+                                      Command="{Binding PlacementTarget.DataContext.ShowPopupCommand,
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                       CommandParameter="{Binding PlacementTarget.SelectedItem,
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
