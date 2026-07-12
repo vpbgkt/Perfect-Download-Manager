@@ -48,6 +48,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="PDM.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Assets\pdm.ico" />
     <None Update="Assets\generate-icon.ps1">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
