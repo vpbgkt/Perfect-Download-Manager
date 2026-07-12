@@ -135,6 +135,16 @@ public partial class App : Application
         }
 
         var logger = Host.LoggerFactory.CreateLogger("PDM.BrowserIntegration");
+
+        // Pre-authorise the published Chrome Web Store extension so users who install it from
+        // the store get working native messaging with zero manual setup. Idempotent and
+        // best-effort; runs off the UI thread so registry/file I/O never delays the window.
+        _ = Task.Run(() =>
+        {
+            string hostExe = System.IO.Path.Combine(AppContext.BaseDirectory, "pdm-native-host.exe");
+            NativeHostRegistrar.EnsureStoreExtensionRegistered(hostExe);
+        });
+
         _browserListener = new Services.DownloadRequestListener(async request =>
         {
             if (!Uri.TryCreate(request.Url, UriKind.Absolute, out Uri? uri) ||

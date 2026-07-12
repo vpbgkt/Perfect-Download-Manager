@@ -68,12 +68,16 @@ internal static class Program
             return new { ok = true };
         }
 
-        // PDM may not be running: launch it, then retry once.
+        // PDM may not be running: launch it, then keep retrying while it starts. A cold start has
+        // to load settings, open the history database and evaluate the licence (which can include
+        // a network round-trip) before its pipe listener is ready, so the old 5-second window was
+        // easily missed on slower machines - the browser's download was then silently dropped.
+        // sendNativeMessage has no timeout of its own, so waiting here up to ~30s is safe.
         if (TryLaunchApp())
         {
-            for (int i = 0; i < 20; i++)
+            for (int i = 0; i < 60; i++)
             {
-                await Task.Delay(250).ConfigureAwait(false);
+                await Task.Delay(500).ConfigureAwait(false);
                 if (await TrySendAsync(payload).ConfigureAwait(false))
                 {
                     return new { ok = true };

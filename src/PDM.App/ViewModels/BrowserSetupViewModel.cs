@@ -6,24 +6,6 @@ using PDM.App.Services;
 
 namespace PDM.App.ViewModels;
 
-/// <summary>Payload for <see cref="BrowserSetupViewModel.InstallExtensionRequested"/>.</summary>
-public sealed class InstallExtensionRequestedEventArgs : EventArgs
-{
-    public InstallExtensionRequestedEventArgs(
-        BrowserRowViewModel row, DetectedBrowser browser, string extensionFolder, string extensionsUrl)
-    {
-        Row = row;
-        Browser = browser;
-        ExtensionFolder = extensionFolder;
-        ExtensionsUrl = extensionsUrl;
-    }
-
-    public BrowserRowViewModel Row { get; }
-    public DetectedBrowser Browser { get; }
-    public string ExtensionFolder { get; }
-    public string ExtensionsUrl { get; }
-}
-
 /// <summary>Row in the Browser Setup wizard: one per detected browser.</summary>
 public sealed partial class BrowserRowViewModel : ObservableObject
 {
@@ -97,12 +79,10 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
 
     [ObservableProperty] private string _summaryText = string.Empty;
 
-    /// <summary>Raised when the user clicks "Install extension" - the view shows the help dialog.</summary>
-    public event EventHandler<InstallExtensionRequestedEventArgs>? InstallExtensionRequested;
-
     /// <summary>
-    /// Fires <see cref="InstallExtensionRequested"/> for the row. The view shows a step-by-step
-    /// help dialog that opens the browser, Explorer, and copies the folder path.
+    /// Opens the published Chrome Web Store listing in the row's browser so the user can click
+    /// "Add to Chrome/Edge/Brave". PDM already pre-authorises the store extension ID on startup,
+    /// so once the user adds it, the integration works immediately — no ID pasting required.
     /// </summary>
     [RelayCommand]
     private void OpenStorePage(BrowserRowViewModel? row)
@@ -112,44 +92,28 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
             return;
         }
 
-        string extensionFolder = FindExtensionFolder();
-        if (string.IsNullOrEmpty(extensionFolder))
+        try
         {
-            row.Status = "Extension folder not found. Please reinstall PDM or contact support.";
-            return;
-        }
-
-        InstallExtensionRequested?.Invoke(this, new InstallExtensionRequestedEventArgs(
-            row, row.Browser, extensionFolder, row.StorePageUrl));
-
-        row.Status = "Extension folder path copied to clipboard. " +
-                     "After you install the extension in the browser, copy its ID (32 lowercase letters) into the box below.";
-    }
-
-    /// <summary>
-    /// Locates the packaged Chromium extension folder. Prefers an install-adjacent folder
-    /// (the MSI ships it), falls back to the dev-time repo folder when running from source.
-    /// </summary>
-    private static string FindExtensionFolder()
-    {
-        string local = Path.Combine(AppContext.BaseDirectory, "browser-extension", "chromium");
-        if (Directory.Exists(local))
-        {
-            return local;
-        }
-
-        // Dev-mode fallback: look for the repo's browser-extension folder relative to the bin path.
-        DirectoryInfo? cursor = new(AppContext.BaseDirectory);
-        for (int i = 0; i < 6 && cursor is not null; i++, cursor = cursor.Parent)
-        {
-            string candidate = Path.Combine(cursor.FullName, "browser-extension", "chromium");
-            if (Directory.Exists(candidate))
+            string? browserExe = row.Browser.ExecutablePath;
+            if (!string.IsNullOrEmpty(browserExe) && File.Exists(browserExe))
             {
-                return candidate;
+                // Open the store page in the specific browser this row represents.
+                Process.Start(new ProcessStartInfo(browserExe) { Arguments = row.StorePageUrl, UseShellExecute = true });
             }
-        }
+            else
+            {
+                // Fall back to the system default browser.
+                Process.Start(new ProcessStartInfo(row.StorePageUrl) { UseShellExecute = true });
+            }
 
-        return string.Empty;
+            row.Status = $"Opened the store page. Click \u201CAdd to {row.DisplayName}\u201D — PDM is already " +
+                         "authorised for the extension, so it works the moment it's added.";
+        }
+        catch (Exception ex)
+        {
+            row.Status = "Couldn't open the store page: " + ex.Message +
+                         $"\nOpen it manually: {row.StorePageUrl}";
+        }
     }
 
     /// <summary>Registers the native host for the row using the pasted extension ID.</summary>
@@ -170,8 +134,21 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
 
         try
         {
+            // Merge with any already-registered IDs (including the published Web Store ID that
+            // PDM authorises on startup) so registering a sideloaded/dev ID never drops the
+            // store extension's authorisation.
+            var ids = new List<string>(NativeHostRegistrar.GetRegisteredExtensionIds());
+            if (!ids.Contains(id, StringComparer.OrdinalIgnoreCase))
+            {
+                ids.Add(id);
+            }
+            if (!ids.Contains(NativeHostRegistrar.WebStoreExtensionId, StringComparer.OrdinalIgnoreCase))
+            {
+                ids.Add(NativeHostRegistrar.WebStoreExtensionId);
+            }
+
             // Register for all Chromium browsers at once - the same manifest covers Chrome/Edge/Brave.
-            NativeHostRegistrar.RegisterChromium(_hostExePath, new[] { id },
+            NativeHostRegistrar.RegisterChromium(_hostExePath, ids,
                 new[] { SupportedBrowser.Chrome, SupportedBrowser.Edge, SupportedBrowser.Brave });
 
             row.Status = "Configured. Restart the browser to activate.";
@@ -196,18 +173,18 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The URL each browser opens on "Install extension". Until the extension is published to
-    /// public stores, we open the browser's own extensions page - that's where the user drops
-    /// the packaged folder via "Load unpacked". The wizard also copies the folder path to the
-    /// clipboard and updates the row status with the exact next steps.
+    /// The URL each browser opens on "Install extension". The extension is published on the
+    /// Chrome Web Store; Chrome, Edge and Brave can all install from it (Edge users may be
+    /// prompted to "Allow extensions from other stores"). Firefox falls back to its own
+    /// debugging page until an AMO listing exists.
     /// </summary>
     private static string StoreUrlFor(SupportedBrowser kind) => kind switch
     {
-        SupportedBrowser.Chrome => "chrome://extensions",
-        SupportedBrowser.Edge => "edge://extensions",
-        SupportedBrowser.Brave => "brave://extensions",
+        SupportedBrowser.Chrome => NativeHostRegistrar.WebStoreListingUrl,
+        SupportedBrowser.Edge => NativeHostRegistrar.WebStoreListingUrl,
+        SupportedBrowser.Brave => NativeHostRegistrar.WebStoreListingUrl,
         SupportedBrowser.Firefox => "about:debugging#/runtime/this-firefox",
-        _ => "chrome://extensions"
+        _ => NativeHostRegistrar.WebStoreListingUrl
     };
 
     private static bool IsPlausibleExtensionId(string id) =>

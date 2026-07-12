@@ -32,36 +32,27 @@ machine; there is no cloud dependency for browser capture.
 - PDM open at least once, so its named-pipe listener is running. If PDM is closed when you
   trigger a capture, the native host will start it automatically.
 
-## Install — using PDM's built-in Browser Setup wizard (current path)
+## Install — from the Chrome Web Store (one-click)
 
-Until the extension is published to the Chrome Web Store (see below), the wizard walks you
-through a one-time drag-and-drop install:
+The extension is published:
+**https://chromewebstore.google.com/detail/phbbcmofdbbojilmcpaghnafpamnocom**
 
-1. Open PDM → toolbar → **More → Browser Setup**. The wizard detects Chrome, Edge, and Brave
-   (and Firefox, in a slightly different flow) and lists one row per browser.
-2. Click **1. Install extension**. PDM shows a step-by-step help window and:
-   - Opens the browser at its `chrome://extensions` page.
-   - Opens Windows Explorer at the packaged extension folder (highlighted).
-   - Copies the folder path to the clipboard.
-3. In the browser's extensions page, toggle **Developer mode** on (top-right).
-4. **Drag the `chromium` folder** from the Explorer window onto the browser's extensions page.
-   The browser installs the extension immediately. (Or use "Load unpacked" and paste the path.)
-5. Copy the new extension's **ID** (32 lowercase letters) shown under its name.
-6. Paste the ID into the wizard's text box and click **2. Register with PDM**. Done.
+PDM pre-authorises this store ID automatically on every launch (it writes the native-host
+manifest + registry keys for Chrome/Edge/Brave), so there is nothing to paste or register:
 
-Remove it any time with the **Remove PDM from all browsers** button.
+1. Open PDM → toolbar → **More → Browser Setup** → **Install extension** (or just open the
+   store link above).
+2. In the browser, click **Add to Chrome / Edge / Brave** → **Add extension**.
+3. Done. Right-click a link → **Download with PDM**, or turn on auto-interception in the popup.
 
-## After the Chrome Web Store listing goes live (one-click install)
-
-Once we pay the one-time $5 Chrome Web Store developer fee and get the extension approved, the
-flow shortens to:
-
-1. Open PDM → **Browser Setup** → **Install extension**
-2. Browser opens the store page. Click **Add to Chrome**.
-3. Copy the ID → paste → **Register**.
-
-No Developer mode toggle. No Explorer. No folder path. Same one-click experience IDM offers via
+No Developer mode, no folder dragging, no ID pasting. Same one-click experience IDM offers via
 their store-hosted [IDM Integration Module](https://chromewebstore.google.com/detail/idm-integration-module/ngpampappnmepgilojfohadhhmbhlaek).
+
+> Edge users: the Chrome Web Store link works in Edge; if prompted, click **Allow extensions
+> from other stores**. The same extension ID is authorised for Edge already.
+
+Remove it any time with the wizard's **Remove PDM from all browsers** button (note: PDM
+re-authorises the store ID on its next launch, since the integration ships with the app).
 
 Fees and listing timelines:
 - **Chrome Web Store**: $5 one-time developer registration. Review usually 1–14 days per submission.
@@ -111,11 +102,15 @@ added when the AMO listing goes through.
 
 ## Public store distribution
 
-Not yet published. Steps outlined in [REMAINING-WORK.md](REMAINING-WORK.md):
-1. Replace the placeholder icons with production art.
-2. Submit to Chrome Web Store (~$5 one-time), Edge Add-ons, Firefox AMO.
-3. After the extension IDs are stable, the MSI installer will register the host for those IDs
-   automatically so end users get a one-click experience.
+**Live on the Chrome Web Store:**
+https://chromewebstore.google.com/detail/phbbcmofdbbojilmcpaghnafpamnocom
+(ID `phbbcmofdbbojilmcpaghnafpamnocom`). PDM auto-authorises this ID on startup, so store
+installs need no manual registration.
+
+Still open:
+1. Microsoft Edge Add-ons listing (same package; a different ID — add it to
+   `NativeHostRegistrar` alongside the Chrome ID when live).
+2. Firefox AMO listing (needs the manifest tweak noted above).
 
 ## Troubleshooting
 

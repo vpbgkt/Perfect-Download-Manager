@@ -11,7 +11,9 @@
 
 param(
     [Parameter(Mandatory = $true)][string]$HostExe,
-    [string[]]$ExtensionIds = @(),
+    # Defaults to the published Chrome Web Store extension ID so a plain install just works.
+    # Pass extra IDs (e.g. a sideloaded dev build) to authorise them alongside the store one.
+    [string[]]$ExtensionIds = @("phbbcmofdbbojilmcpaghnafpamnocom"),
     [switch]$Uninstall
 )
 

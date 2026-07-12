@@ -220,51 +220,39 @@ that requests `nativeMessaging`. Extensions with only `activeTab`-scoped permiss
 clear review faster than those with broad host permissions, which is why we dropped
 `http://*/*` and `https://*/*` in this manifest.
 
-## 7. Post-approval — wire the assigned extension ID into PDM
+## 7. Post-approval — wiring the store ID into PDM (DONE)
 
-Once approved, the store gives your extension a permanent 32-character ID (e.g.
-`aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`). Everyone who installs from the store gets that same ID.
+The extension is published. Its permanent Chrome Web Store ID is:
 
-You need this ID in two places on the user's machine:
-
-1. **Native messaging host manifest** at
-   `%LOCALAPPDATA%\Perfect Download Manager\pdm.host.json`, in the `allowed_origins` array:
-   ```json
-   "allowed_origins": [
-     "chrome-extension://YOUR_EXTENSION_ID/"
-   ]
-   ```
-
-2. Any documentation or in-app "Install Extension" flow that opens the Chrome Web Store
-   listing URL: `https://chrome.google.com/webstore/detail/YOUR_EXTENSION_ID`.
-
-### Baking the ID into the installer
-
-Edit `browser-extension/install-native-host.ps1` to include the Web Store ID by default:
-
-```powershell
-param(
-    [Parameter(Mandatory=$true)][string]$HostExe,
-    [string[]]$ExtensionIds = @("YOUR_EXTENSION_ID"),  # <— set this once approved
-    [switch]$Uninstall
-)
+```
+phbbcmofdbbojilmcpaghnafpamnocom
 ```
 
-Then rebuild PDM and push a new release. From that release onwards, PDM users who install
-the extension from the Chrome Web Store will not need to sideload or run any registration
-script — the native host is pre-authorised for the store ID.
+Listing: https://chromewebstore.google.com/detail/phbbcmofdbbojilmcpaghnafpamnocom
 
-### Updating the app's "Install Extension" button
+Everyone who installs from the store gets that same ID, and PDM is already wired to it. The
+following are all committed in the codebase — you only need to **ship a new PDM release** so
+users get them:
 
-`src/PDM.App/Views/BrowserSetupWindow.xaml.cs` (or wherever the "Install extension"
-button's Click handler lives) currently opens the sideload folder. After store approval,
-change it to open the store listing URL directly:
+1. **App auto-authorises the store ID on every launch.**
+   `App.StartBrowserListener()` calls `NativeHostRegistrar.EnsureStoreExtensionRegistered(...)`,
+   which writes the native-host manifest (`%LOCALAPPDATA%\PerfectDownloadManager\native-host\com.pdm.host.json`)
+   with `chrome-extension://phbbcmofdbbojilmcpaghnafpamnocom/` in `allowed_origins` and the
+   per-user registry keys for Chrome/Edge/Brave. It merges rather than overwrites, so a
+   sideloaded dev ID a user added stays authorised. Result: install from the store → it just
+   works, no sideloading, no ID pasting.
 
-```csharp
-Process.Start(new ProcessStartInfo(
-    "https://chrome.google.com/webstore/detail/YOUR_EXTENSION_ID")
-    { UseShellExecute = true });
-```
+2. **The store ID is the default in the registration script.**
+   `browser-extension/install-native-host.ps1` defaults `-ExtensionIds` to the store ID.
+
+3. **Browser Setup opens the store listing.**
+   `BrowserSetupViewModel.StoreUrlFor(...)` returns the Chrome Web Store URL and
+   `OpenStorePage` launches it in the selected browser. The wizard also reflects "Configured."
+   automatically because `EnsureStoreExtensionRegistered` already registered the ID.
+
+The `WebStoreExtensionId` / `WebStoreListingUrl` constants live in
+`src/PDM.App/Services/NativeHostRegistrar.cs` — update them there if the ID ever changes
+(e.g. an Edge Add-ons listing gets a different ID; add it alongside the Chrome one).
 
 ## Microsoft Edge Add-ons
 

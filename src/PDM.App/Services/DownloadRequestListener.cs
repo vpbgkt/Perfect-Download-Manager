@@ -62,9 +62,18 @@ public sealed class DownloadRequestListener : IAsyncDisposable
         {
             try
             {
-                using NamedPipeServerStream server = CreateServer();
+                NamedPipeServerStream server = CreateServer();
                 await server.WaitForConnectionAsync(token).ConfigureAwait(false);
-                await HandleConnectionAsync(server, token).ConfigureAwait(false);
+
+                // Handle this connection on its own task and immediately loop back to create the
+                // next server instance, so there is always a pipe server ready to accept.
+                //
+                // Previously the loop awaited HandleConnectionAsync before creating the next
+                // server. Because the handler can open a modal "New download detected" prompt and
+                // wait for the user, that left a long window during which NO server was listening:
+                // any further download the browser forwarded in that window failed to connect and
+                // was silently dropped - the reported "PDM not catching downloads" symptom.
+                _ = HandleAndDisposeAsync(server, token);
             }
             catch (OperationCanceledException)
             {
@@ -77,6 +86,26 @@ public sealed class DownloadRequestListener : IAsyncDisposable
                 try { await Task.Delay(500, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
             }
+        }
+    }
+
+    private async Task HandleAndDisposeAsync(NamedPipeServerStream server, CancellationToken token)
+    {
+        try
+        {
+            await HandleConnectionAsync(server, token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error handling a download request connection.");
+        }
+        finally
+        {
+            server.Dispose();
         }
     }
 
@@ -149,16 +178,22 @@ public sealed class DownloadRequestListener : IAsyncDisposable
             return;
         }
 
+        // Acknowledge receipt immediately, THEN run the handler. The handler may open a modal
+        // "New download detected" prompt and wait for the user. If we awaited it before acking we
+        // would hold the browser's native-messaging call open for the whole prompt (so the
+        // extension appears to hang), and the pipe connection would stay busy. Sending the ack
+        // first lets the browser's sendNativeMessage return right away and lets the handler take
+        // as long as it needs (including a user prompt) without blocking further captures.
+        _logger.LogInformation("Accepted browser download for {Url}", request.Url);
+        await writer.WriteLineAsync("{\"ok\":true}").ConfigureAwait(false);
+
         try
         {
             await _handler(request).ConfigureAwait(false);
-            await writer.WriteLineAsync("{\"ok\":true}").ConfigureAwait(false);
-            _logger.LogInformation("Accepted browser download for {Url}", request.Url);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to enqueue browser download for {Url}", request.Url);
-            await writer.WriteLineAsync("{\"ok\":false,\"error\":\"enqueue_failed\"}").ConfigureAwait(false);
         }
     }
 
