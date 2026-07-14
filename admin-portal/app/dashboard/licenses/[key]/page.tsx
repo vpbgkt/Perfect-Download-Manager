@@ -7,6 +7,7 @@ import { PageHeader, Spinner, ErrorText, SuccessText, EmptyState } from "../../.
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../components/ui/card.tsx";
 import { Button } from "../../../../components/ui/button.tsx";
 import { LinkButton } from "../../../../components/ui/link-button.tsx";
+import { ExpiryField } from "../../../../components/ui/expiry-field.tsx";
 import { Input, Label } from "../../../../components/ui/input.tsx";
 import { Badge, statusTone } from "../../../../components/ui/badge.tsx";
 import { Table, THead, TBody, TR, TH, TD } from "../../../../components/ui/table.tsx";
@@ -146,10 +147,7 @@ export default function LicenseDetailPage({ params }: { params: Promise<{ key: s
                 <Label htmlFor="owner">Owner</Label>
                 <Input id="owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="expires">Expires at (empty = perpetual)</Label>
-                <Input id="expires" placeholder="2030-01-01T00:00:00Z" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
-              </div>
+              <ExpiryField id="expires" label="Expires at (empty = perpetual)" value={expiresAt} onChange={setExpiresAt} />
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="features">Features (comma-separated)</Label>
                 <Input id="features" value={features} onChange={(e) => setFeatures(e.target.value)} />

@@ -41,6 +41,40 @@ function sourceIpOf(req: Request): string {
   return req.headers.get("x-real-ip") ?? "unknown";
 }
 
+/**
+ * GET /api/resellers — list all Reseller_Accounts (super_admin only).
+ * Supports pagination via `?limit=` and `?nextToken=`.
+ */
+export async function GET(req: Request): Promise<NextResponse> {
+  const { authenticator, dynamo } = getServerContext();
+
+  const idToken = extractIdToken(req, null);
+  if (!idToken) {
+    return authErrorResponse({ code: "session_expired", message: "Authentication required" });
+  }
+  const authed = await authenticator.authenticate({ idToken });
+  if (!authed.ok) {
+    return authErrorResponse(authed.error);
+  }
+  const permitted = authenticator.requirePermission(authed.value, REQUIRED_PERMISSION);
+  if (!permitted.ok) {
+    return authErrorResponse(permitted.error);
+  }
+
+  const url = new URL(req.url);
+  const limitRaw = url.searchParams.get("limit");
+  const nextToken = url.searchParams.get("nextToken") || undefined;
+  const pageSize = limitRaw ? Number(limitRaw) : undefined;
+  if (pageSize !== undefined && (!Number.isInteger(pageSize) || pageSize < 1)) {
+    return validationErrorResponse("limit", "limit must be a positive integer");
+  }
+
+  const manager = createAccountManager({ dynamo, audit: createAuditLog(dynamo) });
+  const result = await manager.listResellers({ pageSize, continuationToken: nextToken });
+
+  return NextResponse.json({ items: result.items, nextToken: result.nextToken ?? null });
+}
+
 export async function POST(req: Request): Promise<NextResponse> {
   const body = await readJsonBody(req);
 

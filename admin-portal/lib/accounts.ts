@@ -127,6 +127,15 @@ export interface AccountManager {
     input: { resellerAccountId: string },
     actor: AccountActor
   ): Promise<SetStateResult>;
+
+  /**
+   * List Reseller_Accounts via a paginated scan (super_admin only at the route
+   * layer). Returns the records plus an optional continuation token.
+   */
+  listResellers(options?: {
+    pageSize?: number;
+    continuationToken?: string;
+  }): Promise<{ items: ResellerAccountRecord[]; nextToken?: string }>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -291,6 +300,18 @@ export function createAccountManager(deps: AccountManagerDeps): AccountManager {
         RESELLER_REACTIVATE_ACTION,
         actor
       );
+    },
+
+    async listResellers(options) {
+      const page = await dynamo.paginatedScan(
+        { TableName: tableName },
+        options?.pageSize ?? 100,
+        options?.continuationToken
+      );
+      return {
+        items: page.items as unknown as ResellerAccountRecord[],
+        nextToken: page.nextToken,
+      };
     },
   };
 }

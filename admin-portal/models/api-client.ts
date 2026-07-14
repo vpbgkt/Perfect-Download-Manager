@@ -21,6 +21,7 @@ import type {
   ReleaseMetadata,
   ReleaseSubmission,
   ResellerAccount,
+  ResellerListResult,
   SeoSettings,
   SeoUpdateBody,
   SessionSummary,
@@ -131,6 +132,13 @@ export const api = {
   },
 
   // ── resellers ──
+  listResellers(opts: { limit?: number; nextToken?: string } = {}): Promise<ResellerListResult> {
+    const qs = new URLSearchParams();
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    if (opts.nextToken) qs.set("nextToken", opts.nextToken);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<ResellerListResult>("GET", `/api/resellers${suffix}`);
+  },
   createReseller(body: { orgName: string; contactEmail: string }): Promise<ResellerAccount> {
     return request("POST", "/api/resellers", body);
   },

@@ -120,6 +120,12 @@ export interface ResellerAccount {
   createdAt?: string;
 }
 
+/** Paginated reseller list response. */
+export interface ResellerListResult {
+  items: ResellerAccount[];
+  nextToken: string | null;
+}
+
 /** Usage plan (rate/burst/quota). */
 export interface UsagePlan {
   rateLimitPerSec: number;

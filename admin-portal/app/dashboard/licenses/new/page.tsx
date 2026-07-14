@@ -7,6 +7,7 @@ import { PageHeader, ErrorText } from "../../../../components/ui/feedback.tsx";
 import { Card, CardContent } from "../../../../components/ui/card.tsx";
 import { Button } from "../../../../components/ui/button.tsx";
 import { Input, Label } from "../../../../components/ui/input.tsx";
+import { ExpiryField } from "../../../../components/ui/expiry-field.tsx";
 
 export default function NewLicensePage() {
   const router = useRouter();
@@ -68,15 +69,7 @@ export default function NewLicensePage() {
               <Label htmlFor="owner">Owner (optional)</Label>
               <Input id="owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="expires">Expires at (ISO 8601 UTC, optional)</Label>
-              <Input
-                id="expires"
-                placeholder="2030-01-01T00:00:00Z"
-                value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-              />
-            </div>
+            <ExpiryField id="expires" label="Expires at (optional)" value={expiresAt} onChange={setExpiresAt} />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="features">Features (comma-separated, optional)</Label>
               <Input id="features" value={features} onChange={(e) => setFeatures(e.target.value)} />
