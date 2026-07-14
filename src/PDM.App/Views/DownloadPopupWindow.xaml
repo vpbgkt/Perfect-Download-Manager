@@ -30,11 +30,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Title bar with the download's file name and the PDM icon (Req 1.4, 4.1, 5.1).
-             The Wpf.Ui TitleBar supplies the minimize/maximize/close chrome. -->
-        <ui:TitleBar Grid.Row="0" Title="{Binding FileNameDisplay}">
+        <!-- Title bar. A short, constant caption keeps the minimize/maximize/CLOSE buttons
+             fully visible even in a narrow window — a long file name here previously pushed
+             the close (X) button off the right edge. The actual file name is shown in the
+             body below (Req 1.4, 4.1, 5.1). -->
+        <ui:TitleBar Grid.Row="0" Title="Perfect Download Manager">
             <ui:TitleBar.Icon>
-                <ui:ImageIcon Source="pack://application:,,,/Assets/pdm.ico" />
+                <ui:ImageIcon Source="pack://application:,,,/Assets/pdm-logo.png" Width="20" Height="20" />
             </ui:TitleBar.Icon>
         </ui:TitleBar>
 

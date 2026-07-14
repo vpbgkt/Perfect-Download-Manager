@@ -27,8 +27,11 @@ $scArgs = if ($SelfContained) { @("--self-contained", "true", "-p:PublishSingleF
 
 function Publish($project) {
     Write-Host "Publishing $project ..."
+    # PublishReadyToRun precompiles our assemblies to native code (R2R), so the .NET runtime does
+    # far less JIT work during cold start. This is a meaningful chunk of the "app takes 3-4s to
+    # open" gap versus IDM; it stays framework-dependent (the shared runtime is already R2R).
     dotnet publish $project -c $Configuration -r $rid -o $appOut `
-        -p:Version=$Version --nologo @scArgs
+        -p:Version=$Version -p:PublishReadyToRun=true --nologo @scArgs
     if ($LASTEXITCODE -ne 0) { throw "publish failed for $project" }
 }
 
@@ -69,15 +72,10 @@ $assets = Join-Path $appOut "Assets"
 New-Item -ItemType Directory -Path $assets -Force | Out-Null
 Copy-Item (Join-Path $repo "src/PDM.App/Assets/pdm.ico") (Join-Path $assets "pdm.ico") -Force
 
-# Ship the Chromium browser extension folder so the in-app Browser Setup wizard has a stable
-# on-disk path to point users at (Load unpacked). This is temporary until the extension is
-# published to the Chrome Web Store.
-$extSource = Join-Path $repo "browser-extension/chromium"
-$extTarget = Join-Path $appOut "browser-extension/chromium"
-if (Test-Path $extSource) {
-    New-Item -ItemType Directory -Path $extTarget -Force | Out-Null
-    Copy-Item (Join-Path $extSource "*") $extTarget -Recurse -Force
-}
+# The browser extension is now published on the Chrome Web Store and is NO LONGER bundled
+# with the installer. The in-app Browser Setup wizard simply opens the store listing
+# ("Add to Chrome/Edge/Brave"); the store extension ID is pre-authorised on startup, so there
+# is no developer-mode load-unpacked flow and nothing to ship on disk. This trims the payload.
 
 $zip = Join-Path $dist "PDM-$Version.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }

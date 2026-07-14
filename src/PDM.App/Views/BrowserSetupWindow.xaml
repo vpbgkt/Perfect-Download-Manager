@@ -29,7 +29,7 @@
         <StackPanel Margin="16,20,16,8">
             <ui:TextBlock FontTypography="Subtitle" Text="Send downloads from your browser to PDM" Margin="0,0,0,4" />
             <ui:TextBlock FontSize="12" Opacity="0.75" TextWrapping="Wrap" Margin="0,0,0,4"
-                          Text="For each browser: click 'Install extension' - PDM will show step-by-step instructions with the extension folder open in Explorer. Drag the folder into the browser, then paste its ID and Register." />
+                          Text="Click &quot;Add to browser&quot; below to install the Perfect Download Manager extension from the Chrome Web Store, then click &quot;Add to Chrome&quot; on the page that opens. That's it — PDM is already authorised, so it connects automatically. (Works in Chrome, Edge and Brave.)" />
             <ui:TextBlock FontSize="12" Opacity="0.6" Text="{Binding SummaryText}" Margin="0,0,0,12" />
 
             <ItemsControl ItemsSource="{Binding Browsers}">
@@ -45,38 +45,21 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <ui:TextBlock Grid.Row="0" Grid.Column="0"
+                                              VerticalAlignment="Center"
                                               FontTypography="BodyStrong" Text="{Binding DisplayName}" />
                                 <ui:Button Grid.Row="0" Grid.Column="1"
-                                           Content="1. Show me how"
+                                           Content="Add to browser"
+                                           Appearance="Primary"
                                            MinWidth="150"
+                                           Icon="{ui:SymbolIcon Add24}"
                                            Command="{Binding DataContext.OpenStorePageCommand,
                                                      RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                            CommandParameter="{Binding}" />
 
-                                <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <ui:TextBox Grid.Column="0"
-                                                PlaceholderText="Paste the extension ID from chrome://extensions"
-                                                FontFamily="Consolas"
-                                                Text="{Binding ExtensionId, UpdateSourceTrigger=PropertyChanged}" />
-                                    <ui:Button Grid.Column="1"
-                                               Content="2. Register with PDM"
-                                               Margin="8,0,0,0"
-                                               MinWidth="160"
-                                               Appearance="Primary"
-                                               Command="{Binding DataContext.RegisterCommand,
-                                                         RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                               CommandParameter="{Binding}" />
-                                </Grid>
-
-                                <ui:TextBlock Grid.Row="2" Grid.ColumnSpan="2"
+                                <ui:TextBlock Grid.Row="1" Grid.ColumnSpan="2"
                                               Margin="0,6,0,0" FontSize="12"
                                               Opacity="0.75"
                                               TextWrapping="Wrap"

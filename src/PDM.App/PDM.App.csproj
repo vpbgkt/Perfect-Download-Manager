@@ -53,6 +53,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\pdm.ico" />
+    <Resource Include="Assets\pdm-logo.png" />
     <None Update="Assets\generate-icon.ps1">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </None>
