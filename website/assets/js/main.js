@@ -27,4 +27,59 @@
     if (yearEl) {
         yearEl.textContent = new Date().getFullYear();
     }
+
+    // ---- Live version + download links from the backend ----
+    // The portal publishes public metadata to the S3 updates bucket. We prefer
+    // downloads.json (has both MSI + ZIP URLs); if it isn't there yet we fall
+    // back to the signed manifest.json (version + portable package). If neither
+    // loads, the static values already in the HTML remain as a safe default.
+    var S3_BASE = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/";
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return "";
+        var mb = bytes / (1024 * 1024);
+        if (mb >= 1024) return (mb / 1024).toFixed(1) + " GB";
+        return Math.round(mb) + " MB";
+    }
+
+    function setVersion(v) {
+        if (!v) return;
+        var els = document.querySelectorAll("[data-version]");
+        for (var i = 0; i < els.length; i++) els[i].textContent = v;
+    }
+
+    function setDownload(id, sizeSel, url, bytes) {
+        var a = document.getElementById(id);
+        if (!a || !url) return;
+        a.setAttribute("href", url);
+        a.removeAttribute("target");
+        var sizeEl = document.querySelector('[data-size="' + sizeSel + '"]');
+        if (sizeEl) {
+            var s = formatBytes(bytes);
+            sizeEl.textContent = s ? " · " + s : "";
+        }
+    }
+
+    function applyDownloads(d) {
+        if (!d) return;
+        setVersion(d.version || d.Version);
+        setDownload("dlMsi", "msi", d.msiUrl, d.msiSizeBytes);
+        setDownload("dlZip", "zip", d.portableZipUrl || d.PackageUrl, d.portableSizeBytes || d.PackageSizeBytes);
+    }
+
+    function fetchJson(url) {
+        return fetch(url, { cache: "no-store" }).then(function (r) {
+            return r.ok ? r.json() : Promise.reject(new Error(String(r.status)));
+        });
+    }
+
+    fetchJson(S3_BASE + "downloads.json")
+        .then(applyDownloads)
+        .catch(function () {
+            // Fall back to the signed manifest for version + portable download.
+            return fetchJson(S3_BASE + "manifest.json").then(applyDownloads);
+        })
+        .catch(function () {
+            /* offline or nothing published yet — keep the static defaults */
+        });
 })();

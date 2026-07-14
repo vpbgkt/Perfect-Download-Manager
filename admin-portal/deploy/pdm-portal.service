@@ -1,0 +1,37 @@
+[Unit]
+# systemd unit supervising the stateless Next.js portal process (Req 15.3).
+# The VPS holds no local application state; all state lives in AWS DynamoDB,
+# so the host is disposable and this unit can be recreated on any VPS.
+Description=PDM Admin & Reseller Portal (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Dedicated unprivileged service account (no shell, no home writes).
+User=pdmportal
+Group=pdmportal
+WorkingDirectory=/opt/pdm-portal
+
+# Production Next.js server bound to loopback; Nginx terminates TLS in front.
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=AWS_REGION=ap-south-1
+# Secrets (RESEND_API_KEY, OTP_EMAIL_FROM, Firebase credentials) are injected
+# via an environment file that is NOT stored in the repo or the image.
+EnvironmentFile=-/etc/pdm-portal/portal.env
+
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+# Hardening: least privilege at the process level.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/pdm-portal/.next
+
+[Install]
+WantedBy=multi-user.target

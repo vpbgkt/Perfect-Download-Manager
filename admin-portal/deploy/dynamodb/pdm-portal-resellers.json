@@ -1,0 +1,11 @@
+{
+  "TableName": "pdm-portal-resellers",
+  "AttributeDefinitions": [
+    { "AttributeName": "resellerAccountId", "AttributeType": "S" }
+  ],
+  "KeySchema": [
+    { "AttributeName": "resellerAccountId", "KeyType": "HASH" }
+  ],
+  "BillingMode": "PAY_PER_REQUEST",
+  "SSESpecification": { "Enabled": true }
+}

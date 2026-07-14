@@ -38,7 +38,7 @@
                 <a href="#download">Download</a>
                 <a href="#extension">Extension</a>
                 <a href="#faq">FAQ</a>
-                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
+                <a href="/blog/">Blog</a>
             </nav>
         </div>
     </header>
@@ -48,7 +48,7 @@
         <section class="hero">
             <div class="container hero-inner">
                 <div class="hero-copy">
-                    <span class="eyebrow">v1.0.10 · Free for Windows 10 &amp; 11</span>
+                    <span class="eyebrow">v<span data-version>1.0.10</span> · Free for Windows 10 &amp; 11</span>
                     <h1>Faster downloads.<br /><span class="accent">Reliable resume.</span></h1>
                     <p class="lede">
                         PDM splits every file into up to 32 parallel connections, resumes reliably after any interruption, and hands off downloads from Chrome and Edge — all inside a modern Fluent-styled Windows UI.
@@ -57,19 +57,22 @@
                         <a href="#download" class="btn btn-primary">Download for Windows</a>
                         <a href="#features" class="btn btn-ghost">See what's inside</a>
                     </div>
-                    <p class="hero-note">Free · No ads · No sign-in · Open source on GitHub</p>
+                    <p class="hero-note">Free · No ads · No sign-in · No telemetry</p>
                 </div>
                 <div class="hero-visual" aria-hidden="true">
                     <div class="hero-card">
                         <div class="hero-card-row">
-                            <span class="dot dot-red"></span>
-                            <span class="dot dot-amber"></span>
-                            <span class="dot dot-green"></span>
+                            <img src="/assets/img/logo-48.png" alt="" width="16" height="16" class="hero-card-logo" />
                             <span class="hero-card-title">Perfect Download Manager</span>
+                            <span class="win-controls">
+                                <span class="win-btn win-min"></span>
+                                <span class="win-btn win-max"></span>
+                                <span class="win-btn win-close"></span>
+                            </span>
                         </div>
                         <div class="hero-download">
                             <div class="hero-file-row">
-                                <span class="hero-file">ubuntu-24.04-desktop-amd64.iso</span>
+                                <span class="hero-file">Windows11_23H2_x64.iso</span>
                                 <span class="hero-speed">18.4 MB/s</span>
                             </div>
                             <div class="progress"><div class="progress-fill" style="width: 72%"></div></div>
@@ -154,7 +157,7 @@
         <!-- Download -->
         <section id="download" class="section section-alt">
             <div class="container">
-                <h2 class="section-title">Download PDM 1.0.10</h2>
+                <h2 class="section-title">Download PDM <span data-version>1.0.10</span></h2>
                 <p class="section-lede">
                     Windows 10 and 11 · 64-bit · Requires .NET 10 Desktop Runtime (installer prompts if missing).
                 </p>
@@ -163,16 +166,16 @@
                         <div class="download-badge">Recommended</div>
                         <h3>Installer (MSI)</h3>
                         <p>Standard Windows setup with Start Menu shortcut, per-user install, no admin required.</p>
-                        <a class="btn btn-primary btn-block" href="https://github.com/vpbgkt/Perfect-Download-Manager/releases/latest" rel="noopener" target="_blank">
-                            Download MSI · 39 MB
+                        <a class="btn btn-primary btn-block" id="dlMsi" data-download="msi" href="#download" rel="noopener">
+                            Download MSI<span data-size="msi"></span>
                         </a>
-                        <p class="download-meta">SHA-256 available on the releases page</p>
+                        <p class="download-meta">SHA-256 published with every release</p>
                     </div>
                     <div class="download-card">
                         <h3>Portable ZIP</h3>
                         <p>Unzip anywhere and run <code>PDM.exe</code>. Great for USB sticks and testing.</p>
-                        <a class="btn btn-ghost btn-block" href="https://github.com/vpbgkt/Perfect-Download-Manager/releases/latest" rel="noopener" target="_blank">
-                            Download ZIP · 41 MB
+                        <a class="btn btn-ghost btn-block" id="dlZip" data-download="zip" href="#download" rel="noopener">
+                            Download ZIP<span data-size="zip"></span>
                         </a>
                         <p class="download-meta">Same bytes as the MSI, just unpacked</p>
                     </div>
@@ -198,15 +201,17 @@
                             The PDM browser extension adds a "Download with PDM" right-click menu on every link, image, and media element. Optional auto-intercept can hand off the browser's own downloads too — with IDM-style safety filters so old files and prefetched resources never leak through.
                         </p>
                         <ul class="check-list">
+                            <li>Available on the Chrome Web Store</li>
                             <li>Manifest V3 compatible</li>
                             <li>Chrome, Edge, and Brave supported today</li>
                             <li>Firefox port planned</li>
                             <li>No broad host permissions</li>
-                            <li>Chrome Web Store submission in progress</li>
                         </ul>
                         <div class="cta-row">
-                            <a class="btn btn-primary" href="https://github.com/vpbgkt/Perfect-Download-Manager/blob/main/docs/BROWSER-EXTENSION.md" rel="noopener" target="_blank">Extension setup guide</a>
+                            <!-- TODO: replace EXTENSION_ID with the real Chrome Web Store id once published. -->
+                            <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/EXTENSION_ID" rel="noopener" target="_blank">Add to Chrome — free</a>
                         </div>
+                        <p class="hero-note">One click from the Chrome Web Store. Works in Edge and Brave too.</p>
                     </div>
                     <div class="split-visual" aria-hidden="true">
                         <div class="menu-card">
@@ -248,7 +253,7 @@
                     </details>
                     <details class="faq">
                         <summary>Where do I report a bug?</summary>
-                        <p>Open an issue on <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">GitHub</a>. Bugs with logs attached (from <code>%LOCALAPPDATA%\PerfectDownloadManager\logs</code>) get fixed fastest.</p>
+                        <p>Email <a href="mailto:support@perfectdownloadmanager.com">support@perfectdownloadmanager.com</a>. Reports with logs attached (from <code>%LOCALAPPDATA%\PerfectDownloadManager\logs</code>) get fixed fastest.</p>
                     </details>
                     <details class="faq">
                         <summary>Is my code signing certificate needed?</summary>
@@ -269,9 +274,9 @@
                 <a href="#features">Features</a>
                 <a href="#download">Download</a>
                 <a href="#extension">Extension</a>
+                <a href="/blog/">Blog</a>
                 <a href="/privacy.html">Privacy</a>
-                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
-                <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">Support</a>
+                <a href="mailto:support@perfectdownloadmanager.com">Support</a>
             </nav>
             <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
         </div>

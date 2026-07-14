@@ -333,11 +333,37 @@ code {
 .dot-amber { background: #febc2e; }
 .dot-green { background: #28c840; }
 
+/* Windows-style window controls (matches the app; not macOS traffic lights). */
+.hero-card-logo { border-radius: 3px; }
+
 .hero-card-title {
-    margin-left: 12px;
+    margin-left: 6px;
     font-size: 0.85rem;
     color: var(--fg-muted);
+    flex: 1;
 }
+
+.win-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+}
+
+.win-btn {
+    width: 12px;
+    height: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg-muted);
+    font-size: 11px;
+    line-height: 1;
+}
+
+.win-min::before { content: "\2013"; }
+.win-max::before { content: "\25A1"; }
+.win-close::before { content: "\2715"; }
 
 .hero-download {
     display: flex;
@@ -821,3 +847,79 @@ code {
         transition-duration: 0.001ms !important;
     }
 }
+
+/* ---------- Blog ---------- */
+
+.blog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.blog-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.blog-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(227, 139, 0, 0.4);
+}
+
+.blog-card h3 { margin: 0; }
+
+.blog-card p {
+    margin: 0;
+    font-size: 0.94rem;
+    color: var(--fg-muted);
+    flex-grow: 1;
+}
+
+.post-meta {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+}
+
+.breadcrumb {
+    max-width: 760px;
+    margin: 24px auto 0;
+    padding: 0 24px;
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+}
+
+.article {
+    max-width: 760px;
+    margin: 24px auto 56px;
+    padding: 0 24px;
+}
+
+.article h1 { margin-bottom: 8px; }
+
+.article .lede {
+    font-size: 1.12rem;
+    color: var(--fg-muted);
+    margin-bottom: 24px;
+}
+
+.article h2 {
+    margin: 32px 0 10px;
+    font-size: 1.3rem;
+    text-align: left;
+}
+
+.article p, .article li { color: var(--fg-muted); }
+
+.article ul, .article ol { padding-left: 20px; }
+
+.article li { margin-bottom: 6px; line-height: 1.7; }
+
+.article .cta-row { margin-top: 28px; }

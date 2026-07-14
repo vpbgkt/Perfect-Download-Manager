@@ -1,0 +1,50 @@
+{
+  "TableName": "pdm-portal-audit",
+  "AttributeDefinitions": [
+    { "AttributeName": "auditId", "AttributeType": "S" },
+    { "AttributeName": "actor", "AttributeType": "S" },
+    { "AttributeName": "target", "AttributeType": "S" },
+    { "AttributeName": "action", "AttributeType": "S" },
+    { "AttributeName": "logScope", "AttributeType": "S" },
+    { "AttributeName": "timestamp", "AttributeType": "S" }
+  ],
+  "KeySchema": [
+    { "AttributeName": "auditId", "KeyType": "HASH" }
+  ],
+  "BillingMode": "PAY_PER_REQUEST",
+  "SSESpecification": { "Enabled": true },
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "actor-timestamp-index",
+      "KeySchema": [
+        { "AttributeName": "actor", "KeyType": "HASH" },
+        { "AttributeName": "timestamp", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "target-timestamp-index",
+      "KeySchema": [
+        { "AttributeName": "target", "KeyType": "HASH" },
+        { "AttributeName": "timestamp", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "action-timestamp-index",
+      "KeySchema": [
+        { "AttributeName": "action", "KeyType": "HASH" },
+        { "AttributeName": "timestamp", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "logScope-timestamp-index",
+      "KeySchema": [
+        { "AttributeName": "logScope", "KeyType": "HASH" },
+        { "AttributeName": "timestamp", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    }
+  ]
+}
