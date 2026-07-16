@@ -136,10 +136,18 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     private double BytesPerSecond => _latestProgress?.BytesPerSecond ?? 0d;
 
     /// <summary>
-    /// Effective status used for live-metric decisions: the latest snapshot's status when a snapshot
-    /// exists, otherwise the persisted download status.
+    /// Effective status for control-enablement and status-driven display.
+    /// <para>
+    /// This MUST read the managed download's authoritative status, not the last progress snapshot.
+    /// The download manager (and the worker it runs) mutate <c>_managed.State.Status</c> directly on
+    /// the same object this view-model holds, so it is always at least as fresh as any snapshot.
+    /// A progress snapshot, by contrast, is a point-in-time copy: after a Pause the worker stops
+    /// emitting snapshots, so the last one still says "Downloading". Preferring that stale snapshot
+    /// (the previous behaviour) left the Resume button permanently disabled after a pause and made
+    /// the speed read "Stalled" instead of idle — the reported "Resume doesn't work" bug.
+    /// </para>
     /// </summary>
-    private DownloadStatus EffectiveStatus => _latestProgress?.Status ?? _managed.State.Status;
+    private DownloadStatus EffectiveStatus => _managed.State.Status;
 
     /// <summary>
     /// Progress percentage clamped to [0, 100]. Forced to 100 when the download is Completed
@@ -222,6 +230,12 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(SpeedText));
         OnPropertyChanged(nameof(EtaText));
         OnPropertyChanged(nameof(ConnectionsText));
+
+        // The worker advances the download's status (Connecting -> Downloading -> Verifying ...) on
+        // the shared state object without always raising a separate DownloadChanged event, so refresh
+        // the status-derived control state here too. This keeps Pause/Resume/Cancel enablement and the
+        // status label in lock-step with the live transfer, not just with discrete status events.
+        NotifyStatusChanged();
     }
 
     // ---------------------------------------------------------------------
@@ -286,6 +300,17 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// <summary>Open-folder affordance is enabled only when the download is Completed (Requirement 8.1).</summary>
     public bool CanOpenFolder => EffectiveStatus == DownloadStatus.Completed;
 
+    /// <summary>True once the download reaches any terminal state (Completed, Failed, or Canceled).</summary>
+    public bool IsTerminal =>
+        EffectiveStatus is DownloadStatus.Completed or DownloadStatus.Failed or DownloadStatus.Canceled;
+
+    /// <summary>
+    /// Whether the live transfer metrics (speed, time-left, connections) are still meaningful and
+    /// should be shown. They are suppressed once the download reaches a terminal state so a completed,
+    /// failed, or canceled popup presents a clean summary instead of stale rate/ETA/connection figures.
+    /// </summary>
+    public bool ShowLiveMetrics => !IsTerminal;
+
     /// <summary>
     /// Refreshes every status-derived property after a <c>DownloadChanged</c> event so the popup's
     /// controls and terminal-state affordances update within the required window (Requirements 3.6,
@@ -306,6 +331,8 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(FailureMessage));
         OnPropertyChanged(nameof(CanOpenFile));
         OnPropertyChanged(nameof(CanOpenFolder));
+        OnPropertyChanged(nameof(IsTerminal));
+        OnPropertyChanged(nameof(ShowLiveMetrics));
 
         // Status also drives these live-metric projections (e.g. Completed forces 100%,
         // and a non-active status changes the speed indication).
@@ -322,8 +349,14 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     // gates the request behind the injected confirmCancel delegate.
     // ---------------------------------------------------------------------
 
-    /// <summary>Prompt shown by the Cancel confirmation gate (Requirement 3.7).</summary>
-    private const string CancelConfirmationPrompt = "Cancel this download? This cannot be undone.";
+    /// <summary>
+    /// Prompt shown by the Cancel confirmation gate (Requirement 3.7). Makes the destructive nature
+    /// explicit: cancelling deletes the partially downloaded data, so the file must be downloaded
+    /// again from the start.
+    /// </summary>
+    private const string CancelConfirmationPrompt =
+        "Cancel this download?\n\nThe partially downloaded file will be deleted from your disk and " +
+        "you'll need to download it again from the start. This cannot be undone.";
 
     /// <summary>
     /// Requests that the <see cref="DownloadManager"/> pause this popup's download (Requirements 3.1).
@@ -393,7 +426,10 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
 
         try
         {
-            await _manager.CancelAsync(Id).ConfigureAwait(false);
+            // deleteFiles: true — the user confirmed a destructive cancel, so remove the partial
+            // (.pdmdownload) data from disk as the prompt promised. The download stays in the list
+            // as Canceled so the popup can show the outcome.
+            await _manager.CancelAsync(Id, deleteFiles: true).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

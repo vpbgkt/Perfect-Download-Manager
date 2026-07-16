@@ -140,7 +140,7 @@
                             <ContextMenu Placement="Bottom">
                                 <MenuItem Header="Settings" Click="OnOpenSettings" />
                                 <MenuItem Header="License" Click="OnOpenLicense" />
-                                <MenuItem Header="Browser Setup" Click="OnBrowserSetup" />
+                                <MenuItem Header="Browser Extension" Click="OnBrowserSetup" />
                                 <Separator />
                                 <MenuItem Header="Check for Updates" Click="OnCheckForUpdates" />
                             </ContextMenu>

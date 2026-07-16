@@ -154,19 +154,25 @@
                                       TextTrimming="CharacterEllipsis"
                                       Text="{Binding DownloadedText}" />
                     </StackPanel>
-                    <StackPanel Margin="0,0,16,10">
+                    <!-- Speed, time-left and connections are transfer-only figures; they are
+                         collapsed once the download is completed/failed/canceled so the terminal
+                         popup shows a clean summary (ShowLiveMetrics). -->
+                    <StackPanel Margin="0,0,16,10"
+                                Visibility="{Binding ShowLiveMetrics, Converter={StaticResource BoolToVis}}">
                         <ui:TextBlock FontSize="11" Opacity="0.6" Text="Speed" />
                         <ui:TextBlock FontTypography="BodyStrong"
                                       TextTrimming="CharacterEllipsis"
                                       Text="{Binding SpeedText}" />
                     </StackPanel>
-                    <StackPanel Margin="0,0,16,10">
+                    <StackPanel Margin="0,0,16,10"
+                                Visibility="{Binding ShowLiveMetrics, Converter={StaticResource BoolToVis}}">
                         <ui:TextBlock FontSize="11" Opacity="0.6" Text="Time left" />
                         <ui:TextBlock FontTypography="BodyStrong"
                                       TextTrimming="CharacterEllipsis"
                                       Text="{Binding EtaText}" />
                     </StackPanel>
-                    <StackPanel Margin="0,0,16,10">
+                    <StackPanel Margin="0,0,16,10"
+                                Visibility="{Binding ShowLiveMetrics, Converter={StaticResource BoolToVis}}">
                         <ui:TextBlock FontSize="11" Opacity="0.6" Text="Connections" />
                         <ui:TextBlock FontTypography="BodyStrong"
                                       TextTrimming="CharacterEllipsis"
@@ -174,45 +180,42 @@
                     </StackPanel>
                 </WrapPanel>
 
-                <!-- Primary controls: Pause/Resume/Cancel. Enablement is driven purely by the
-                     bound download status (Req 3.3, 3.4, 3.5, 3.6). Commands are added to the
-                     view-model in task 4.x. A WrapPanel keeps buttons visible when narrow. -->
-                <WrapPanel Margin="0,8,0,0">
+                <!-- Action controls. Each button is fully COLLAPSED (not just disabled) unless it
+                     applies to the current status, so the popup only ever shows the actions that make
+                     sense: Pause+Cancel while downloading, Resume+Cancel while paused/failed, and
+                     Open File+Open Folder once completed (Req 3.3-3.6, 8.1). A single WrapPanel keeps
+                     the relevant buttons on one reflowing row. -->
+                <WrapPanel Margin="0,12,0,0">
                     <ui:Button Content="Pause"
                                Appearance="Secondary"
                                Icon="{ui:SymbolIcon Pause24}"
                                Margin="0,0,8,8"
-                               IsEnabled="{Binding CanPause}"
+                               Visibility="{Binding CanPause, Converter={StaticResource BoolToVis}}"
                                Command="{Binding PauseCommand}" />
                     <ui:Button Content="Resume"
-                               Appearance="Secondary"
+                               Appearance="Primary"
                                Icon="{ui:SymbolIcon Play24}"
                                Margin="0,0,8,8"
-                               IsEnabled="{Binding CanResume}"
+                               Visibility="{Binding CanResume, Converter={StaticResource BoolToVis}}"
                                Command="{Binding ResumeCommand}" />
-                    <ui:Button Content="Cancel"
-                               Appearance="Secondary"
-                               Icon="{ui:SymbolIcon Dismiss24}"
-                               Margin="0,0,8,8"
-                               IsEnabled="{Binding CanCancel}"
-                               Command="{Binding CancelCommand}" />
-                </WrapPanel>
-
-                <!-- Terminal affordances: open the completed file or its containing folder.
-                     Enabled only when the download has completed (Req 8.1). -->
-                <WrapPanel Margin="0,4,0,0">
                     <ui:Button Content="Open File"
                                Appearance="Primary"
                                Icon="{ui:SymbolIcon Open24}"
                                Margin="0,0,8,8"
-                               IsEnabled="{Binding CanOpenFile}"
+                               Visibility="{Binding CanOpenFile, Converter={StaticResource BoolToVis}}"
                                Command="{Binding OpenFileCommand}" />
                     <ui:Button Content="Open Folder"
                                Appearance="Secondary"
                                Icon="{ui:SymbolIcon FolderOpen24}"
                                Margin="0,0,8,8"
-                               IsEnabled="{Binding CanOpenFolder}"
+                               Visibility="{Binding CanOpenFolder, Converter={StaticResource BoolToVis}}"
                                Command="{Binding OpenFolderCommand}" />
+                    <ui:Button Content="Cancel"
+                               Appearance="Secondary"
+                               Icon="{ui:SymbolIcon Dismiss24}"
+                               Margin="0,0,8,8"
+                               Visibility="{Binding CanCancel, Converter={StaticResource BoolToVis}}"
+                               Command="{Binding CancelCommand}" />
                 </WrapPanel>
 
             </StackPanel>
