@@ -3,16 +3,25 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Perfect Download Manager — Faster downloads for Windows</title>
-    <meta name="description" content="Perfect Download Manager (PDM) is a free multi-connection download manager for Windows. Faster downloads, reliable resume, modern Fluent UI, and Chrome/Edge browser integration." />
+    <title>Perfect Download Manager 1.0.18 — Free Download Manager (PDM) for Windows</title>
+    <meta name="description" content="Download Perfect Download Manager (PDM) free for Windows 10 &amp; 11. A fast multi-connection download manager with reliable resume, Chrome/Edge integration, and a modern Fluent UI. Free IDM alternative — no ads, no telemetry." />
+    <meta name="keywords" content="Perfect Download Manager, PDM, PDM download, download manager, free download manager, download manager for Windows, IDM alternative, multi-connection downloader, resume downloads" />
+    <meta name="author" content="Perfect Download Manager" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#E38B00" />
 
     <!-- Open Graph / Twitter Card -->
-    <meta property="og:title" content="Perfect Download Manager" />
-    <meta property="og:description" content="Faster downloads. Reliable resume. Modern Windows UI." />
-    <meta property="og:image" content="/assets/img/og-image.png" />
+    <meta property="og:site_name" content="Perfect Download Manager" />
+    <meta property="og:title" content="Perfect Download Manager — Free Download Manager for Windows" />
+    <meta property="og:description" content="Download PDM free for Windows 10 &amp; 11. Faster downloads, reliable resume, Chrome/Edge integration, modern Fluent UI. No ads, no telemetry." />
+    <meta property="og:image" content="https://perfectdownloadmanager.com/assets/img/og-image.png" />
+    <meta property="og:image:alt" content="Perfect Download Manager for Windows" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://perfectdownloadmanager.com/" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Perfect Download Manager — Free Download Manager for Windows" />
+    <meta name="twitter:description" content="Download PDM free for Windows 10 &amp; 11. Faster downloads, reliable resume, Chrome/Edge integration." />
+    <meta name="twitter:image" content="https://perfectdownloadmanager.com/assets/img/og-image.png" />
 
     <!-- Favicons -->
     <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico" />
@@ -22,6 +31,63 @@
 
     <link rel="canonical" href="https://perfectdownloadmanager.com/" />
     <link rel="stylesheet" href="/assets/css/styles.css" />
+
+    <!-- Structured data: helps search engines show PDM as a downloadable Windows app
+         with a rich result for queries like "PDM download" / "Perfect Download Manager". -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Perfect Download Manager",
+      "alternateName": "PDM",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Windows 10, Windows 11",
+      "softwareVersion": "1.0.18",
+      "url": "https://perfectdownloadmanager.com/",
+      "downloadUrl": "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.18.msi",
+      "installUrl": "https://perfectdownloadmanager.com/#download",
+      "description": "Perfect Download Manager (PDM) is a free multi-connection download manager for Windows 10 and 11 with reliable resume, Chrome and Edge browser integration, and a modern Fluent UI.",
+      "image": "https://perfectdownloadmanager.com/assets/img/og-image.png",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Perfect Download Manager",
+        "url": "https://perfectdownloadmanager.com/"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is PDM free?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Perfect Download Manager is free for personal and commercial use while it's in early access. A paid tier with advanced features is planned; the current version will remain free." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it work on Windows 10?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It needs the .NET 10 Desktop Runtime, which the installer will prompt you to install if it isn't already present." }
+        },
+        {
+          "@type": "Question",
+          "name": "How is it different from Internet Download Manager (IDM)?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Same core idea (multi-connection downloads and browser integration) with a different implementation. PDM is built on modern .NET 10 with a Fluent-styled WPF UI, ships an MV3 browser extension with strict safety filters, and uses ECDSA-signed auto-updates. Free while in early access." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it phone home?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No telemetry, no analytics, no ads. The app contacts our servers only for license validation (if you activate a license) and to check for updates." }
+        }
+      ]
+    }
+    </script>
 </head>
 <body>
     <header class="site-header">
@@ -236,7 +302,7 @@
                 <div class="faq-list">
                     <details class="faq">
                         <summary>Is PDM free?</summary>
-                        <p>Yes. Version 1.0.10 is free for personal and commercial use while it's in early access. A paid tier with advanced features is planned; the current version will remain free.</p>
+                        <p>Yes. Perfect Download Manager is free for personal and commercial use while it's in early access. A paid tier with advanced features is planned; the current version will remain free.</p>
                     </details>
                     <details class="faq">
                         <summary>Does it work on Windows 10?</summary>

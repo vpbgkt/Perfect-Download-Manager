@@ -139,8 +139,11 @@ Remove-Item dist/downloads.json
 ### 5.6 Point the website at the new version
 Edit `website/index.html`:
 - Both `<span data-version>…</span>` → `1.0.18` (hero eyebrow + download heading).
+- `<title>` version → `1.0.18`.
 - `#dlMsi` `href` → `…/downloads/PDM-1.0.18.msi`
 - `#dlZip` `href` → `…/stable/pdm-1.0.18.zip`
+- SoftwareApplication JSON-LD (`<script type="application/ld+json">` in `<head>`):
+  `softwareVersion` → `1.0.18` and `downloadUrl` → `…/downloads/PDM-1.0.18.msi`.
 
 `website/assets/js/main.js` still refreshes version/size/links from `downloads.json` at
 runtime, but the static hrefs guarantee the buttons work even before JS runs.
