@@ -71,3 +71,9 @@ pubkey.txt
 testkey.txt
 activate-resp.json
 vector.json
+
+# WiX debug symbols (build artefact, no use in source control)
+*.wixpdb
+
+# Kiro / agent scratch reads
+temp_read.txt
