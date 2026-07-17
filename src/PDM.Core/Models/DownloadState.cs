@@ -16,6 +16,14 @@ public sealed class DownloadState
     /// <summary>The effective URL after redirects (used for resuming segments).</summary>
     public string EffectiveUrl { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional referrer page the download was initiated from. Sent as the <c>Referer</c> header
+    /// on both the inspection probe and every segment request so downloads that a server only
+    /// serves when the request carries a referrer (a very common hot-link protection) succeed
+    /// exactly as they did in the browser. Persisted so a resumed transfer keeps sending it.
+    /// </summary>
+    public string? Referrer { get; set; }
+
     /// <summary>Absolute path to the final output file.</summary>
     public string DestinationPath { get; set; } = string.Empty;
 

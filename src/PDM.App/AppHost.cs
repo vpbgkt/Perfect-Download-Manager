@@ -127,25 +127,27 @@ public sealed class AppHost : IAsyncDisposable
 
         var licenseService = new LicenseService(licenseStore, transport, verifier);
 
-        // Anchor the trial to the server (reinstall-proof) before evaluating state. Best-effort:
-        // if offline, the local trial start is used until the machine reconnects.
-        if (Licensing.Aws.LicensingConfig.IsConfigured && keyIntact)
-        {
-            try { await licenseService.EnsureTrialAnchorAsync(cancellationToken).ConfigureAwait(false); }
-            catch { /* offline: fall back to local trial start */ }
-        }
-
+        // Evaluate licensing from LOCAL state only, so startup NEVER blocks on the network.
+        // Previously we awaited EnsureTrialAnchorAsync() here — a call to the AWS licensing API —
+        // before the main window could appear, which added seconds to cold start on slow or
+        // unreachable networks (the "PDM takes 3-4s to open" symptom). The window now shows as soon
+        // as local state is read; the server-signed trial anchor (reinstall-proofing) and any
+        // license re-validation run in the background below and take effect on the next evaluation.
         LicenseSnapshot license = await licenseService.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
 
-        // Best-effort background re-validation so revocations and token refreshes propagate
-        // without blocking startup. Failures are swallowed (offline tolerance).
-        if (Licensing.Aws.LicensingConfig.IsConfigured && keyIntact && license.Status != LicenseStatus.Trial)
+        // Best-effort background licensing work: anchor the trial (reinstall-proof) and re-validate
+        // an activated license so revocations/token refreshes propagate. Fully off the startup path;
+        // failures are swallowed (offline tolerance — token TTL + grace govern access).
+        if (Licensing.Aws.LicensingConfig.IsConfigured && keyIntact)
         {
             _ = Task.Run(async () =>
             {
+                try { await licenseService.EnsureTrialAnchorAsync().ConfigureAwait(false); }
+                catch { /* offline: fall back to local trial start */ }
+
                 try { await licenseService.RefreshAsync().ConfigureAwait(false); }
                 catch { /* offline: token TTL + grace govern access */ }
-            }, cancellationToken);
+            });
         }
 
         startupLogger.LogInformation("Startup complete. License status: {Status}", license.Status);

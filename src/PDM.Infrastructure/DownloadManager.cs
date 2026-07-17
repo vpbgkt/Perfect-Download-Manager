@@ -116,6 +116,7 @@ public sealed class DownloadManager : IAsyncDisposable
         bool? startImmediately = null,
         bool allowWebPage = false,
         bool saveForLater = false,
+        string? referrer = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
@@ -127,7 +128,7 @@ public sealed class DownloadManager : IAsyncDisposable
 
         DownloadState state = await _engine.PrepareAsync(
                 url, destDir, fileNameOverride, chosenCategory,
-                _settings.OverwritePolicy, allowWebPage, options, cancellationToken)
+                _settings.OverwritePolicy, allowWebPage, options, referrer, cancellationToken)
             .ConfigureAwait(false);
 
         // Save-for-later parks the download in Paused so the scheduler leaves it alone; the
@@ -220,8 +221,15 @@ public sealed class DownloadManager : IAsyncDisposable
     /// <see cref="DownloadChanged"/> event is raised (not <see cref="DownloadRemoved"/>), so any
     /// bound UI can keep showing a canceled indication. No-op when the download is already
     /// <see cref="DownloadStatus.Completed"/> or <see cref="DownloadStatus.Canceled"/>.
+    /// <para>
+    /// When <paramref name="deleteFiles"/> is true, the partially-downloaded ".pdmdownload" part
+    /// file (and any already-assembled destination file) are also removed from disk, so a cancelled
+    /// download leaves nothing behind and must be started over. The popup's Cancel uses this so the
+    /// action matches the "the file will be deleted, you'll download it again from the start"
+    /// confirmation shown to the user.
+    /// </para>
     /// </summary>
-    public async Task CancelAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task CancelAsync(Guid id, bool deleteFiles = false, CancellationToken cancellationToken = default)
     {
         if (!_downloads.TryGetValue(id, out ManagedDownload? managed))
         {
@@ -255,6 +263,15 @@ public sealed class DownloadManager : IAsyncDisposable
         managed.State.Status = DownloadStatus.Canceled;
         managed.State.CompletedUtc = DateTimeOffset.UtcNow;
         await _repository.UpsertAsync(managed.State, cancellationToken).ConfigureAwait(false);
+
+        // Only delete files AFTER the in-flight run has fully unwound above, so the worker's file
+        // handles are released and the deletion cannot race an active write.
+        if (deleteFiles)
+        {
+            SafeDelete(managed.State.DestinationPath + DownloadWorker.PartSuffix);
+            SafeDelete(managed.State.DestinationPath);
+        }
+
         DownloadChanged?.Invoke(this, new DownloadEventArgs(managed));
         Signal();
     }

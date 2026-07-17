@@ -158,17 +158,25 @@ public partial class App : Application
             // under Settings > Confirm browser downloads.
             if (Host.Settings.ConfirmBrowserDownloads)
             {
-                await ShowNewDownloadPromptAsync(uri, request.FileName, request.Directory).ConfigureAwait(false);
+                // onRejected evicts this URL from the listener's dedup cache so that if the user
+                // declines now and re-tries the same download shortly after, PDM prompts again
+                // instead of silently ignoring it (problem: "a rejected file is never caught again").
+                await ShowNewDownloadPromptAsync(uri, request.FileName, request.Directory, request.Referrer,
+                    onRejected: () => _browserListener?.ForgetRecent(request.Url)).ConfigureAwait(false);
             }
             else
             {
                 try
                 {
-                    await Host.DownloadManager.AddAsync(uri, request.Directory, request.FileName).ConfigureAwait(false);
+                    await Host.DownloadManager.AddAsync(
+                        uri, request.Directory, request.FileName,
+                        referrer: request.Referrer, startImmediately: true).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "Auto-add of browser download {Url} failed", uri);
+                    Host.Notifications.ShowError(
+                        "Download could not start", DescribeAddFailure(ex));
                 }
             }
         }, logger);
@@ -188,7 +196,8 @@ public partial class App : Application
     /// starts the download, saves it for later (added paused), or does nothing. If a prompt is
     /// already visible, this request is silently dropped so bursts can never stack dialogs.
     /// </summary>
-    private static async Task ShowNewDownloadPromptAsync(Uri uri, string? suggestedFileName, string? directory)
+    private static async Task ShowNewDownloadPromptAsync(
+        Uri uri, string? suggestedFileName, string? directory, string? referrer, Action? onRejected = null)
     {
         if (Host is null || Current.Dispatcher is null)
         {
@@ -218,26 +227,45 @@ public partial class App : Application
                     case Views.NewDownloadDialog.Choice.StartNow:
                         try
                         {
-                            await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName)
-                                .ConfigureAwait(false);
+                            // The user explicitly chose "Start download", so force the transfer to
+                            // begin regardless of the AutoStartAddedDownloads setting, and forward
+                            // the captured referrer so hot-link-protected files are not rejected.
+                            await Host.DownloadManager.AddAsync(
+                                uri, directory, suggestedFileName,
+                                referrer: referrer, startImmediately: true);
                         }
-                        catch (Exception) { /* logged elsewhere */ }
+                        catch (Exception ex)
+                        {
+                            // Never swallow silently: a failed prepare/add previously made the
+                            // prompt vanish with no download and no explanation. Tell the user why.
+                            Host.LoggerFactory.CreateLogger("PDM.BrowserIntegration")
+                                .LogWarning(ex, "Start-now of browser download {Url} failed", uri);
+                            Host.Notifications.ShowError("Download could not start", DescribeAddFailure(ex));
+                        }
                         break;
 
                     case Views.NewDownloadDialog.Choice.SaveForLater:
                         try
                         {
-                            await Host.DownloadManager.AddAsync(uri, directory, suggestedFileName,
-                                saveForLater: true).ConfigureAwait(false);
+                            await Host.DownloadManager.AddAsync(
+                                uri, directory, suggestedFileName,
+                                saveForLater: true, referrer: referrer);
                             Host.Notifications.ShowInfo("Saved for later",
                                 dialog.FileName + " is in your queue, paused. Right-click Resume when you're ready.");
                         }
-                        catch (Exception) { /* logged elsewhere */ }
+                        catch (Exception ex)
+                        {
+                            Host.LoggerFactory.CreateLogger("PDM.BrowserIntegration")
+                                .LogWarning(ex, "Save-for-later of browser download {Url} failed", uri);
+                            Host.Notifications.ShowError("Download could not be saved", DescribeAddFailure(ex));
+                        }
                         break;
 
                     case Views.NewDownloadDialog.Choice.Cancel:
                     default:
-                        // User dismissed; do nothing.
+                        // User declined. Forget the URL in the dedup cache so an immediate retry
+                        // re-prompts instead of being swallowed as a "duplicate".
+                        onRejected?.Invoke();
                         break;
                 }
             });
@@ -247,6 +275,24 @@ public partial class App : Application
             Interlocked.Exchange(ref s_promptShowing, 0);
         }
     }
+
+    /// <summary>
+    /// Turns an exception raised while preparing/adding a browser-captured download into a short,
+    /// user-facing explanation. Keeps the message actionable so a silent failure (the old
+    /// behaviour) becomes something the user can understand and react to.
+    /// </summary>
+    private static string DescribeAddFailure(Exception ex) => ex switch
+    {
+        PDM.Core.Downloading.LikelyWebPageException =>
+            "That link points to a web page, not a downloadable file.",
+        HttpRequestException http when http.StatusCode is { } status =>
+            $"The server refused the download ({(int)status} {status}). It may require signing in on the page first.",
+        HttpRequestException =>
+            "Could not reach the server for that download. Check your connection and try again.",
+        TaskCanceledException or TimeoutException =>
+            "The server took too long to respond. Please try again.",
+        _ => string.IsNullOrWhiteSpace(ex.Message) ? "The download could not be started." : ex.Message
+    };
 
     protected override async void OnExit(ExitEventArgs e)
     {

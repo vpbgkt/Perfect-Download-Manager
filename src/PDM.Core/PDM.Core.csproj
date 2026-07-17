@@ -13,4 +13,15 @@
     <Description>Perfect Download Manager - core download engine.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!--
+      WinHTTP-backed HTTP handler. We route downloads through the operating system's HTTP stack
+      (winhttp.dll) rather than .NET's managed SocketsHttpHandler because several CDNs (Cloudflare
+      in particular) fingerprint the TLS ClientHello and block SocketsHttpHandler's fingerprint with
+      403 Forbidden, while the OS stack (the same family curl/WinINet/IDM use) is accepted. See the
+      detailed comment in HttpClientProvider. The handler is only instantiated on Windows.
+    -->
+    <PackageReference Include="System.Net.Http.WinHttpHandler" Version="10.0.0" />
+  </ItemGroup>
+
 </Project>

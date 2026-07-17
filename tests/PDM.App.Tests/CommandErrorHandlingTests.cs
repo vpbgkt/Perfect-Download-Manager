@@ -242,7 +242,7 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
 
     private sealed class StubRemoteFileInspector : IRemoteFileInspector
     {
-        public Task<RemoteFileInfo> InspectAsync(Uri url, CancellationToken cancellationToken = default)
+        public Task<RemoteFileInfo> InspectAsync(Uri url, string? referrer = null, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
     }
 
