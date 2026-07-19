@@ -27,11 +27,14 @@ $scArgs = if ($SelfContained) { @("--self-contained", "true", "-p:PublishSingleF
 
 function Publish($project) {
     Write-Host "Publishing $project ..."
-    # PublishReadyToRun precompiles our assemblies to native code (R2R), so the .NET runtime does
-    # far less JIT work during cold start. This is a meaningful chunk of the "app takes 3-4s to
-    # open" gap versus IDM; it stays framework-dependent (the shared runtime is already R2R).
+    # ReadyToRun (R2R) is DISABLED. It precompiles our assemblies to native code to cut cold-start
+    # JIT time, but R2R images caused a fatal CLR ExecutionEngineException (exit 0x80131506) at
+    # startup on some Windows 10 machines / virtualized CPUs — the app crashed before it could even
+    # create a log. Plain IL + JIT is portable across every CPU/OS the runtime supports, so we trade
+    # a little cold-start speed for reliable startup everywhere. (The shared .NET runtime remains R2R
+    # itself, so most framework code is still precompiled.)
     dotnet publish $project -c $Configuration -r $rid -o $appOut `
-        -p:Version=$Version -p:PublishReadyToRun=true --nologo @scArgs
+        -p:Version=$Version -p:PublishReadyToRun=false --nologo @scArgs
     if ($LASTEXITCODE -ne 0) { throw "publish failed for $project" }
 }
 

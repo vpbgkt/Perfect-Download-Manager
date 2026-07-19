@@ -1,9 +1,14 @@
-﻿<Application x:Class="PDM.App.App"
+﻿<!--
+    No StartupUri: the main window is created manually in App.OnStartup with its view-model injected
+    (MainWindow has no parameterless constructor). A StartupUri here made WPF also try to instantiate
+    MainWindow via Activator.CreateInstance() during startup, which throws before logging is set up —
+    a silent, timing-dependent crash (observed on Windows 10) with no window, no dialog, and no log.
+-->
+<Application x:Class="PDM.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:PDM.App"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-             StartupUri="Views/MainWindow.xaml">
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

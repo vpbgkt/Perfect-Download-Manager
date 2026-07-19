@@ -52,46 +52,67 @@ public partial class App : Application
             return;
         }
 
-        ApplyTheme(Host.Settings.Theme);
-
-        var mainViewModel = new MainViewModel(Host);
-
-        // Wire the IDM-style per-download popup windows. The PopupManager owns the popup
-        // lifecycle and event routing; the window factory builds a fully-wired popup (view-model
-        // + FluentWindow) for a given download and shows it. PopupManager never calls Show()
-        // itself, so the factory is responsible for making the window visible.
-        PopupManager? popupManager = null;
-        Func<ManagedDownload, IDownloadPopup> popupFactory = managed =>
+        // Everything from here (theme + window creation) must be guarded: an exception thrown here
+        // used to bubble out of this async-void method into OnDispatcherException, which set
+        // e.Handled = true and SILENTLY swallowed it — leaving a running process with no window
+        // (the "app won't open, nothing happens" symptom, seen on Windows 10). Now a startup failure
+        // is logged and shown, and the app exits cleanly instead of lingering invisibly.
+        try
         {
-            // The view-model's confirmCancel delegate must call back into the window that hosts it,
-            // so the window is captured and assigned after construction (the view-model does not
-            // invoke confirmCancel during construction).
-            DownloadPopupWindow? window = null;
-            var viewModel = new DownloadPopupViewModel(
-                managed,
-                Host!.DownloadManager,
-                confirmCancel: message => window!.ConfirmCancel(message),
-                showError: message => Host!.Notifications.ShowError("Download", message));
+            var mainViewModel = new MainViewModel(Host);
 
-            window = new DownloadPopupWindow(viewModel, id => popupManager!.NotifyPopupClosed(id));
-            window.Show();
-            return window;
-        };
+            // Wire the IDM-style per-download popup windows. The PopupManager owns the popup
+            // lifecycle and event routing; the window factory builds a fully-wired popup (view-model
+            // + FluentWindow) for a given download and shows it. PopupManager never calls Show()
+            // itself, so the factory is responsible for making the window visible.
+            PopupManager? popupManager = null;
+            Func<ManagedDownload, IDownloadPopup> popupFactory = managed =>
+            {
+                // The view-model's confirmCancel delegate must call back into the window that hosts it,
+                // so the window is captured and assigned after construction (the view-model does not
+                // invoke confirmCancel during construction).
+                DownloadPopupWindow? window = null;
+                var viewModel = new DownloadPopupViewModel(
+                    managed,
+                    Host!.DownloadManager,
+                    confirmCancel: message => window!.ConfirmCancel(message),
+                    showError: message => Host!.Notifications.ShowError("Download", message));
 
-        popupManager = new PopupManager(
-            Host.DownloadManager,
-            popupFactory,
-            showError: message => Host!.Notifications.ShowError("Download", message),
-            logger: Host.LoggerFactory.CreateLogger<PopupManager>());
-        popupManager.Start();
-        mainViewModel.PopupManager = popupManager;
+                window = new DownloadPopupWindow(viewModel, id => popupManager!.NotifyPopupClosed(id));
+                window.Show();
+                return window;
+            };
 
-        var mainWindow = new MainWindow(mainViewModel);
-        MainWindow = mainWindow;
-        mainWindow.Show();
+            popupManager = new PopupManager(
+                Host.DownloadManager,
+                popupFactory,
+                showError: message => Host!.Notifications.ShowError("Download", message),
+                logger: Host.LoggerFactory.CreateLogger<PopupManager>());
+            popupManager.Start();
+            mainViewModel.PopupManager = popupManager;
 
-        StartBrowserListener();
-        _ = StartBackgroundUpdateCheckAsync(mainWindow);
+            var mainWindow = new MainWindow(mainViewModel);
+            MainWindow = mainWindow;
+
+            // Apply the theme AFTER the window exists. SystemThemeWatcher.Watch needs a real window;
+            // it was previously passed Current.MainWindow while that was still null.
+            ApplyTheme(Host.Settings.Theme, mainWindow);
+
+            mainWindow.Show();
+
+            StartBrowserListener();
+            _ = StartBackgroundUpdateCheckAsync(mainWindow);
+        }
+        catch (Exception ex)
+        {
+            try { Serilog.Log.Fatal(ex, "Failed to create or show the main window"); } catch { /* logging must never mask the real error */ }
+            MessageBox.Show(
+                "Perfect Download Manager could not open its main window.\n\n" +
+                ex.Message +
+                "\n\nA detailed log was written to:\n%LOCALAPPDATA%\\PerfectDownloadManager\\logs",
+                "Startup error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+        }
     }
 
     /// <summary>
@@ -454,40 +475,52 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private static void ApplyTheme(string theme)
+    private static void ApplyTheme(string theme, Window window)
     {
-        ApplicationTheme wpfTheme = theme.ToLowerInvariant() switch
+        // WPF-UI theming can throw on some OS builds (e.g. backdrop/DWM differences on Windows 10).
+        // A theme failure must never prevent the window from showing, so it is isolated here.
+        try
         {
-            "light" => ApplicationTheme.Light,
-            "dark" => ApplicationTheme.Dark,
-            _ => ApplicationTheme.Unknown // "system"
-        };
+            ApplicationTheme wpfTheme = theme.ToLowerInvariant() switch
+            {
+                "light" => ApplicationTheme.Light,
+                "dark" => ApplicationTheme.Dark,
+                _ => ApplicationTheme.Unknown // "system"
+            };
 
-        if (wpfTheme == ApplicationTheme.Unknown)
-        {
-            SystemThemeWatcher.Watch(Current.MainWindow);
+            if (wpfTheme == ApplicationTheme.Unknown)
+            {
+                SystemThemeWatcher.Watch(window);
+            }
+            else
+            {
+                ApplicationThemeManager.Apply(wpfTheme);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            ApplicationThemeManager.Apply(wpfTheme);
+            try { Serilog.Log.Warning(ex, "Applying the app theme failed; continuing with defaults."); } catch { }
         }
     }
 
     private static void OnDispatcherException(object? sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        // A malformed URL or transient error should never take down the whole app.
+        // A malformed URL or transient error should never take down the whole app. Log it (so a
+        // swallowed startup/UI crash is at least diagnosable in the log file) then keep running.
+        try { Serilog.Log.Error(e.Exception, "Unhandled UI (dispatcher) exception; handled to keep the app running."); } catch { }
         e.Handled = true;
     }
 
     private static void OnDomainException(object? sender, UnhandledExceptionEventArgs e)
     {
         // Log-only; managed AppDomain unhandled exceptions with IsTerminating=true will
-        // still exit the process. Deliberately swallowed here to avoid crashing on
-        // benign background surface.
+        // still exit the process. Logged so a crash on background surface is diagnosable.
+        try { Serilog.Log.Error(e.ExceptionObject as Exception, "Unhandled AppDomain exception (terminating={Terminating}).", e.IsTerminating); } catch { }
     }
 
     private static void OnTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
+        try { Serilog.Log.Error(e.Exception, "Unobserved task exception."); } catch { }
         e.SetObserved();
     }
 }
