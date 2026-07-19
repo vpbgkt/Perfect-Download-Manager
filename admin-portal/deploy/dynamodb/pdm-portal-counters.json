@@ -1,0 +1,11 @@
+{
+  "TableName": "pdm-portal-counters",
+  "AttributeDefinitions": [
+    { "AttributeName": "counterKey", "AttributeType": "S" }
+  ],
+  "KeySchema": [
+    { "AttributeName": "counterKey", "KeyType": "HASH" }
+  ],
+  "BillingMode": "PAY_PER_REQUEST",
+  "SSESpecification": { "Enabled": true }
+}

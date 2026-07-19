@@ -1,7 +1,7 @@
 "use strict";
 
 const DEFAULTS = {
-  intercept: false,
+  intercept: true,
   cancelBrowserDownload: true,
   interceptAllTypes: true,
   notifications: true

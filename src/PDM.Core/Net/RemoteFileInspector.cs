@@ -29,12 +29,20 @@ public sealed class RemoteFileInspector : IRemoteFileInspector
     }
 
     /// <inheritdoc />
-    public async Task<RemoteFileInfo> InspectAsync(Uri url, CancellationToken cancellationToken = default)
+    public async Task<RemoteFileInfo> InspectAsync(Uri url, string? referrer = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Range = new RangeHeaderValue(0, 0);
+
+        // Forward the originating page as the Referer so hot-link-protected resources that the
+        // browser could fetch (because it sent a referrer) are not rejected with a 403 here.
+        if (!string.IsNullOrWhiteSpace(referrer) &&
+            Uri.TryCreate(referrer, UriKind.Absolute, out Uri? referrerUri))
+        {
+            request.Headers.Referrer = referrerUri;
+        }
 
         using HttpResponseMessage response = await _client
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)

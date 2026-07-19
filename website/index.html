@@ -3,16 +3,25 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Perfect Download Manager — Faster downloads for Windows</title>
-    <meta name="description" content="Perfect Download Manager (PDM) is a free multi-connection download manager for Windows. Faster downloads, reliable resume, modern Fluent UI, and Chrome/Edge browser integration." />
+    <title>Perfect Download Manager 1.0.26 — Free Download Manager (PDM) for Windows</title>
+    <meta name="description" content="Download Perfect Download Manager (PDM) free for Windows 10 &amp; 11. A fast multi-connection download manager with reliable resume, Chrome/Edge integration, and a modern Fluent UI. Free IDM alternative — no ads, no telemetry." />
+    <meta name="keywords" content="Perfect Download Manager, PDM, PDM download, download manager, free download manager, download manager for Windows, IDM alternative, multi-connection downloader, resume downloads" />
+    <meta name="author" content="Perfect Download Manager" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#E38B00" />
 
     <!-- Open Graph / Twitter Card -->
-    <meta property="og:title" content="Perfect Download Manager" />
-    <meta property="og:description" content="Faster downloads. Reliable resume. Modern Windows UI." />
-    <meta property="og:image" content="/assets/img/og-image.png" />
+    <meta property="og:site_name" content="Perfect Download Manager" />
+    <meta property="og:title" content="Perfect Download Manager — Free Download Manager for Windows" />
+    <meta property="og:description" content="Download PDM free for Windows 10 &amp; 11. Faster downloads, reliable resume, Chrome/Edge integration, modern Fluent UI. No ads, no telemetry." />
+    <meta property="og:image" content="https://perfectdownloadmanager.com/assets/img/og-image.png" />
+    <meta property="og:image:alt" content="Perfect Download Manager for Windows" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://perfectdownloadmanager.com/" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Perfect Download Manager — Free Download Manager for Windows" />
+    <meta name="twitter:description" content="Download PDM free for Windows 10 &amp; 11. Faster downloads, reliable resume, Chrome/Edge integration." />
+    <meta name="twitter:image" content="https://perfectdownloadmanager.com/assets/img/og-image.png" />
 
     <!-- Favicons -->
     <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico" />
@@ -22,6 +31,63 @@
 
     <link rel="canonical" href="https://perfectdownloadmanager.com/" />
     <link rel="stylesheet" href="/assets/css/styles.css" />
+
+    <!-- Structured data: helps search engines show PDM as a downloadable Windows app
+         with a rich result for queries like "PDM download" / "Perfect Download Manager". -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Perfect Download Manager",
+      "alternateName": "PDM",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Windows 10, Windows 11",
+      "softwareVersion": "1.0.26",
+      "url": "https://perfectdownloadmanager.com/",
+      "downloadUrl": "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.26-Setup.exe",
+      "installUrl": "https://perfectdownloadmanager.com/#download",
+      "description": "Perfect Download Manager (PDM) is a free multi-connection download manager for Windows 10 and 11 with reliable resume, Chrome and Edge browser integration, and a modern Fluent UI.",
+      "image": "https://perfectdownloadmanager.com/assets/img/og-image.png",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Perfect Download Manager",
+        "url": "https://perfectdownloadmanager.com/"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is PDM free?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Perfect Download Manager is free for personal and commercial use while it's in early access. A paid tier with advanced features is planned; the current version will remain free." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it work on Windows 10?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It runs on the .NET 10 Desktop Runtime, which the installer sets up automatically if it isn't already present." }
+        },
+        {
+          "@type": "Question",
+          "name": "How is it different from Internet Download Manager (IDM)?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Same core idea (multi-connection downloads and browser integration) with a different implementation. PDM is built on modern .NET 10 with a Fluent-styled WPF UI, ships an MV3 browser extension with strict safety filters, and uses ECDSA-signed auto-updates. Free while in early access." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it phone home?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No telemetry, no analytics, no ads. The app contacts our servers only for license validation (if you activate a license) and to check for updates." }
+        }
+      ]
+    }
+    </script>
 </head>
 <body>
     <header class="site-header">
@@ -38,7 +104,9 @@
                 <a href="#download">Download</a>
                 <a href="#extension">Extension</a>
                 <a href="#faq">FAQ</a>
-                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
+                <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
+                <a href="/support">Support</a>
             </nav>
         </div>
     </header>
@@ -48,7 +116,7 @@
         <section class="hero">
             <div class="container hero-inner">
                 <div class="hero-copy">
-                    <span class="eyebrow">v1.0.10 · Free for Windows 10 &amp; 11</span>
+                    <span class="eyebrow">v<span data-version>1.0.26</span> · Free for Windows 10 &amp; 11</span>
                     <h1>Faster downloads.<br /><span class="accent">Reliable resume.</span></h1>
                     <p class="lede">
                         PDM splits every file into up to 32 parallel connections, resumes reliably after any interruption, and hands off downloads from Chrome and Edge — all inside a modern Fluent-styled Windows UI.
@@ -57,19 +125,22 @@
                         <a href="#download" class="btn btn-primary">Download for Windows</a>
                         <a href="#features" class="btn btn-ghost">See what's inside</a>
                     </div>
-                    <p class="hero-note">Free · No ads · No sign-in · Open source on GitHub</p>
+                    <p class="hero-note">Free · No ads · No sign-in · No telemetry</p>
                 </div>
                 <div class="hero-visual" aria-hidden="true">
                     <div class="hero-card">
                         <div class="hero-card-row">
-                            <span class="dot dot-red"></span>
-                            <span class="dot dot-amber"></span>
-                            <span class="dot dot-green"></span>
+                            <img src="/assets/img/logo-48.png" alt="" width="16" height="16" class="hero-card-logo" />
                             <span class="hero-card-title">Perfect Download Manager</span>
+                            <span class="win-controls">
+                                <span class="win-btn win-min"></span>
+                                <span class="win-btn win-max"></span>
+                                <span class="win-btn win-close"></span>
+                            </span>
                         </div>
                         <div class="hero-download">
                             <div class="hero-file-row">
-                                <span class="hero-file">ubuntu-24.04-desktop-amd64.iso</span>
+                                <span class="hero-file">Windows11_23H2_x64.iso</span>
                                 <span class="hero-speed">18.4 MB/s</span>
                             </div>
                             <div class="progress"><div class="progress-fill" style="width: 72%"></div></div>
@@ -154,27 +225,28 @@
         <!-- Download -->
         <section id="download" class="section section-alt">
             <div class="container">
-                <h2 class="section-title">Download PDM 1.0.10</h2>
+                <h2 class="section-title">Download PDM <span data-version>1.0.26</span></h2>
                 <p class="section-lede">
-                    Windows 10 and 11 · 64-bit · Requires .NET 10 Desktop Runtime (installer prompts if missing).
+                    Windows 10 and 11 · 64-bit · The installer sets up everything for you, including the
+                    .NET 10 runtime if it isn't already present — no separate downloads.
                 </p>
                 <div class="download-grid">
                     <div class="download-card download-card-primary">
                         <div class="download-badge">Recommended</div>
-                        <h3>Installer (MSI)</h3>
-                        <p>Standard Windows setup with Start Menu shortcut, per-user install, no admin required.</p>
-                        <a class="btn btn-primary btn-block" href="https://github.com/vpbgkt/Perfect-Download-Manager/releases/latest" rel="noopener" target="_blank">
-                            Download MSI · 39 MB
+                        <h3>Installer</h3>
+                        <p>One-click setup with Start Menu shortcut, per-user install, no admin required. Installs the .NET 10 runtime automatically if it's missing.</p>
+                        <a class="btn btn-primary btn-block" id="dlMsi" data-download="msi" href="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.26-Setup.exe" rel="noopener">
+                            Download for Windows<span data-size="msi"> · 41 MB</span>
                         </a>
-                        <p class="download-meta">SHA-256 available on the releases page</p>
+                        <p class="download-meta">SHA-256 published with every release</p>
                     </div>
                     <div class="download-card">
                         <h3>Portable ZIP</h3>
-                        <p>Unzip anywhere and run <code>PDM.exe</code>. Great for USB sticks and testing.</p>
-                        <a class="btn btn-ghost btn-block" href="https://github.com/vpbgkt/Perfect-Download-Manager/releases/latest" rel="noopener" target="_blank">
-                            Download ZIP · 41 MB
+                        <p>Unzip anywhere and run <code>PDM.exe</code>. Great for USB sticks and testing. Needs the .NET 10 Desktop Runtime already installed.</p>
+                        <a class="btn btn-ghost btn-block" id="dlZip" data-download="zip" href="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-1.0.26.zip" rel="noopener">
+                            Download ZIP<span data-size="zip"> · 42 MB</span>
                         </a>
-                        <p class="download-meta">Same bytes as the MSI, just unpacked</p>
+                        <p class="download-meta">Same app as the installer, just unpacked</p>
                     </div>
                 </div>
                 <div class="install-steps">
@@ -198,15 +270,16 @@
                             The PDM browser extension adds a "Download with PDM" right-click menu on every link, image, and media element. Optional auto-intercept can hand off the browser's own downloads too — with IDM-style safety filters so old files and prefetched resources never leak through.
                         </p>
                         <ul class="check-list">
+                            <li>Available on the Chrome Web Store</li>
                             <li>Manifest V3 compatible</li>
                             <li>Chrome, Edge, and Brave supported today</li>
                             <li>Firefox port planned</li>
                             <li>No broad host permissions</li>
-                            <li>Chrome Web Store submission in progress</li>
                         </ul>
                         <div class="cta-row">
-                            <a class="btn btn-primary" href="https://github.com/vpbgkt/Perfect-Download-Manager/blob/main/docs/BROWSER-EXTENSION.md" rel="noopener" target="_blank">Extension setup guide</a>
+                            <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/perfect-download-manager/phbbcmofdbbojilmcpaghnafpamnocom" rel="noopener" target="_blank">Add to Chrome — free</a>
                         </div>
+                        <p class="hero-note">One click from the Chrome Web Store. Works in Edge and Brave too.</p>
                     </div>
                     <div class="split-visual" aria-hidden="true">
                         <div class="menu-card">
@@ -232,11 +305,11 @@
                 <div class="faq-list">
                     <details class="faq">
                         <summary>Is PDM free?</summary>
-                        <p>Yes. Version 1.0.10 is free for personal and commercial use while it's in early access. A paid tier with advanced features is planned; the current version will remain free.</p>
+                        <p>Yes. Perfect Download Manager is free for personal and commercial use while it's in early access. A paid tier with advanced features is planned; the current version will remain free.</p>
                     </details>
                     <details class="faq">
                         <summary>Does it work on Windows 10?</summary>
-                        <p>Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It needs the .NET 10 Desktop Runtime, which the installer will prompt you to install if it isn't already present.</p>
+                        <p>Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It runs on the .NET 10 Desktop Runtime, which the installer sets up automatically if it isn't already present — nothing to install separately.</p>
                     </details>
                     <details class="faq">
                         <summary>How is it different from Internet Download Manager (IDM)?</summary>
@@ -248,7 +321,7 @@
                     </details>
                     <details class="faq">
                         <summary>Where do I report a bug?</summary>
-                        <p>Open an issue on <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">GitHub</a>. Bugs with logs attached (from <code>%LOCALAPPDATA%\PerfectDownloadManager\logs</code>) get fixed fastest.</p>
+                        <p>Email <a href="mailto:support@perfectdownloadmanager.com">support@perfectdownloadmanager.com</a>. Reports with logs attached (from <code>%LOCALAPPDATA%\PerfectDownloadManager\logs</code>) get fixed fastest.</p>
                     </details>
                     <details class="faq">
                         <summary>Is my code signing certificate needed?</summary>
@@ -269,9 +342,10 @@
                 <a href="#features">Features</a>
                 <a href="#download">Download</a>
                 <a href="#extension">Extension</a>
+                <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
                 <a href="/privacy.html">Privacy</a>
-                <a href="https://github.com/vpbgkt/Perfect-Download-Manager" rel="noopener" target="_blank">GitHub</a>
-                <a href="https://github.com/vpbgkt/Perfect-Download-Manager/issues" rel="noopener" target="_blank">Support</a>
+                <a href="/support">Support</a>
             </nav>
             <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
         </div>

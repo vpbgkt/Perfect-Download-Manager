@@ -45,43 +45,43 @@ Implementation language: **C# / .NET 10** (matches the existing solution). Prope
     - Add `CanPause` (Connecting/Downloading only), `CanResume` (Paused/Failed only), `CanCancel` (false when Completed/Failed/Canceled), `IsCompleted`/`IsFailed`/`IsCanceled`, `FailureMessage` (recorded error or non-empty generic text), `CanOpenFile`/`CanOpenFolder` (Completed only), and `NotifyStatusChanged()` to refresh them; force `ProgressPercent=100` and `IsCompleted` when status is Completed
     - _Requirements: 2.9, 3.3, 3.4, 3.5, 3.6, 8.1, 8.2, 8.3, 8.4_
 
-  - [ ] 3.4 Write property test for identity display placeholders
+  - [x] 3.4 Write property test for identity display placeholders
     - **Property 3: Identity display with placeholders**
     - **Validates: Requirements 1.4, 1.5**
 
-  - [ ] 3.5 Write property test for progress-percent clamping
+  - [x] 3.5 Write property test for progress-percent clamping
     - **Property 4: Progress percentage is clamped to [0, 100]**
     - **Validates: Requirements 2.2**
 
-  - [ ] 3.6 Write property test for snapshot-reflection
+  - [x] 3.6 Write property test for snapshot-reflection
     - **Property 5: Display values reflect the most recent snapshot**
     - **Validates: Requirements 2.1, 4.3, 4.4, 5.6**
 
-  - [ ] 3.7 Write property test for speed display
+  - [x] 3.7 Write property test for speed display
     - **Property 6: Speed display**
     - **Validates: Requirements 2.3, 2.4**
 
-  - [ ] 3.8 Write property test for ETA display
+  - [x] 3.8 Write property test for ETA display
     - **Property 7: ETA display**
     - **Validates: Requirements 2.5, 2.6**
 
-  - [ ] 3.9 Write property test for indeterminate progress
+  - [x] 3.9 Write property test for indeterminate progress
     - **Property 8: Indeterminate progress for unknown total**
     - **Validates: Requirements 2.7**
 
-  - [ ] 3.10 Write property test for connection-count display
+  - [x] 3.10 Write property test for connection-count display
     - **Property 9: Connection counts display**
     - **Validates: Requirements 2.8**
 
-  - [ ] 3.11 Write property test for completed-forces-100
+  - [x] 3.11 Write property test for completed-forces-100
     - **Property 10: Completed status forces 100 percent**
     - **Validates: Requirements 2.9, 8.1**
 
-  - [ ] 3.12 Write property test for control enablement
+  - [x] 3.12 Write property test for control enablement
     - **Property 11: Control enablement and terminal affordances are a pure function of status**
     - **Validates: Requirements 3.3, 3.4, 3.5, 3.6, 8.1, 8.4**
 
-  - [ ] 3.13 Write property test for failure-message content
+  - [x] 3.13 Write property test for failure-message content
     - **Property 12: Failure message content**
     - **Validates: Requirements 8.2, 8.3**
 
@@ -94,15 +94,15 @@ Implementation language: **C# / .NET 10** (matches the existing solution). Prope
     - Add `[RelayCommand]` `OpenFile`/`OpenFolder` that check `File.Exists`/`Directory.Exists` (mirroring `MainViewModel`), launch the target when present, and show an "item could not be opened" error while retaining the completed indication when missing
     - _Requirements: 8.1, 8.6_
 
-  - [ ] 4.3 Write property test for cancel-confirmation gate
+  - [x] 4.3 Write property test for cancel-confirmation gate
     - **Property 13: Cancel confirmation gate**
     - **Validates: Requirements 3.7, 3.8, 3.9**
 
-  - [~] 4.4 Write property test for command targeting
+  - [x] 4.4 Write property test for command targeting
     - **Property 14: Control commands target only their own download**
     - **Validates: Requirements 3.1, 3.2, 6.3**
 
-  - [~] 4.5 Write unit tests for command error handling and missing-target open
+  - [x] 4.5 Write unit tests for command error handling and missing-target open
     - Cover Pause/Resume/Cancel manager-call failure (error shown, status unchanged) and OpenFile/OpenFolder with a missing target
     - _Requirements: 3.10, 8.6_
 
@@ -118,23 +118,23 @@ Implementation language: **C# / .NET 10** (matches the existing solution). Prope
     - Reopen (or foreground) a popup for a download that currently has none, resolving current state from `DownloadManager.Downloads` so a reopened background download shows current progress/speed/ETA/status
     - _Requirements: 5.4, 5.5, 5.6_
 
-  - [-] 6.3 Write property test for one-to-one mapping and lifecycle
+  - [x] 6.3 Write property test for one-to-one mapping and lifecycle
     - **Property 1: One-to-one popup mapping and lifecycle invariant**
     - **Validates: Requirements 1.3, 1.6, 5.3, 6.2, 6.5, 8.5**
 
-  - [-] 6.4 Write property test for the auto-open predicate
+  - [x] 6.4 Write property test for the auto-open predicate
     - **Property 2: Auto-open decision predicate**
     - **Validates: Requirements 1.2, 5.5**
 
-  - [-] 6.5 Write property test for progress-event routing
+  - [x] 6.5 Write property test for progress-event routing
     - **Property 15: Progress events route only to the matching popup**
     - **Validates: Requirements 6.4**
 
-  - [-] 6.6 Write property test for concurrent popup capacity
+  - [x] 6.6 Write property test for concurrent popup capacity
     - **Property 16: Concurrent popup capacity**
     - **Validates: Requirements 6.1, 6.6**
 
-  - [ ] 6.7 Write unit tests for open-failure and remove behavior
+  - [x] 6.7 Write unit tests for open-failure and remove behavior
     - Using a headless fake `IDownloadPopup` factory: auto-open on `DownloadAdded` immediate-start (Req 1.1), transfer untouched + error shown when the factory throws (Req 1.7), and popup closed on `DownloadRemoved` (Req 8.5)
     - _Requirements: 1.1, 1.7, 8.5_
 

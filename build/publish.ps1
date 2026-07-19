@@ -27,8 +27,14 @@ $scArgs = if ($SelfContained) { @("--self-contained", "true", "-p:PublishSingleF
 
 function Publish($project) {
     Write-Host "Publishing $project ..."
+    # ReadyToRun (R2R) is DISABLED. It precompiles our assemblies to native code to cut cold-start
+    # JIT time, but R2R images caused a fatal CLR ExecutionEngineException (exit 0x80131506) at
+    # startup on some Windows 10 machines / virtualized CPUs — the app crashed before it could even
+    # create a log. Plain IL + JIT is portable across every CPU/OS the runtime supports, so we trade
+    # a little cold-start speed for reliable startup everywhere. (The shared .NET runtime remains R2R
+    # itself, so most framework code is still precompiled.)
     dotnet publish $project -c $Configuration -r $rid -o $appOut `
-        -p:Version=$Version --nologo @scArgs
+        -p:Version=$Version -p:PublishReadyToRun=false --nologo @scArgs
     if ($LASTEXITCODE -ne 0) { throw "publish failed for $project" }
 }
 
@@ -69,15 +75,10 @@ $assets = Join-Path $appOut "Assets"
 New-Item -ItemType Directory -Path $assets -Force | Out-Null
 Copy-Item (Join-Path $repo "src/PDM.App/Assets/pdm.ico") (Join-Path $assets "pdm.ico") -Force
 
-# Ship the Chromium browser extension folder so the in-app Browser Setup wizard has a stable
-# on-disk path to point users at (Load unpacked). This is temporary until the extension is
-# published to the Chrome Web Store.
-$extSource = Join-Path $repo "browser-extension/chromium"
-$extTarget = Join-Path $appOut "browser-extension/chromium"
-if (Test-Path $extSource) {
-    New-Item -ItemType Directory -Path $extTarget -Force | Out-Null
-    Copy-Item (Join-Path $extSource "*") $extTarget -Recurse -Force
-}
+# The browser extension is now published on the Chrome Web Store and is NO LONGER bundled
+# with the installer. The in-app Browser Setup wizard simply opens the store listing
+# ("Add to Chrome/Edge/Brave"); the store extension ID is pre-authorised on startup, so there
+# is no developer-mode load-unpacked flow and nothing to ship on disk. This trims the payload.
 
 $zip = Join-Path $dist "PDM-$Version.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }

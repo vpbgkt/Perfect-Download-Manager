@@ -1,0 +1,66 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LicensesTableAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-licenses",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-licenses/index/*"
+      ]
+    },
+    {
+      "Sid": "PortalTablesAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-admins",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-admins/index/*",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-resellers",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-resellers/index/*",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-apikeys",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-apikeys/index/*",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-counters",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-seo",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-releases",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-audit",
+        "arn:aws:dynamodb:ap-south-1:452359090613:table/pdm-portal-audit/index/*"
+      ]
+    },
+    {
+      "Sid": "SigningKeyReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter"
+      ],
+      "Resource": [
+        "arn:aws:ssm:ap-south-1:452359090613:parameter/pdm/updates/private-key"
+      ]
+    },
+    {
+      "Sid": "ReleaseBucketPublish",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::pdm-updates-452359090613-aps1/*"
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Perfect Download Manager Integration",
-  "version": "1.1.2",
+  "version": "1.2.6",
   "description": "Send downloads, links and media to Perfect Download Manager (PDM) — a fast multi-connection download manager for Windows.",
   "author": "Perfect Download Manager",
   "homepage_url": "https://github.com/vpbgkt/Perfect-Download-Manager",

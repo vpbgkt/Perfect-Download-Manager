@@ -1,0 +1,21 @@
+{
+  "TableName": "pdm-portal-apikeys",
+  "AttributeDefinitions": [
+    { "AttributeName": "apiKeyId", "AttributeType": "S" },
+    { "AttributeName": "secretHash", "AttributeType": "S" }
+  ],
+  "KeySchema": [
+    { "AttributeName": "apiKeyId", "KeyType": "HASH" }
+  ],
+  "BillingMode": "PAY_PER_REQUEST",
+  "SSESpecification": { "Enabled": true },
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "secretHash-index",
+      "KeySchema": [
+        { "AttributeName": "secretHash", "KeyType": "HASH" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    }
+  ]
+}

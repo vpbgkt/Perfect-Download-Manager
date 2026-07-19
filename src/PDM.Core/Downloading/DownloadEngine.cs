@@ -46,6 +46,11 @@ public sealed class DownloadEngine
     /// resolves to an HTML page. Set to true to intentionally download the page's HTML source.
     /// </param>
     /// <param name="options">Optional per-download options; engine defaults are used otherwise.</param>
+    /// <param name="referrer">
+    /// Optional originating page sent as the <c>Referer</c> header on the inspection probe and
+    /// persisted on the state so every segment request carries it too. Lets hot-link-protected
+    /// downloads that the browser could fetch succeed here as well. Ignored when null/empty.
+    /// </param>
     /// <param name="cancellationToken">Token used to cancel probing.</param>
     public async Task<DownloadState> PrepareAsync(
         Uri url,
@@ -55,15 +60,42 @@ public sealed class DownloadEngine
         OverwritePolicy overwritePolicy = OverwritePolicy.Rename,
         bool allowWebPage = false,
         DownloadOptions? options = null,
+        string? referrer = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationDirectory);
 
+        RemoteFileInfo info = await _inspector.InspectAsync(url, referrer, cancellationToken).ConfigureAwait(false);
+        return await PrepareFromInfoAsync(
+                url, info, destinationDirectory, fileNameOverride, category, overwritePolicy,
+                allowWebPage, options, referrer, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Same as <see cref="PrepareAsync"/> but uses an already-obtained <paramref name="info"/> instead
+    /// of probing the URL again. This lets a caller that probed for duplicate detection reuse that
+    /// single probe for the actual prepare, so a new download never costs two network round trips.
+    /// </summary>
+    public async Task<DownloadState> PrepareFromInfoAsync(
+        Uri url,
+        RemoteFileInfo info,
+        string destinationDirectory,
+        string? fileNameOverride = null,
+        DownloadCategory? category = null,
+        OverwritePolicy overwritePolicy = OverwritePolicy.Rename,
+        bool allowWebPage = false,
+        DownloadOptions? options = null,
+        string? referrer = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        ArgumentNullException.ThrowIfNull(info);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationDirectory);
+
         DownloadOptions effective = options ?? _defaultOptions;
         effective.Validate();
-
-        RemoteFileInfo info = await _inspector.InspectAsync(url, cancellationToken).ConfigureAwait(false);
 
         // Refuse HTML pages by default so the user gets a clear "not a downloadable file" message
         // instead of silently downloading an unhelpful .html of the landing page.
@@ -96,6 +128,7 @@ public sealed class DownloadEngine
         {
             SourceUrl = url.ToString(),
             EffectiveUrl = info.EffectiveUrl.ToString(),
+            Referrer = string.IsNullOrWhiteSpace(referrer) ? null : referrer,
             DestinationPath = destination,
             TotalBytes = info.TotalBytes,
             SupportsRanges = info.SupportsRanges,
@@ -108,6 +141,18 @@ public sealed class DownloadEngine
 
         await _stateStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
         return state;
+    }
+
+    /// <summary>
+    /// Probes <paramref name="url"/> and returns its <see cref="RemoteFileInfo"/> without
+    /// creating or persisting any download state. Used by the "change/refresh URL" flow to
+    /// validate that a replacement link points at the same file before it is applied.
+    /// </summary>
+    public Task<RemoteFileInfo> InspectAsync(
+        Uri url, string? referrer = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        return _inspector.InspectAsync(url, referrer, cancellationToken);
     }
 
     /// <summary>
@@ -143,7 +188,7 @@ public sealed class DownloadEngine
     {
         DownloadState state = await PrepareAsync(
                 url, destinationDirectory, fileNameOverride, category, overwritePolicy,
-                allowWebPage, options, cancellationToken)
+                allowWebPage, options, referrer: null, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         await RunAsync(state, progress, options, cancellationToken).ConfigureAwait(false);
         return state;

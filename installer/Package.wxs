@@ -103,6 +103,12 @@
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
+    <!-- Brand the installer green (the default WiX bitmaps read as a red/"CD" theme that feels
+         alarming during setup). banner.bmp (493x58) tops the interior dialogs; dialog.bmp
+         (493x312) is the Welcome/Exit background. Regenerate with build/make-installer-art.ps1. -->
+    <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="dialog.bmp" />
+
     <!-- Finish-page checkbox: "Launch Perfect Download Manager", checked by default. -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Perfect Download Manager" />

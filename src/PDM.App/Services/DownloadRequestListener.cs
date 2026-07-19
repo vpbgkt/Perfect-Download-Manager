@@ -33,8 +33,12 @@ public sealed class DownloadRequestListener : IAsyncDisposable
     // Excess requests are rejected with rate_limited so the extension can decide how to react.
     private const int RateLimitCount = 10;
     private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(30);
-    // A URL seen inside this window is treated as a duplicate and dropped silently.
-    private static readonly TimeSpan DedupWindow = TimeSpan.FromMinutes(1);
+    // A URL seen inside this window is treated as a duplicate and dropped silently. Kept SHORT so
+    // it only collapses the rapid duplicate forwards a single click can produce — NOT genuine user
+    // retries. If a user declines a download in the prompt and re-tries it moments later, that retry
+    // must reach the prompt again; a long window here was a cause of "a rejected file is never
+    // caught again". Rejections additionally evict the URL immediately via ForgetRecent().
+    private static readonly TimeSpan DedupWindow = TimeSpan.FromSeconds(5);
 
     private readonly Func<DownloadRequest, Task> _handler;
     private readonly ILogger _logger;
@@ -194,6 +198,20 @@ public sealed class DownloadRequestListener : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to enqueue browser download for {Url}", request.Url);
+        }
+    }
+
+    /// <summary>
+    /// Removes <paramref name="url"/> from the duplicate-suppression cache so an immediate re-send
+    /// of the same URL is treated as fresh (and re-prompts) rather than being silently ignored.
+    /// Called when the user declines the "New download detected" prompt: declining must not lock
+    /// the URL out of a later retry within the dedup window.
+    /// </summary>
+    public void ForgetRecent(string? url)
+    {
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            _recentUrls.TryRemove(url, out _);
         }
     }
 

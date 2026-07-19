@@ -1,0 +1,69 @@
+<ui:FluentWindow x:Class="PDM.App.Views.ChangeUrlDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Change download link"
+                 Height="330" Width="580"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 ResizeMode="NoResize">
+
+    <Grid Margin="16,32,16,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TextBlock Grid.Row="0"
+                      x:Name="FileNameText"
+                      FontTypography="BodyStrong"
+                      TextTrimming="CharacterEllipsis"
+                      Margin="0,0,0,2" />
+
+        <ui:TextBlock Grid.Row="1"
+                      Text="Paste a fresh link to the same file. PDM will check it before continuing so your progress is never corrupted."
+                      Opacity="0.7"
+                      TextWrapping="Wrap"
+                      Margin="0,0,0,10" />
+
+        <ui:TextBlock Grid.Row="2" FontTypography="Body" Text="New download URL" Margin="0,0,0,6" />
+
+        <ui:TextBox x:Name="UrlBox"
+                    Grid.Row="3"
+                    PlaceholderText="https://example.com/same-file.zip"
+                    Padding="8"
+                    KeyDown="OnUrlBoxKeyDown" />
+
+        <ui:TextBox x:Name="ReferrerBox"
+                    Grid.Row="4"
+                    Margin="0,8,0,0"
+                    PlaceholderText="Referrer page (optional)"
+                    Padding="8" />
+
+        <ui:InfoBar x:Name="StatusBar"
+                    Grid.Row="5"
+                    Margin="0,12,0,0"
+                    IsClosable="False"
+                    IsOpen="False" />
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <ui:Button Content="Cancel"
+                       Appearance="Secondary"
+                       MinWidth="96"
+                       Click="OnCancel" />
+            <ui:Button x:Name="OkButton"
+                       Content="Check &amp; Apply"
+                       Appearance="Primary"
+                       MinWidth="140"
+                       Margin="8,0,0,0"
+                       IsDefault="True"
+                       Click="OnOk" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

@@ -82,7 +82,30 @@ public partial class MainWindow : FluentWindow
     /// </summary>
     private async Task AddOneAsync(string url)
     {
-        var outcome = await _viewModel.AddDownloadAsync(url).ConfigureAwait(true);
+        // Resolve the file identity once (probing when needed to see through dynamic links). If PDM
+        // already has this file (finished, partial, or in progress), ask the user what to do instead
+        // of silently adding a redundant copy. Otherwise reuse the probe for the add (no re-probe).
+        PDM.Core.Models.RemoteFileInfo? probed = null;
+        if (App.Host is not null &&
+            Uri.TryCreate(url, UriKind.Absolute, out Uri? parsed) &&
+            (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps))
+        {
+            var (dup, info) = await App.Host.DownloadManager
+                .InspectForDuplicateAsync(parsed, referrer: null, candidateFileName: null)
+                .ConfigureAwait(true);
+
+            if (dup is not null)
+            {
+                await Services.DuplicatePrompt.HandleAsync(
+                    this, App.Host.DownloadManager, dup, parsed, referrer: null, info,
+                    reveal: id => _viewModel.RevealExisting(id)).ConfigureAwait(true);
+                return;
+            }
+
+            probed = info;
+        }
+
+        var outcome = await _viewModel.AddDownloadAsync(url, probedInfo: probed).ConfigureAwait(true);
         switch (outcome.Result)
         {
             case ViewModels.MainViewModel.AddResult.Ok:
@@ -143,6 +166,104 @@ public partial class MainWindow : FluentWindow
         }
 
         await _viewModel.PerformDeleteAsync(item, dialog.DeleteFiles).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Opens the "change download link" dialog for the selected download. Completed downloads
+    /// have nothing to refresh, so they are rejected up front. The dialog itself drives the
+    /// probe/resume/restart handshake through <see cref="MainViewModel.ChangeUrlAsync"/>.
+    /// </summary>
+    private void OnChangeUrl(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedItem is not { } item)
+        {
+            MessageBox.Show(this, "Select a download first.", "Change link",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (item.Status == PDM.Core.Models.DownloadStatus.Completed)
+        {
+            MessageBox.Show(this, "This download has already finished, so its link can't be changed.",
+                "Change link", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new ChangeUrlDialog(
+            item.FileName,
+            item.SourceUrl,
+            (url, referrer, mode) => _viewModel.ChangeUrlAsync(item.Id, url, referrer, mode))
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            ShowSnack("Download link updated", item.FileName,
+                Wpf.Ui.Controls.ControlAppearance.Success,
+                Wpf.Ui.Controls.SymbolRegular.Link24);
+        }
+    }
+
+    /// <summary>
+    /// Arms a "refresh link from browser" for the selected download: the next matching capture from
+    /// the browser extension will be re-linked onto this download (keeping progress when safe)
+    /// instead of starting a duplicate. Guides the user to trigger the download again in the browser.
+    /// </summary>
+    private void OnRefreshFromBrowser(object sender, RoutedEventArgs e)
+    {
+        if (App.Host is null)
+        {
+            return;
+        }
+
+        if (_viewModel.SelectedItem is not { } item)
+        {
+            MessageBox.Show(this, "Select a download first.", "Refresh link",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (item.Status == PDM.Core.Models.DownloadStatus.Completed)
+        {
+            MessageBox.Show(this, "This download has already finished, so there is nothing to refresh.",
+                "Refresh link", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        App.Host.RefreshCoordinator.Arm(item.Id, item.FileName);
+
+        // Auto-open the download's originating page in the default browser so the user just has to
+        // re-trigger the download there — the one-click behaviour expected of a download manager.
+        // Prefer the referrer page (where the download link lives); fall back to the source URL.
+        string? target = item.Managed.State.Referrer;
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            target = item.SourceUrl;
+        }
+
+        bool opened = false;
+        if (!string.IsNullOrWhiteSpace(target) &&
+            Uri.TryCreate(target, UriKind.Absolute, out Uri? targetUri) &&
+            (targetUri.Scheme == Uri.UriSchemeHttp || targetUri.Scheme == Uri.UriSchemeHttps))
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true });
+                opened = true;
+            }
+            catch (Exception)
+            {
+                // No default browser / shell failure: fall back to the manual-guidance message below.
+            }
+        }
+
+        ShowSnack("Waiting for a fresh link",
+            opened
+                ? $"Opened the download page in your browser. Start \"{item.FileName}\" again there and PDM will relink it automatically."
+                : $"Reopen the page for \"{item.FileName}\" in your browser and start the download again within 2 minutes — PDM will relink it automatically.",
+            Wpf.Ui.Controls.ControlAppearance.Info,
+            Wpf.Ui.Controls.SymbolRegular.ArrowSync24);
     }
 
     private async void OnBulkAdd(object sender, RoutedEventArgs e)
@@ -208,6 +329,11 @@ public partial class MainWindow : FluentWindow
         dialog.ShowDialog();
         App.Host.License = dialog.LatestSnapshot;
         _viewModel.LicenseBanner.Refresh();
+    }
+
+    private void OnContactSupport(object sender, RoutedEventArgs e)
+    {
+        Services.SupportLinks.OpenSupport();
     }
 
     private void OnBrowserSetup(object sender, RoutedEventArgs e)

@@ -25,22 +25,23 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* Design tokens — mirror the app's Fluent dark theme so the site and the app feel
-   like the same brand. Orange accent matches the "downloading" progress-bar colour
-   we chose in the app. */
+/* Design tokens — clean light theme. The orange accent matches the
+   "downloading" progress-bar colour used in the app so the brand stays
+   consistent across the site and product. */
 :root {
-    --bg: #0e1116;
-    --bg-alt: #121821;
-    --card: #171d27;
-    --border: #262d3a;
-    --fg: #e6edf3;
-    --fg-muted: #8b95a7;
-    --accent: #e38b00;
-    --accent-strong: #f39c12;
-    --success: #2cb84a;
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-alt: #f5f7fa;
+    --card: #ffffff;
+    --border: #e4e8ee;
+    --fg: #1b2130;
+    --fg-muted: #5b6675;
+    --accent: #e07c00;
+    --accent-strong: #b45f00;
+    --success: #1a9c3e;
     --paused: #8a8a8a;
-    --danger: #d93a3a;
-    --shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    --danger: #d33a3a;
+    --shadow: 0 12px 30px rgba(20, 30, 50, 0.10);
     --radius: 12px;
     --radius-sm: 8px;
 }
@@ -67,7 +68,7 @@ h1, h2, h3, h4 {
     letter-spacing: -0.01em;
     line-height: 1.2;
     margin: 0 0 0.5em;
-    color: #fff;
+    color: var(--fg);
 }
 
 h1 {
@@ -99,7 +100,7 @@ code {
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "Cascadia Mono",
         "Segoe UI Mono", Consolas, monospace;
     font-size: 0.88em;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.05);
     padding: 0.1em 0.4em;
     border-radius: 4px;
     color: var(--fg);
@@ -111,10 +112,10 @@ code {
     position: sticky;
     top: 0;
     z-index: 50;
-    background: rgba(14, 17, 22, 0.85);
+    background: rgba(255, 255, 255, 0.85);
     backdrop-filter: saturate(160%) blur(14px);
     -webkit-backdrop-filter: saturate(160%) blur(14px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--border);
 }
 
 .header-inner {
@@ -129,14 +130,14 @@ code {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    color: #fff;
+    color: var(--fg);
     font-weight: 700;
     letter-spacing: -0.01em;
 }
 
 .brand:hover {
     text-decoration: none;
-    color: #fff;
+    color: var(--fg);
 }
 
 .brand img {
@@ -162,8 +163,8 @@ code {
 }
 
 .site-nav a:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.05);
+    color: var(--fg);
+    background: rgba(0, 0, 0, 0.05);
     text-decoration: none;
 }
 
@@ -217,14 +218,14 @@ code {
 }
 
 .btn-primary {
-    background: linear-gradient(180deg, var(--accent-strong) 0%, var(--accent) 100%);
-    color: #1a1103;
-    box-shadow: 0 6px 18px rgba(227, 139, 0, 0.35);
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
+    color: #ffffff;
+    box-shadow: 0 6px 18px rgba(227, 139, 0, 0.30);
 }
 
 .btn-primary:hover {
-    color: #1a1103;
-    box-shadow: 0 10px 24px rgba(227, 139, 0, 0.45);
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(227, 139, 0, 0.40);
 }
 
 .btn-ghost {
@@ -234,9 +235,9 @@ code {
 }
 
 .btn-ghost:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.16);
+    color: var(--fg);
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.16);
 }
 
 .btn-block {
@@ -304,7 +305,7 @@ code {
 }
 
 .hero-card {
-    background: linear-gradient(180deg, #1a2130 0%, #141a24 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 20px;
@@ -333,11 +334,37 @@ code {
 .dot-amber { background: #febc2e; }
 .dot-green { background: #28c840; }
 
+/* Windows-style window controls (matches the app; not macOS traffic lights). */
+.hero-card-logo { border-radius: 3px; }
+
 .hero-card-title {
-    margin-left: 12px;
+    margin-left: 6px;
     font-size: 0.85rem;
     color: var(--fg-muted);
+    flex: 1;
 }
+
+.win-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+}
+
+.win-btn {
+    width: 12px;
+    height: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg-muted);
+    font-size: 11px;
+    line-height: 1;
+}
+
+.win-min::before { content: "\2013"; }
+.win-max::before { content: "\25A1"; }
+.win-close::before { content: "\2715"; }
 
 .hero-download {
     display: flex;
@@ -353,7 +380,7 @@ code {
 }
 
 .hero-file {
-    color: #fff;
+    color: var(--fg);
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -380,7 +407,7 @@ code {
 .progress {
     height: 8px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.08);
     overflow: hidden;
 }
 
@@ -576,7 +603,7 @@ code {
 }
 
 .menu-card {
-    background: linear-gradient(180deg, #1c2432 0%, #131924 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 12px;
@@ -606,7 +633,7 @@ code {
 
 .menu-item-highlight {
     background: rgba(227, 139, 0, 0.14);
-    color: #fff;
+    color: var(--fg);
     font-weight: 600;
 }
 
@@ -640,7 +667,7 @@ code {
     cursor: pointer;
     padding: 18px 0;
     font-weight: 600;
-    color: #fff;
+    color: var(--fg);
     list-style: none;
     display: flex;
     justify-content: space-between;
@@ -691,7 +718,7 @@ code {
     align-items: center;
     gap: 10px;
     font-weight: 600;
-    color: #fff;
+    color: var(--fg);
 }
 
 .footer-nav {
@@ -708,7 +735,7 @@ code {
 }
 
 .footer-nav a:hover {
-    color: #fff;
+    color: var(--fg);
     text-decoration: none;
 }
 
@@ -783,7 +810,7 @@ code {
         top: 64px;
         left: 0;
         right: 0;
-        background: rgba(14, 17, 22, 0.98);
+        background: rgba(255, 255, 255, 0.98);
         backdrop-filter: blur(14px);
         border-bottom: 1px solid var(--border);
         flex-direction: column;
@@ -821,3 +848,79 @@ code {
         transition-duration: 0.001ms !important;
     }
 }
+
+/* ---------- Blog ---------- */
+
+.blog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.blog-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.blog-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(227, 139, 0, 0.4);
+}
+
+.blog-card h3 { margin: 0; }
+
+.blog-card p {
+    margin: 0;
+    font-size: 0.94rem;
+    color: var(--fg-muted);
+    flex-grow: 1;
+}
+
+.post-meta {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+}
+
+.breadcrumb {
+    max-width: 760px;
+    margin: 24px auto 0;
+    padding: 0 24px;
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+}
+
+.article {
+    max-width: 760px;
+    margin: 24px auto 56px;
+    padding: 0 24px;
+}
+
+.article h1 { margin-bottom: 8px; }
+
+.article .lede {
+    font-size: 1.12rem;
+    color: var(--fg-muted);
+    margin-bottom: 24px;
+}
+
+.article h2 {
+    margin: 32px 0 10px;
+    font-size: 1.3rem;
+    text-align: left;
+}
+
+.article p, .article li { color: var(--fg-muted); }
+
+.article ul, .article ol { padding-left: 20px; }
+
+.article li { margin-bottom: 6px; line-height: 1.7; }
+
+.article .cta-row { margin-top: 28px; }

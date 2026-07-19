@@ -58,7 +58,7 @@ async function refreshStatus() {
 
 // ---- Toggle -----------------------------------------------------------------
 
-chrome.storage.local.get({ intercept: false }).then(({ intercept }) => {
+chrome.storage.local.get({ intercept: true }).then(({ intercept }) => {
   interceptBox.checked = intercept;
 });
 interceptBox.addEventListener("change", () => {

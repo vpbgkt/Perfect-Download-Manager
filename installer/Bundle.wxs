@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX v5 Burn bootstrapper for Perfect Download Manager.
+
+  Produces a small (~40 MB) setup .exe that:
+    1. Detects whether a .NET 10 (or newer) Windows Desktop Runtime (x64) is installed and, if not,
+       downloads and silently installs it from Microsoft on demand.
+    2. Installs the framework-dependent PDM MSI (embedded in the bundle).
+
+  This keeps the download small while removing the manual "install .NET 10 first" step users hit
+  with the bare framework-dependent MSI. The exact runtime hash/size/URL are injected at build time
+  by build/build-bundle.ps1 (pinned to an immutable versioned URL so the download always matches).
+
+  NOTE: the runtime auto-install path must be verified on a clean machine (no .NET installed) before
+  public release — it cannot be exercised on a dev box that already has the runtime.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Bundle Name="Perfect Download Manager"
+          Manufacturer="Perfect Download Manager"
+          Version="$(var.ProductVersion)"
+          UpgradeCode="E7B4A2C1-6D3F-4A9E-8C1B-2F3A4B5C6D7E"
+          IconSourceFile="pdm.ico"
+          AboutUrl="https://perfectdownloadmanager.com/">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="rtfLicense"
+          LicenseFile="License.rtf"
+          LogoFile="pdm.ico"
+          SuppressOptionsUI="yes" />
+    </BootstrapperApplication>
+
+    <!--
+      Detect an existing .NET 10+ Windows Desktop Runtime (x64). When the key/value is absent the
+      variable is empty, the DetectCondition is false, and the runtime is installed. That means even
+      if this registry path is ever wrong, we err toward running the runtime installer (which is
+      idempotent and no-ops when already present) rather than skipping it — never a broken state.
+    -->
+    <util:RegistrySearch
+        Id="NetDesktopRuntimeVersionSearch"
+        Variable="NetDesktopRuntimeVersion"
+        Root="HKLM"
+        Key="SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App"
+        Value="Version"
+        Result="value"
+        Bitness="always64" />
+
+    <Chain>
+      <!-- .NET 10 Windows Desktop Runtime (x64). Remote payload: downloaded on demand, skipped when
+           already present. Hash/Size/URL are supplied by build-bundle.ps1. -->
+      <ExePackage
+          Id="NetDesktopRuntime"
+          DisplayName="Microsoft Windows Desktop Runtime 10 (x64)"
+          Permanent="yes"
+          Vital="yes"
+          DetectCondition="NetDesktopRuntimeVersion &gt;= v10.0.0"
+          InstallArguments="/install /quiet /norestart"
+          RepairArguments="/repair /quiet /norestart">
+        <ExePackagePayload
+            Name="$(var.RuntimeName)"
+            DownloadUrl="$(var.RuntimeUrl)"
+            Hash="$(var.RuntimeHash)"
+            Size="$(var.RuntimeSize)" />
+      </ExePackage>
+
+      <!-- The framework-dependent PDM installer, embedded in the bundle. -->
+      <MsiPackage
+          Id="PdmMsi"
+          SourceFile="$(var.MsiPath)"
+          Vital="yes"
+          Compressed="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

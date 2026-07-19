@@ -174,6 +174,15 @@ public sealed class DownloadWorker
 
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_state.EffectiveUrl));
 
+        // Carry the originating page as the Referer on every segment request. Servers that only
+        // serve a file when the request is referred from their page (hot-link protection) would
+        // otherwise reject the transfer even though the inspection probe succeeded.
+        if (!string.IsNullOrWhiteSpace(_state.Referrer) &&
+            Uri.TryCreate(_state.Referrer, UriKind.Absolute, out Uri? referrerUri))
+        {
+            request.Headers.Referrer = referrerUri;
+        }
+
         if (_state.SupportsRanges)
         {
             long? to = openEnded ? null : segment.End;

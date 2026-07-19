@@ -3,7 +3,7 @@
 // Responsibilities
 //   1. Right-click "Download with PDM" context menu (links, images, media, page, selection).
 //      Always active, always user-initiated — never subject to the auto-intercept filters.
-//   2. Optional auto-interception of the browser's own downloads (opt-in via the popup).
+//   2. Auto-interception of the browser's own downloads (ON by default; toggle in the popup).
 //   3. A message API used by the popup / options page:
 //        { type: "getStatus" }              -> { hostOk, error }
 //        { type: "sendUrl", url, referrer, filename }  -> { ok, error }
@@ -24,10 +24,6 @@ const HOST_NAME = "com.pdm.host";
 const CONTEXT_MENU_ID = "pdm-download";
 const CONTEXT_MENU_PAGE_ID = "pdm-download-page";
 
-// Bump when a change MUST force the intercept toggle off for all users regardless of whether
-// the browser fired onInstalled on reload (covers in-place upgrades).
-const REMEDIATION_VERSION = "1.1.0-a";
-
 // A download whose startTime is within this window is considered "fresh". Used only during
 // the browser-startup window to reject session-restore replays (which carry old startTimes).
 const RECENCY_MS = 15_000;
@@ -45,16 +41,25 @@ const STARTUP_WINDOW_MS = 25_000;
 const RATE_LIMIT_COUNT = 8;
 const RATE_LIMIT_WINDOW_MS = 30_000;
 
-const DEDUP_WINDOW_MS = 60_000;
+// Dedup window: ONLY long enough to collapse the near-instant duplicate onCreated events a single
+// logical download can raise (e.g. finalUrl vs url, or a redirect hop) — a few hundred ms in
+// practice. It must stay SHORT so a genuine user retry is not swallowed: if someone declines a
+// download in PDM's prompt and then re-clicks it in the browser, that second attempt must reach
+// PDM and prompt again (the "rejected file is never caught again" bug came from a 60s window here).
+const DEDUP_WINDOW_MS = 1_500;
 const NOTIFICATION_THROTTLE_MS = 4_000;
 const BADGE_CLEAR_MS = 2_500;
 
 // Default settings; merged with whatever is in chrome.storage.local.
+// All capture-related toggles default ON so the extension starts catching downloads immediately
+// after install with zero manual setup. The heavy per-item gates in downloads.onCreated (below)
+// are what make always-on interception safe — session-restore replays and non-download events are
+// rejected there, so defaulting intercept on no longer risks the historical prompt flood.
 const DEFAULT_SETTINGS = {
-    intercept: false,             // auto-intercept the browser's own downloads
+    intercept: true,              // auto-intercept the browser's own downloads
     notifications: true,          // show toast notifications on capture
     cancelBrowserDownload: true,  // cancel the browser's copy once PDM accepts
-    interceptAllTypes: true       // forward all file types (default on, per product decision)
+    interceptAllTypes: true       // forward all file types
 };
 
 // Content-type allow-list. Empty mime is allowed through (many downloads report empty mime
@@ -97,45 +102,99 @@ function getSettings() {
 
 // ---- Startup bookkeeping ----------------------------------------------------
 
-// Record the real browser-launch time in session storage (survives SW recycles within the
-// same browser session, cleared when the browser closes). Used by inStartupWindow().
+// Real browser-launch time, kept IN MEMORY so inStartupWindow() is synchronous and adds zero
+// latency to the download-intercept hot path (an await there delayed the cancel and let Brave's
+// own download / "save as" dialog appear before we could dismiss it). It is mirrored to session
+// storage so it survives a service-worker recycle within the same browser session, and reloaded
+// into memory below on a cold SW start.
+let browserStartedAt = 0;
+
+// Repopulate the in-memory value after a service-worker restart within the same session.
+try {
+    chrome.storage.session.get({ browserStartedAt: 0 }).then(({ browserStartedAt: t }) => {
+        if (t) browserStartedAt = t;
+    }).catch(() => { /* ignore */ });
+} catch { /* ignore */ }
+
 function markBrowserStart() {
-    try { chrome.storage.session.set({ browserStartedAt: Date.now() }); } catch { /* ignore */ }
+    browserStartedAt = Date.now();
+    try { chrome.storage.session.set({ browserStartedAt }); } catch { /* ignore */ }
 }
 
-async function inStartupWindow() {
-    try {
-        const { browserStartedAt } = await chrome.storage.session.get({ browserStartedAt: 0 });
-        return browserStartedAt > 0 && (Date.now() - browserStartedAt) < STARTUP_WINDOW_MS;
-    } catch {
-        return false;
-    }
+// Synchronous by design (see browserStartedAt above): no await on the intercept hot path.
+function inStartupWindow() {
+    return browserStartedAt > 0 && (Date.now() - browserStartedAt) < STARTUP_WINDOW_MS;
 }
-
-// Version-marked remediation: force auto-intercept off on any build change.
-chrome.storage.local.get({ remediationVersion: null }).then(async ({ remediationVersion }) => {
-    if (remediationVersion !== REMEDIATION_VERSION) {
-        try {
-            await chrome.storage.local.set({ intercept: false, remediationVersion: REMEDIATION_VERSION });
-        } catch { /* ignore */ }
-    }
-});
 
 // ---- Native messaging -------------------------------------------------------
 
+// --- Persistent native-messaging port ----------------------------------------
+//
+// Why a long-lived port instead of chrome.runtime.sendNativeMessage:
+//   sendNativeMessage spawns a BRAND-NEW native-host process for EVERY message. Launching a
+//   process (especially a .NET host that must locate the runtime and JIT on cold start) costs
+//   hundreds of ms to seconds — that was the visible "4-5 second" lag before a capture reached
+//   PDM. connectNative starts the host ONCE and keeps it alive for the whole browsing session,
+//   so only the first capture pays the startup cost and every subsequent one is near-instant.
+//   This is how IDM feels immediate.
+//
+// The native host already frames messages with the standard native-messaging length prefix and
+// loops reading them, so it works unchanged over a persistent port.
+//
+// Response correlation: the host processes messages serially and replies exactly once per
+// message, in order. We therefore keep a FIFO queue of pending resolvers and match each incoming
+// reply to the oldest pending request. A per-request timeout resolves early but LEAVES its slot
+// in the queue (a settled placeholder) so ordering never desyncs — a late reply simply drains the
+// already-settled placeholder and is discarded.
+const NATIVE_TIMEOUT_MS = 8_000;
+let nativePort = null;
+const pendingResponses = [];
+
+function getNativePort() {
+    if (nativePort) return nativePort;
+    const port = chrome.runtime.connectNative(HOST_NAME);
+    port.onMessage.addListener((msg) => {
+        const resolve = pendingResponses.shift();
+        if (resolve) resolve(msg || { ok: false, error: "no_response" });
+    });
+    port.onDisconnect.addListener(() => {
+        const err = chrome.runtime.lastError ? chrome.runtime.lastError.message : "disconnected";
+        nativePort = null;
+        // Fail every in-flight request; callers treat this as "host unavailable" and react.
+        while (pendingResponses.length) {
+            const resolve = pendingResponses.shift();
+            resolve({ ok: false, error: err });
+        }
+    });
+    nativePort = port;
+    return port;
+}
+
 function sendToPdm(payload) {
     return new Promise((resolve) => {
+        let settled = false;
+        const done = (r) => { if (!settled) { settled = true; resolve(r); } };
+
+        let port;
         try {
-            chrome.runtime.sendNativeMessage(HOST_NAME, payload, (response) => {
-                if (chrome.runtime.lastError) {
-                    resolve({ ok: false, error: chrome.runtime.lastError.message });
-                    return;
-                }
-                resolve(response || { ok: false, error: "no_response" });
-            });
+            port = getNativePort();
         } catch (e) {
-            resolve({ ok: false, error: String(e) });
+            done({ ok: false, error: String(e) });
+            return;
         }
+
+        // Enqueue BEFORE posting so a reply can never arrive before we're listening.
+        pendingResponses.push(done);
+        try {
+            port.postMessage(payload);
+        } catch (e) {
+            // Port died between getNativePort() and postMessage(); onDisconnect will drain us.
+            void e;
+        }
+
+        // Never block forever on a wedged host. The placeholder stays in the FIFO to preserve
+        // ordering (see the block comment above); it is a no-op once settled.
+        setTimeout(() => done({ ok: false, error: "timeout" }), NATIVE_TIMEOUT_MS);
     });
 }
 
@@ -221,11 +280,17 @@ function createContextMenus() {
 
 chrome.runtime.onInstalled.addListener(async (details) => {
     createContextMenus();
-    // Only a brand-new install starts with interception off. Updates preserve the user's
-    // choice so the feature never appears to "turn itself off" after an upgrade/reload.
+    // A brand-new install turns capture (and the other capture-related toggles) ON by default so
+    // the extension starts catching downloads immediately with no manual setup. Updates deliberately
+    // do NOT touch stored settings, so a user who turned capture off keeps it off across upgrades.
     if (details.reason === "install") {
         try {
-            await chrome.storage.local.set({ intercept: false, remediationVersion: REMEDIATION_VERSION });
+            await chrome.storage.local.set({
+                intercept: true,
+                notifications: true,
+                cancelBrowserDownload: true,
+                interceptAllTypes: true
+            });
         } catch { /* ignore */ }
     }
 });
@@ -366,10 +431,9 @@ chrome.downloads.onCreated.addListener(async (item) => {
     // During the browser-startup window, additionally require a recent startTime. This is the
     // belt-and-suspenders guard for the exact scenario the user hit: the browser restoring a
     // download session right after launch. Outside the window we skip it so a real download
-    // that just woke the service worker is never dropped.
-    if (await inStartupWindow()) {
-        if (!itemStartedRecently(item)) return;
-    }
+    // that just woke the service worker is never dropped. inStartupWindow() is synchronous so
+    // this adds no latency before the cancel below.
+    if (inStartupWindow() && !itemStartedRecently(item)) return;
 
     if (!looksDownloadable(item, url, settings.interceptAllTypes)) return;
     if (isDuplicate(url)) return;
@@ -377,22 +441,41 @@ chrome.downloads.onCreated.addListener(async (item) => {
     // Silent flood guard — no notification, ever. Only forward-eligible downloads reach here.
     if (isRateLimited()) return;
 
+    // All gates above are synchronous (no await), so we reach this point within a single microtask
+    // of onCreated firing. Record dedup/rate bookkeeping and capture the fields we need up front.
     recentUrls.set(url, Date.now());
     forwardTimestamps.push(Date.now());
+    const referrer = item.referrer || "";
+    const filename = item.filename || "";
 
-    const result = await sendToPdm({
-        url,
-        referrer: item.referrer || "",
-        filename: item.filename || ""
-    });
+    // IDM-like instant handoff. Cancel the browser's OWN download RIGHT NOW — before the native
+    // round-trip — so it never lingers in the browser downloader, and so the browser's own
+    // "where do you want to save this file?" dialog (Brave/Chrome "Ask where to save each file")
+    // is dismissed immediately instead of staying open for the user to close by hand. Doing the
+    // cancel this early (all preceding gates are synchronous) is what makes it disappear cleanly.
+    // We DEFER erasing from history until PDM confirms, so a failed handoff leaves a cancelled
+    // entry the user can retry rather than vanishing silently.
+    if (settings.cancelBrowserDownload) {
+        try { chrome.downloads.cancel(item.id); } catch { /* already finished */ }
+    }
+
+    const result = await sendToPdm({ url, referrer, filename });
 
     if (result && result.ok) {
         if (settings.cancelBrowserDownload) {
-            try { chrome.downloads.cancel(item.id); } catch { /* already finished */ }
+            // Handoff confirmed — clear the cancelled entry so the browser downloader stays clean.
             try { chrome.downloads.erase({ id: item.id }); } catch { /* ignore */ }
         }
         // Badge only — auto-interception is silent, matching IDM. User-initiated captures
         // (context menu / popup) still toast because the user expects direct feedback.
         flashBadge("1", "#2cb84a");
+    } else {
+        // PDM could not accept it after we cancelled the browser copy. Drop it from the dedup
+        // cache so the user can retry immediately (a failed handoff must never lock out a retry),
+        // and surface it (throttled) so the download is never lost silently.
+        recentUrls.delete(url);
+        flashBadge("!", "#dc2626");
+        await notify("PDM could not accept the download" +
+            (result && result.error ? ": " + result.error : "") + ".", { throttled: true });
     }
 });
