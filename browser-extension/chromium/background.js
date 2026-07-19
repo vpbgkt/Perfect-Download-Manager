@@ -3,7 +3,7 @@
 // Responsibilities
 //   1. Right-click "Download with PDM" context menu (links, images, media, page, selection).
 //      Always active, always user-initiated — never subject to the auto-intercept filters.
-//   2. Optional auto-interception of the browser's own downloads (opt-in via the popup).
+//   2. Auto-interception of the browser's own downloads (ON by default; toggle in the popup).
 //   3. A message API used by the popup / options page:
 //        { type: "getStatus" }              -> { hostOk, error }
 //        { type: "sendUrl", url, referrer, filename }  -> { ok, error }
@@ -23,10 +23,6 @@
 const HOST_NAME = "com.pdm.host";
 const CONTEXT_MENU_ID = "pdm-download";
 const CONTEXT_MENU_PAGE_ID = "pdm-download-page";
-
-// Bump when a change MUST force the intercept toggle off for all users regardless of whether
-// the browser fired onInstalled on reload (covers in-place upgrades).
-const REMEDIATION_VERSION = "1.1.0-a";
 
 // A download whose startTime is within this window is considered "fresh". Used only during
 // the browser-startup window to reject session-restore replays (which carry old startTimes).
@@ -55,11 +51,15 @@ const NOTIFICATION_THROTTLE_MS = 4_000;
 const BADGE_CLEAR_MS = 2_500;
 
 // Default settings; merged with whatever is in chrome.storage.local.
+// All capture-related toggles default ON so the extension starts catching downloads immediately
+// after install with zero manual setup. The heavy per-item gates in downloads.onCreated (below)
+// are what make always-on interception safe — session-restore replays and non-download events are
+// rejected there, so defaulting intercept on no longer risks the historical prompt flood.
 const DEFAULT_SETTINGS = {
-    intercept: false,             // auto-intercept the browser's own downloads
+    intercept: true,              // auto-intercept the browser's own downloads
     notifications: true,          // show toast notifications on capture
     cancelBrowserDownload: true,  // cancel the browser's copy once PDM accepts
-    interceptAllTypes: true       // forward all file types (default on, per product decision)
+    interceptAllTypes: true       // forward all file types
 };
 
 // Content-type allow-list. Empty mime is allowed through (many downloads report empty mime
@@ -125,15 +125,6 @@ function markBrowserStart() {
 function inStartupWindow() {
     return browserStartedAt > 0 && (Date.now() - browserStartedAt) < STARTUP_WINDOW_MS;
 }
-
-// Version-marked remediation: force auto-intercept off on any build change.
-chrome.storage.local.get({ remediationVersion: null }).then(async ({ remediationVersion }) => {
-    if (remediationVersion !== REMEDIATION_VERSION) {
-        try {
-            await chrome.storage.local.set({ intercept: false, remediationVersion: REMEDIATION_VERSION });
-        } catch { /* ignore */ }
-    }
-});
 
 // ---- Native messaging -------------------------------------------------------
 
@@ -289,11 +280,17 @@ function createContextMenus() {
 
 chrome.runtime.onInstalled.addListener(async (details) => {
     createContextMenus();
-    // Only a brand-new install starts with interception off. Updates preserve the user's
-    // choice so the feature never appears to "turn itself off" after an upgrade/reload.
+    // A brand-new install turns capture (and the other capture-related toggles) ON by default so
+    // the extension starts catching downloads immediately with no manual setup. Updates deliberately
+    // do NOT touch stored settings, so a user who turned capture off keeps it off across upgrades.
     if (details.reason === "install") {
         try {
-            await chrome.storage.local.set({ intercept: false, remediationVersion: REMEDIATION_VERSION });
+            await chrome.storage.local.set({
+                intercept: true,
+                notifications: true,
+                cancelBrowserDownload: true,
+                interceptAllTypes: true
+            });
         } catch { /* ignore */ }
     }
 });

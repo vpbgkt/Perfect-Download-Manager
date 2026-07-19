@@ -301,6 +301,41 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         await _host.DownloadManager.RemoveAsync(item.Id, deleteFiles).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Returns an existing download that matches <paramref name="url"/> (already downloaded, partially
+    /// downloaded, or in progress), or null when there is no duplicate. Used by the add flow to prompt
+    /// the user before starting a redundant transfer.
+    /// </summary>
+    public DuplicateInfo? FindDuplicate(Uri url) => _host.DownloadManager.FindDuplicate(url);
+
+    /// <summary>Resumes an existing download by id (used by the duplicate prompt's "continue" action).</summary>
+    public Task ResumeExistingAsync(Guid id) => _host.DownloadManager.ResumeAsync(id);
+
+    /// <summary>Selects an existing download row by id and reveals its popup, if one is available.</summary>
+    public void RevealExisting(Guid id)
+    {
+        if (_byId.TryGetValue(id, out DownloadItemViewModel? vm))
+        {
+            SelectedItem = vm;
+            PopupManager?.ShowPopupFor(id);
+        }
+    }
+
+    /// <summary>
+    /// Changes (refreshes) the URL of a download. Delegates to <see cref="DownloadManager.ChangeUrlAsync"/>,
+    /// which probes the new link and preserves progress only when it is safe to do so; the dialog in
+    /// the view interprets the returned <see cref="ChangeUrlResult"/> (including the restart handshake).
+    /// </summary>
+    public Task<ChangeUrlResult> ChangeUrlAsync(Guid id, string newUrl, string? referrer, ReplaceUrlMode mode)
+    {
+        if (!Uri.TryCreate(newUrl, UriKind.Absolute, out Uri? uri))
+        {
+            return Task.FromResult(new ChangeUrlResult(ChangeUrlStatus.Rejected, "Enter a valid http:// or https:// URL."));
+        }
+
+        return _host.DownloadManager.ChangeUrlAsync(id, uri, referrer, mode);
+    }
+
     [RelayCommand]
     private void OpenFile(DownloadItemViewModel? item)
     {
@@ -367,7 +402,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// the view can prompt the user for confirmation and hint at the browser extension.
     /// </summary>
     public async Task<AddOutcome> AddDownloadAsync(string url, string? destinationDirectory = null,
-        bool allowWebPage = false, CancellationToken cancellationToken = default)
+        bool allowWebPage = false, OverwritePolicy? overwritePolicy = null,
+        RemoteFileInfo? probedInfo = null, CancellationToken cancellationToken = default)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -378,7 +414,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             ManagedDownload managed = await _host.DownloadManager.AddAsync(uri, destinationDirectory,
-                allowWebPage: allowWebPage, cancellationToken: cancellationToken).ConfigureAwait(false);
+                allowWebPage: allowWebPage, overwritePolicy: overwritePolicy, probedInfo: probedInfo,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             if (_host.Settings.ShowNotifications)
             {

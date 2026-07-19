@@ -153,6 +153,29 @@ public partial class App : Application
                 return;
             }
 
+            // If the user armed a "refresh from browser" for a stalled download, try to correlate
+            // THIS capture with it first. A confident match re-links the existing download (keeping
+            // progress when safe) instead of creating a duplicate. A non-match falls through to the
+            // normal new-download handling below — covering the user navigating away mid-refresh and
+            // starting a different download.
+            if (await TryHandleRefreshCaptureAsync(uri, request.Referrer).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            // Resolve the file identity once — probing when needed so dynamic links (Google Drive,
+            // signed CDNs) that change every time are still recognised as the same file. If it matches
+            // something PDM already has, prompt instead of adding a redundant copy. Otherwise reuse the
+            // probe for the add so a new download never probes twice.
+            var (duplicate, probed) = await Host.DownloadManager
+                .InspectForDuplicateAsync(uri, request.Referrer, request.FileName).ConfigureAwait(false);
+
+            if (duplicate is not null)
+            {
+                await ShowDuplicatePromptAsync(duplicate, uri, request.Referrer, probed).ConfigureAwait(false);
+                return;
+            }
+
             // Browser-captured downloads must be confirmed by default so users are never
             // surprised by unwanted downloads starting silently. Users can turn this off
             // under Settings > Confirm browser downloads.
@@ -162,7 +185,7 @@ public partial class App : Application
                 // declines now and re-tries the same download shortly after, PDM prompts again
                 // instead of silently ignoring it (problem: "a rejected file is never caught again").
                 await ShowNewDownloadPromptAsync(uri, request.FileName, request.Directory, request.Referrer,
-                    onRejected: () => _browserListener?.ForgetRecent(request.Url)).ConfigureAwait(false);
+                    probed, onRejected: () => _browserListener?.ForgetRecent(request.Url)).ConfigureAwait(false);
             }
             else
             {
@@ -170,7 +193,7 @@ public partial class App : Application
                 {
                     await Host.DownloadManager.AddAsync(
                         uri, request.Directory, request.FileName,
-                        referrer: request.Referrer, startImmediately: true).ConfigureAwait(false);
+                        referrer: request.Referrer, startImmediately: true, probedInfo: probed).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -182,6 +205,122 @@ public partial class App : Application
         }, logger);
 
         _browserListener.Start();
+    }
+
+    /// <summary>
+    /// Attempts to satisfy an armed "refresh from browser" with this capture. Returns true when the
+    /// capture was consumed (it matched the armed download and was applied or prompted), false when
+    /// the caller should handle it as an ordinary new download.
+    /// </summary>
+    private static async Task<bool> TryHandleRefreshCaptureAsync(Uri uri, string? referrer)
+    {
+        if (Host is null)
+        {
+            return false;
+        }
+
+        RefreshCoordinator.ArmedRefresh? armed = Host.RefreshCoordinator.Current;
+        if (armed is null)
+        {
+            return false;
+        }
+
+        RefreshCaptureResult result;
+        try
+        {
+            result = await Host.DownloadManager
+                .TryRefreshFromCaptureAsync(armed.DownloadId, uri, referrer)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Host.LoggerFactory.CreateLogger("PDM.BrowserIntegration")
+                .LogWarning(ex, "Refresh correlation failed for {Url}", uri);
+            return false;
+        }
+
+        switch (result.Match)
+        {
+            case RefreshMatch.Applied:
+                Host.RefreshCoordinator.Disarm(armed.DownloadId);
+                Host.Notifications.ShowSuccess("Download link refreshed",
+                    $"{armed.FileName} is downloading again.");
+                return true;
+
+            case RefreshMatch.RestartRequired:
+                Host.RefreshCoordinator.Disarm(armed.DownloadId);
+                await PromptRefreshRestartAsync(armed, uri, referrer, result.Change?.Message).ConfigureAwait(false);
+                return true;
+
+            case RefreshMatch.NoDownload:
+                // The armed download was removed while we waited; clear it and treat this as new.
+                Host.RefreshCoordinator.Disarm();
+                return false;
+
+            case RefreshMatch.NotAMatch:
+            case RefreshMatch.Rejected:
+            default:
+                // Not the file the user was refreshing (they grabbed something else). Leave the arm
+                // in place so the correct refresh can still arrive, and handle this as a new download.
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Shows the duplicate prompt for a browser capture on the UI thread, reusing the caller's probe
+    /// so a "download again / start new" does not probe the URL a second time.
+    /// </summary>
+    private static async Task ShowDuplicatePromptAsync(
+        DuplicateInfo duplicate, Uri uri, string? referrer, PDM.Core.Models.RemoteFileInfo? probedInfo)
+    {
+        if (Host is null || Current?.Dispatcher is null)
+        {
+            return;
+        }
+
+        Task op = await Current.Dispatcher.InvokeAsync(() =>
+            Services.DuplicatePrompt.HandleAsync(
+                Current.MainWindow, Host.DownloadManager, duplicate, uri, referrer, probedInfo,
+                reveal: _ => Current.MainWindow?.Activate()));
+
+        await op.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Asks the user whether to restart a download from scratch when its refreshed link matched the
+    /// file but cannot continue the existing partial data (e.g. the content changed server-side).
+    /// </summary>
+    private static async Task PromptRefreshRestartAsync(
+        RefreshCoordinator.ArmedRefresh armed, Uri uri, string? referrer, string? reason)
+    {
+        if (Host is null || Current?.Dispatcher is null)
+        {
+            return;
+        }
+
+        await Current.Dispatcher.InvokeAsync(async () =>
+        {
+            MessageBoxResult choice = MessageBox.Show(
+                $"PDM found a fresh link for \"{armed.FileName}\", but it can't continue your existing progress:\n\n" +
+                $"{reason}\n\nDownload it again from the beginning?",
+                "Refresh download link",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (choice != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                await Host.DownloadManager.ChangeUrlAsync(
+                    armed.DownloadId, uri, referrer, ReplaceUrlMode.Restart);
+            }
+            catch (Exception ex)
+            {
+                Host.Notifications.ShowError("Could not restart download", ex.Message);
+            }
+        });
     }
 
     // Global gate so only ONE "New download detected" dialog is ever visible at a time.
@@ -197,7 +336,8 @@ public partial class App : Application
     /// already visible, this request is silently dropped so bursts can never stack dialogs.
     /// </summary>
     private static async Task ShowNewDownloadPromptAsync(
-        Uri uri, string? suggestedFileName, string? directory, string? referrer, Action? onRejected = null)
+        Uri uri, string? suggestedFileName, string? directory, string? referrer,
+        PDM.Core.Models.RemoteFileInfo? probedInfo = null, Action? onRejected = null)
     {
         if (Host is null || Current.Dispatcher is null)
         {
@@ -232,7 +372,7 @@ public partial class App : Application
                             // the captured referrer so hot-link-protected files are not rejected.
                             await Host.DownloadManager.AddAsync(
                                 uri, directory, suggestedFileName,
-                                referrer: referrer, startImmediately: true);
+                                referrer: referrer, startImmediately: true, probedInfo: probedInfo);
                         }
                         catch (Exception ex)
                         {
@@ -249,7 +389,7 @@ public partial class App : Application
                         {
                             await Host.DownloadManager.AddAsync(
                                 uri, directory, suggestedFileName,
-                                saveForLater: true, referrer: referrer);
+                                saveForLater: true, referrer: referrer, probedInfo: probedInfo);
                             Host.Notifications.ShowInfo("Saved for later",
                                 dialog.FileName + " is in your queue, paused. Right-click Resume when you're ready.");
                         }

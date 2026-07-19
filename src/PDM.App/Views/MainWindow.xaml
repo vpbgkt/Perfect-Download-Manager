@@ -83,6 +83,7 @@
                     <MenuItem Header="Open PDM" Click="OnTrayOpen" />
                     <Separator />
                     <MenuItem Header="Add download..." Click="OnAddDownload" />
+                    <MenuItem Header="Contact Support" Click="OnContactSupport" />
                     <Separator />
                     <MenuItem Header="Exit" Click="OnTrayExit" />
                 </ContextMenu>
@@ -142,6 +143,7 @@
                                 <MenuItem Header="License" Click="OnOpenLicense" />
                                 <MenuItem Header="Browser Extension" Click="OnBrowserSetup" />
                                 <Separator />
+                                <MenuItem Header="Contact Support / Renew License" Click="OnContactSupport" />
                                 <MenuItem Header="Check for Updates" Click="OnCheckForUpdates" />
                             </ContextMenu>
                         </ui:Button.ContextMenu>
@@ -319,6 +321,9 @@
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                       CommandParameter="{Binding PlacementTarget.SelectedItem,
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            <Separator />
+                            <MenuItem Header="Change link..." Click="OnChangeUrl" />
+                            <MenuItem Header="Refresh link from browser" Click="OnRefreshFromBrowser" />
                             <Separator />
                             <MenuItem Header="Remove / Delete..." Click="OnRemoveSelected" />
                         </ContextMenu>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Perfect Download Manager 1.0.18 — Free Download Manager (PDM) for Windows</title>
+    <title>Perfect Download Manager 1.0.23 — Free Download Manager (PDM) for Windows</title>
     <meta name="description" content="Download Perfect Download Manager (PDM) free for Windows 10 &amp; 11. A fast multi-connection download manager with reliable resume, Chrome/Edge integration, and a modern Fluent UI. Free IDM alternative — no ads, no telemetry." />
     <meta name="keywords" content="Perfect Download Manager, PDM, PDM download, download manager, free download manager, download manager for Windows, IDM alternative, multi-connection downloader, resume downloads" />
     <meta name="author" content="Perfect Download Manager" />
@@ -42,9 +42,9 @@
       "alternateName": "PDM",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Windows 10, Windows 11",
-      "softwareVersion": "1.0.18",
+      "softwareVersion": "1.0.23",
       "url": "https://perfectdownloadmanager.com/",
-      "downloadUrl": "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.18.msi",
+      "downloadUrl": "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.23-Setup.exe",
       "installUrl": "https://perfectdownloadmanager.com/#download",
       "description": "Perfect Download Manager (PDM) is a free multi-connection download manager for Windows 10 and 11 with reliable resume, Chrome and Edge browser integration, and a modern Fluent UI.",
       "image": "https://perfectdownloadmanager.com/assets/img/og-image.png",
@@ -73,7 +73,7 @@
         {
           "@type": "Question",
           "name": "Does it work on Windows 10?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It needs the .NET 10 Desktop Runtime, which the installer will prompt you to install if it isn't already present." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It runs on the .NET 10 Desktop Runtime, which the installer sets up automatically if it isn't already present." }
         },
         {
           "@type": "Question",
@@ -105,6 +105,8 @@
                 <a href="#extension">Extension</a>
                 <a href="#faq">FAQ</a>
                 <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
+                <a href="/support">Support</a>
             </nav>
         </div>
     </header>
@@ -114,7 +116,7 @@
         <section class="hero">
             <div class="container hero-inner">
                 <div class="hero-copy">
-                    <span class="eyebrow">v<span data-version>1.0.18</span> · Free for Windows 10 &amp; 11</span>
+                    <span class="eyebrow">v<span data-version>1.0.23</span> · Free for Windows 10 &amp; 11</span>
                     <h1>Faster downloads.<br /><span class="accent">Reliable resume.</span></h1>
                     <p class="lede">
                         PDM splits every file into up to 32 parallel connections, resumes reliably after any interruption, and hands off downloads from Chrome and Edge — all inside a modern Fluent-styled Windows UI.
@@ -223,27 +225,28 @@
         <!-- Download -->
         <section id="download" class="section section-alt">
             <div class="container">
-                <h2 class="section-title">Download PDM <span data-version>1.0.18</span></h2>
+                <h2 class="section-title">Download PDM <span data-version>1.0.23</span></h2>
                 <p class="section-lede">
-                    Windows 10 and 11 · 64-bit · Requires .NET 10 Desktop Runtime (installer prompts if missing).
+                    Windows 10 and 11 · 64-bit · The installer sets up everything for you, including the
+                    .NET 10 runtime if it isn't already present — no separate downloads.
                 </p>
                 <div class="download-grid">
                     <div class="download-card download-card-primary">
                         <div class="download-badge">Recommended</div>
-                        <h3>Installer (MSI)</h3>
-                        <p>Standard Windows setup with Start Menu shortcut, per-user install, no admin required.</p>
-                        <a class="btn btn-primary btn-block" id="dlMsi" data-download="msi" href="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.18.msi" rel="noopener">
-                            Download MSI<span data-size="msi"> · 40 MB</span>
+                        <h3>Installer</h3>
+                        <p>One-click setup with Start Menu shortcut, per-user install, no admin required. Installs the .NET 10 runtime automatically if it's missing.</p>
+                        <a class="btn btn-primary btn-block" id="dlMsi" data-download="msi" href="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.23-Setup.exe" rel="noopener">
+                            Download for Windows<span data-size="msi"> · 41 MB</span>
                         </a>
                         <p class="download-meta">SHA-256 published with every release</p>
                     </div>
                     <div class="download-card">
                         <h3>Portable ZIP</h3>
-                        <p>Unzip anywhere and run <code>PDM.exe</code>. Great for USB sticks and testing.</p>
-                        <a class="btn btn-ghost btn-block" id="dlZip" data-download="zip" href="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-1.0.18.zip" rel="noopener">
+                        <p>Unzip anywhere and run <code>PDM.exe</code>. Great for USB sticks and testing. Needs the .NET 10 Desktop Runtime already installed.</p>
+                        <a class="btn btn-ghost btn-block" id="dlZip" data-download="zip" href="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-1.0.23.zip" rel="noopener">
                             Download ZIP<span data-size="zip"> · 42 MB</span>
                         </a>
-                        <p class="download-meta">Same bytes as the MSI, just unpacked</p>
+                        <p class="download-meta">Same app as the installer, just unpacked</p>
                     </div>
                 </div>
                 <div class="install-steps">
@@ -306,7 +309,7 @@
                     </details>
                     <details class="faq">
                         <summary>Does it work on Windows 10?</summary>
-                        <p>Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It needs the .NET 10 Desktop Runtime, which the installer will prompt you to install if it isn't already present.</p>
+                        <p>Yes. PDM supports 64-bit Windows 10 (version 1809 or later) and Windows 11. It runs on the .NET 10 Desktop Runtime, which the installer sets up automatically if it isn't already present — nothing to install separately.</p>
                     </details>
                     <details class="faq">
                         <summary>How is it different from Internet Download Manager (IDM)?</summary>
@@ -340,8 +343,9 @@
                 <a href="#download">Download</a>
                 <a href="#extension">Extension</a>
                 <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
                 <a href="/privacy.html">Privacy</a>
-                <a href="mailto:support@perfectdownloadmanager.com">Support</a>
+                <a href="/support">Support</a>
             </nav>
             <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
         </div>

@@ -42,7 +42,18 @@
                         FontSize="11"
                         Margin="0,0,0,16" />
 
+            <ui:TextBlock Margin="0,0,0,12"
+                          TextWrapping="Wrap"
+                          Opacity="0.75"
+                          FontSize="12"
+                          Text="Need a license, a renewal, or help? Contact the PDM team." />
+
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <ui:Button Content="Contact / Renew"
+                           Appearance="Secondary"
+                           MinWidth="120"
+                           Margin="0,0,8,0"
+                           Click="OnContactSupport" />
                 <ui:Button Content="Close"
                            Appearance="Secondary"
                            MinWidth="96"

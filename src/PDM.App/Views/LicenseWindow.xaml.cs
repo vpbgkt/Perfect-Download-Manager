@@ -25,4 +25,9 @@ public partial class LicenseWindow : FluentWindow
         DialogResult = true;
         Close();
     }
+
+    private void OnContactSupport(object sender, RoutedEventArgs e)
+    {
+        Services.SupportLinks.OpenSupport();
+    }
 }

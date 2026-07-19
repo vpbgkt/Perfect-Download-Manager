@@ -71,6 +71,12 @@ public sealed class AppHost : IAsyncDisposable
     /// <summary>Manager the UI binds to.</summary>
     public DownloadManager DownloadManager { get; }
 
+    /// <summary>
+    /// Coordinates "refresh this download's link from the browser": the UI arms it for a stalled
+    /// download and the browser listener correlates the next capture against it.
+    /// </summary>
+    public Services.RefreshCoordinator RefreshCoordinator { get; } = new();
+
     /// <summary>Builds and initializes all singletons.</summary>
     public static async Task<AppHost> CreateAsync(CancellationToken cancellationToken = default)
     {

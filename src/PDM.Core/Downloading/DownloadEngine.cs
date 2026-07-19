@@ -66,10 +66,36 @@ public sealed class DownloadEngine
         ArgumentNullException.ThrowIfNull(url);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationDirectory);
 
+        RemoteFileInfo info = await _inspector.InspectAsync(url, referrer, cancellationToken).ConfigureAwait(false);
+        return await PrepareFromInfoAsync(
+                url, info, destinationDirectory, fileNameOverride, category, overwritePolicy,
+                allowWebPage, options, referrer, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Same as <see cref="PrepareAsync"/> but uses an already-obtained <paramref name="info"/> instead
+    /// of probing the URL again. This lets a caller that probed for duplicate detection reuse that
+    /// single probe for the actual prepare, so a new download never costs two network round trips.
+    /// </summary>
+    public async Task<DownloadState> PrepareFromInfoAsync(
+        Uri url,
+        RemoteFileInfo info,
+        string destinationDirectory,
+        string? fileNameOverride = null,
+        DownloadCategory? category = null,
+        OverwritePolicy overwritePolicy = OverwritePolicy.Rename,
+        bool allowWebPage = false,
+        DownloadOptions? options = null,
+        string? referrer = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        ArgumentNullException.ThrowIfNull(info);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationDirectory);
+
         DownloadOptions effective = options ?? _defaultOptions;
         effective.Validate();
-
-        RemoteFileInfo info = await _inspector.InspectAsync(url, referrer, cancellationToken).ConfigureAwait(false);
 
         // Refuse HTML pages by default so the user gets a clear "not a downloadable file" message
         // instead of silently downloading an unhelpful .html of the landing page.
@@ -115,6 +141,18 @@ public sealed class DownloadEngine
 
         await _stateStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
         return state;
+    }
+
+    /// <summary>
+    /// Probes <paramref name="url"/> and returns its <see cref="RemoteFileInfo"/> without
+    /// creating or persisting any download state. Used by the "change/refresh URL" flow to
+    /// validate that a replacement link points at the same file before it is applied.
+    /// </summary>
+    public Task<RemoteFileInfo> InspectAsync(
+        Uri url, string? referrer = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        return _inspector.InspectAsync(url, referrer, cancellationToken);
     }
 
     /// <summary>

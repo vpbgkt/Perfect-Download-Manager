@@ -23,7 +23,22 @@
     <RootNamespace>PDM.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+
+    <!--
+      Memory footprint tuning. PDM is a mostly-idle desktop app, not a throughput server, so we use
+      the workstation GC (per-process, compact heaps) with background/concurrent GC disabled. That
+      avoids the extra GC heaps and background collector thread that inflate idle working set, at the
+      cost of slightly longer GC pauses which are imperceptible for this workload.
+    -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Ask the GC to trade a little CPU for a smaller heap (0-9 scale); moderate setting keeps the
+         resident memory down without thrashing collections. Emitted into PDM.runtimeconfig.json. -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" Trim="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PDM.Core\PDM.Core.csproj" />

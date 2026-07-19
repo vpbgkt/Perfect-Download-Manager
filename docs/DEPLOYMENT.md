@@ -1,4 +1,4 @@
-# PDM Deployment & Release Runbook
+1# PDM Deployment & Release Runbook
 
 The single reference for shipping Perfect Download Manager after code changes. It covers the
 **desktop app** (build → installer → signed auto-update), the **marketing website**, the
@@ -97,6 +97,22 @@ The MSI is **unsigned** (no code-signing cert), so Windows SmartScreen shows a
 "More info → Run anyway" prompt on first install. The *auto-updater* is still safe: every
 package is ECDSA-signed and SHA-256 verified before it runs.
 
+### 5.2b Build the bootstrapper (the public download)
+```powershell
+# Requires 5.1 (framework-dependent, NO -SelfContained) + 5.2 to have run first.
+# Produces dist/PDM-1.0.18.0-Setup.exe (~41 MB).
+./build/build-bundle.ps1 -Version 1.0.18.0
+```
+This WiX Burn bundle (`installer/Bundle.wxs`) wraps the framework-dependent MSI and, on a machine
+without the runtime, **downloads and silently installs the .NET 10 Desktop Runtime** before
+installing PDM. It downloads the runtime on demand (not embedded), so the setup stays ~41 MB. The
+script pins the runtime to an immutable versioned URL, so rebuild the bundle each release to track
+the current .NET patch. `Setup.exe` is what the website links to; the bare MSI and portable ZIP
+remain available for advanced/enterprise use.
+
+> The runtime auto-install path must be verified on a **clean VM with no .NET installed** before a
+> public release — a dev box that already has the runtime skips that code path.
+
 ### 5.3 Sign & publish the auto-update (existing users update from here)
 ```powershell
 ./backend/updates/sign-release.ps1 -Version 1.0.18 -Channel Stable `
@@ -109,9 +125,16 @@ This computes the ZIP's size + SHA-256, signs a manifest with the SSM key, and u
 Every client on the **Stable** channel with a version `< 1.0.18` will offer the update on its
 next "Check for Updates". (Use `-Channel Beta` for a beta ring → `beta/manifest.json`.)
 
-### 5.4 Upload the MSI for the website
-`sign-release.ps1` publishes the ZIP but not the MSI, so upload it explicitly:
+### 5.4 Upload the installer(s) for the website
+`sign-release.ps1` publishes the ZIP but not the installer(s), so upload them explicitly. The
+website's primary "Download for Windows" button points at the **bootstrapper Setup.exe**:
 ```powershell
+# Bootstrapper (primary public download)
+aws s3 cp dist/PDM-1.0.18.0-Setup.exe `
+    s3://pdm-updates-452359090613-aps1/downloads/PDM-1.0.18-Setup.exe `
+    --content-type "application/octet-stream" --region ap-south-1
+
+# Bare MSI (optional, for advanced/enterprise use)
 aws s3 cp dist/PDM-1.0.18.0.msi `
     s3://pdm-updates-452359090613-aps1/downloads/PDM-1.0.18.msi `
     --content-type "application/x-msi" --region ap-south-1
@@ -122,10 +145,12 @@ Get the exact byte sizes and write the metadata file:
 ```powershell
 $msi = (Get-Item dist/PDM-1.0.18.0.msi).Length
 $zip = (Get-Item dist/PDM-1.0.18.zip).Length
+# NOTE: the website's primary button (#dlMsi) reads `msiUrl`, so point it at the Setup.exe.
+$setup = (Get-Item dist/PDM-1.0.18.0-Setup.exe).Length
 @{
   version           = "1.0.18"
-  msiUrl            = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.18.msi"
-  msiSizeBytes      = $msi
+  msiUrl            = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.18-Setup.exe"
+  msiSizeBytes      = $setup
   portableZipUrl    = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-1.0.18.zip"
   portableSizeBytes = $zip
 } | ConvertTo-Json | Set-Content dist/downloads.json -NoNewline

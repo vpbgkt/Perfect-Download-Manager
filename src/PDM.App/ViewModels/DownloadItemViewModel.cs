@@ -106,6 +106,7 @@ public sealed partial class DownloadItemViewModel : ObservableObject
             OnPropertyChanged(nameof(CanPause));
             OnPropertyChanged(nameof(CanResume));
             OnPropertyChanged(nameof(FileName));
+            OnPropertyChanged(nameof(SourceUrl));
         }
 
         var dispatcher = Application.Current?.Dispatcher;

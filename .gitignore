@@ -75,5 +75,9 @@ vector.json
 # WiX debug symbols (build artefact, no use in source control)
 *.wixpdb
 
+# Bootstrapper build inputs (downloaded .NET runtime + generated remote-payload fragment)
+installer/redist/
+installer/runtime-payload.generated.wxs
+
 # Kiro / agent scratch reads
 temp_read.txt

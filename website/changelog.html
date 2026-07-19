@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Changelog — Perfect Download Manager (PDM) for Windows</title>
+    <meta name="description" content="Release notes and version history for Perfect Download Manager (PDM), the free multi-connection download manager for Windows 10 and 11." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/img/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png" />
+
+    <link rel="canonical" href="https://perfectdownloadmanager.com/changelog.html" />
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="brand" aria-label="Perfect Download Manager home">
+                <img src="/assets/img/logo-48.png" alt="" width="36" height="36" />
+                <span class="brand-name">Perfect Download Manager</span>
+            </a>
+            <nav class="site-nav" aria-label="Primary">
+                <a href="/#features">Features</a>
+                <a href="/#download">Download</a>
+                <a href="/#extension">Extension</a>
+                <a href="/#faq">FAQ</a>
+                <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
+                <a href="/support">Support</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="doc-content">
+        <h1>Changelog</h1>
+        <p>
+            Release notes for Perfect Download Manager (PDM). PDM updates itself automatically —
+            existing installs are offered each new stable release from inside the app
+            (toolbar menu → Check for Updates). You can also
+            <a href="/#download">download the latest version</a> any time.
+        </p>
+
+        <section>
+            <h2>1.0.23</h2>
+            <p><em>Latest stable</em></p>
+            <ul>
+                <li><strong>Much faster resume.</strong> Paused downloads now re-spread the remaining data across all connections when resumed, so a resumed transfer runs at full speed instead of crawling on one connection.</li>
+                <li><strong>Refreshed links on resume.</strong> When a download is resumed, PDM re-resolves the source link, so expiring CDN and file-host links keep working.</li>
+                <li><strong>Smarter duplicate detection.</strong> Starting a download PDM already has now recognises the same file even when the link changes each time (Google Drive, signed links), and offers to continue the existing partial download, open the finished file, or start a fresh copy.</li>
+                <li><strong>Change or refresh a download's link.</strong> Right-click a download to paste a new link, or re-capture a fresh one from your browser, and continue where you left off.</li>
+                <li><strong>Smaller, self-setup installer.</strong> The new installer is about 41&nbsp;MB and installs the .NET 10 runtime automatically if it's missing — no separate download.</li>
+                <li><strong>Support & contact.</strong> Reach the team for help or license renewals from the toolbar menu and the <a href="/support">support page</a>.</li>
+                <li>Lower memory usage while idle, and a refreshed green installer.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>1.0.18</h2>
+            <ul>
+                <li>Reliability and UX improvements to the download engine and browser capture.</li>
+                <li>Signed, verified auto-updates (ECDSA + SHA-256).</li>
+            </ul>
+        </section>
+
+        <p style="margin-top:2rem;">
+            Looking for a specific fix or have a problem to report? Visit the
+            <a href="/support">support page</a> or email
+            <a href="mailto:support@perfectdownloadmanager.com">support@perfectdownloadmanager.com</a>.
+        </p>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-brand">
+                <img src="/assets/img/logo-48.png" alt="" width="28" height="28" />
+                <span>Perfect Download Manager</span>
+            </div>
+            <nav class="footer-nav" aria-label="Footer">
+                <a href="/#features">Features</a>
+                <a href="/#download">Download</a>
+                <a href="/#extension">Extension</a>
+                <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
+                <a href="/privacy.html">Privacy</a>
+                <a href="/support">Support</a>
+            </nav>
+            <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
+        </div>
+    </footer>
+
+    <script src="/assets/js/main.js" defer></script>
+</body>
+</html>
