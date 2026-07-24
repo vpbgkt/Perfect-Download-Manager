@@ -4,8 +4,9 @@
 **Owner:** _TBD_
 **Source baseline:** current `main`/`release/1.0.23` desktop app (WPF, .NET 10, self-contained)
 **Goal of this document:** a complete, implementation-ready plan to move Perfect Download Manager
-from Windows-only WPF to a cross-platform Avalonia UI on a shared .NET core, published with
-NativeAOT on desktop — reusing the hardened download engine, licensing, and updater as-is.
+from WPF to an Avalonia UI on a shared .NET core, published with **NativeAOT for Windows**, reusing
+the hardened download engine, licensing, and updater as-is. **Scope of this effort is Windows only**;
+the architecture is kept portable so macOS/Android can be added later without a rewrite (see §1, §11).
 
 > Read this first in the new implementation session. It is the single source of truth for scope,
 > architecture, sequencing, and acceptance criteria. Nothing here changes app behavior yet.
@@ -26,17 +27,27 @@ desktop builds a small (~15–30 MB), instant-start, runtime-free, memory-safe n
 they fix size/startup/runtime fragility *and* unlock cross-platform, while **keeping ~75% of the
 existing, tested code** (engine, manager, licensing, updater).
 
-### Goals
-- One shared `.NET` core; Avalonia UI; NativeAOT desktop binaries.
-- Windows first at behavioral parity with today, then macOS, then Android (separate phase).
-- Small, fast-starting, memory-safe, no runtime dependency on desktop.
-- Preserve every hardening win already shipped (segmented resume + dynamic re-segmentation,
-  URL refresh on resume, probe-based duplicate detection, change/refresh-link, signed updates).
+### Scope for this effort: **Windows only**
+The delivered product of this migration is the **Windows** app on Avalonia + NativeAOT, at behavioral
+parity with today's WPF build. **macOS, Android, and Linux are explicitly out of scope for delivery
+right now.** We still write the code *cross-platform-ready* (the `PDM.Platform` seam in §4) because it
+is near-zero extra cost and simply good architecture — but **only the Windows platform implementations
+are built and shipped.** Adding other platforms later is a future decision (§11 Phases 3–4), not part
+of this train, and the seams mean it won't require a rewrite when/if it happens.
 
-### Non-goals (initially)
+### Goals
+- One shared `.NET` core; Avalonia UI; **a single NativeAOT Windows binary** — small (~15–30 MB),
+  instant-start, memory-safe, **no runtime dependency**.
+- **Windows at full behavioral parity** with today's WPF app.
+- Preserve every hardening win already shipped (segmented resume + dynamic re-segmentation, URL
+  refresh on resume, probe-based duplicate detection, change/refresh-link, signed updates, and the
+  reliable Win10/Win11 startup we just stabilized).
+- Keep the architecture portable via interface seams so macOS/Android can be added later without a rewrite.
+
+### Non-goals (this effort)
 - No feature additions during migration (parity first).
-- No change to the AWS licensing backend, browser extension protocol, or admin portal.
-- Android is scoped but **not** delivered in the first release train.
+- **No macOS, Android, or Linux builds now** — architecture-ready only, not shipped.
+- No change to the AWS licensing backend, browser-extension protocol, or admin portal.
 
 ---
 
@@ -84,11 +95,11 @@ src/
   PDM.Updater/             signed update check                                       [Reuse]
   PDM.Platform/            NEW: cross-platform abstractions (interfaces only)         [New]
   PDM.Platform.Windows/    NEW: DPAPI, WinHTTP handler, fingerprint, pipe, tray       [Adapt from PDM.App/PDM.Licensing]
-  PDM.Platform.MacOS/      NEW: Keychain, fingerprint, IPC, tray                      [New, phase 3]
-  PDM.Platform.Android/    NEW: KeyStore, SAF storage, foreground service            [New, phase 4]
+  PDM.Platform.MacOS/      DEFERRED — not built now (Keychain, fingerprint, IPC)      [Future, phase 3]
+  PDM.Platform.Android/    DEFERRED — not built now (KeyStore, SAF, fg service)       [Future, phase 4]
   PDM.App.Core/            NEW: shared ViewModels + app services (no UI framework)    [Reuse VMs]
-  PDM.App.Avalonia/        NEW: Avalonia Views/App, desktop head                      [Rewrite UI]
-  PDM.App.Android/         NEW: Avalonia Android head                                 [New, phase 4]
+  PDM.App.Avalonia/        NEW: Avalonia Views/App, WINDOWS desktop head              [Rewrite UI]
+  PDM.App.Android/         DEFERRED — not built now (Avalonia Android head)           [Future, phase 4]
   PDM.UpdateLauncher/      desktop update applier (per-OS)                            [Adapt]
   PDM.NativeHost/          native-messaging host (per-OS install)                     [Adapt]
 tests/                     existing + AOT smoke + UI headless tests
@@ -217,9 +228,10 @@ Keep the **ECDSA-signed + SHA-256** update manifest model everywhere; only the a
 - **Keep all existing non-UI tests** (Core/Infra/Licensing/Updater/Launcher) — they cover the reused
   code, so migration cannot silently regress the engine.
 - **Headless Avalonia UI tests** (`Avalonia.Headless`) for each ported view/flow.
-- **AOT smoke tests in CI:** publish AOT and launch on a **clean VM matrix** (Win10 19041, Win11,
-  macOS) that asserts the window opens — this is exactly the failure class (R2R crash, missing-runtime,
-  Win10 startup) that hit us; make it a gate, not a manual step.
+- **AOT smoke tests in CI:** publish the NativeAOT Windows build and launch it on a **clean VM matrix
+  (Windows 10 build 19041 + Windows 11, no .NET installed)** that asserts the window actually opens —
+  this is exactly the failure class (R2R `0x80131506` crash, missing/mismatched runtime, Win10 silent
+  startup) that hit us this cycle; make it a build gate, not a manual step.
 - **Trim/AOT warnings = build errors.**
 - **Property tests** for the engine's correctness (segment tiling in `SegmentPlanner.ReplanRemaining`,
   resume offsets, duplicate matching) — extend what exists.
@@ -236,11 +248,11 @@ Assumes one senior .NET dev (calendar compresses with a small team). Each phase 
 | **0. Prep** | Solution restructure (§3), extract `PDM.App.Core` VMs, define `PDM.Platform` interfaces, `PDM.Platform.Windows` impls wrapping today's code. No behavior change; WPF still builds. | Existing app still runs; core builds against interfaces; tests green. | 2–3 wk |
 | **1. AOT-ready core** | JSON source-gen, SQLite bundle, trim/AOT audit, `InvariantGlobalization` decision. Publish core console harness with `PublishAot`. | Core + Infra + Licensing + Updater compile and run under NativeAOT with zero trim warnings. | 2–4 wk |
 | **2. Avalonia Windows head** | Rewrite UI in Avalonia against shared VMs (§7 order). NativeAOT Windows build + MSI. | **Feature parity with today on Windows**, AOT exe ~15–30 MB, opens on clean Win10/Win11 (CI-gated). Ship as the new Windows release. | 6–10 wk |
-| **3. macOS head** | `PDM.Platform.MacOS`, `.app`/`.dmg`, notarization, mac update applier. | PDM runs + updates on macOS; parity minus the TLS-fingerprint caveat (documented). | 4–8 wk |
-| **4. Android head** | `PDM.App.Android`, SAF storage, foreground-service downloads, Share-intent capture, notifications. | Usable Android download manager sharing the core engine. | 8–14 wk (own project) |
+| **3. macOS head** — _DEFERRED_ | `PDM.Platform.MacOS`, `.app`/`.dmg`, notarization, mac update applier. | Not part of this effort. | _future_ |
+| **4. Android head** — _DEFERRED_ | `PDM.App.Android`, SAF storage, foreground-service downloads, Share-intent capture. | Not part of this effort. | _future_ |
 
-**Windows-cross-platform-desktop parity (Phases 0–2): ~3–4 months.** macOS +1–2 months. Android is a
-separate track.
+**This effort = Phases 0–2 (Windows only): ~3–4 months** to a NativeAOT Windows build at parity.
+Phases 3–4 are future work; the architecture keeps them cheap to add later but they are **not built now.**
 
 ---
 
@@ -274,16 +286,21 @@ separate track.
 
 ---
 
-## 14. Open decisions to confirm before implementation
+## 14. Decisions (resolved for this Windows-only effort)
 
-1. **`InvariantGlobalization`** on (saves ~28 MB, culture-invariant formatting) — accept?
-2. **Target RIDs / min OS:** Windows `win-x64` (+ `arm64`?), min Win10 build; macOS x64+arm64; Android API level.
-3. **Avalonia version** to pin (latest 11.x stable with AOT support).
-4. **macOS in this train or later?** (needs Apple Developer account + notarization setup.)
-5. **Android as a committed target** or "architecture-ready but deferred"?
-6. **Keep the WiX MSI** for Windows or move to a lighter installer for the AOT exe?
-7. **Linux** — ship or skip initially?
-8. **Repo/branch strategy** for the migration (long-lived `migration/avalonia` branch vs. incremental on trunk).
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Target platform | **Windows only.** macOS / Android / Linux deferred — architecture-ready, not built. |
+| 2 | Target RID / min OS | **`win-x64`** primary; minimum **Windows 10 build 19041**. `win-arm64` optional at a later release. |
+| 3 | `InvariantGlobalization` | **On** — saves ~28 MB; formatting becomes culture-invariant, acceptable for PDM. Flip off if a locale issue surfaces. |
+| 4 | Avalonia version | Pin the **latest stable Avalonia 11.x** with NativeAOT support at kickoff; record the exact version in `Directory.Build.props`. |
+| 5 | Installer | **Keep the WiX MSI**, retargeted to the NativeAOT exe (per-user install, current UX + green art). |
+| 6 | Branch strategy | **Long-lived `migration/avalonia` branch.** WPF must keep building throughout Phase 0; merge to trunk once the Avalonia Windows head reaches parity. |
+| 7 | Bindings | **Compiled bindings only** (`x:DataType` + `CompiledBinding`) — a NativeAOT requirement, enforced from the first view. |
+
+Still to confirm by the owner (not blockers for starting Phase 0):
+- The exact Avalonia version to pin (choose at kickoff).
+- Whether to also ship `win-arm64` at the first release (default: x64 only).
 
 ---
 
