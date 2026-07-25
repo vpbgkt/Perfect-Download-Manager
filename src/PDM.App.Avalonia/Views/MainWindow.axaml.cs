@@ -260,6 +260,44 @@ public partial class MainWindow : Window
         _viewModel.LicenseBanner.Refresh();
     }
 
+    private void OnBrowserSetup(object? sender, RoutedEventArgs e)
+    {
+        string hostExe = Path.Combine(AppContext.BaseDirectory, "pdm-native-host.exe");
+        var vm = new BrowserSetupViewModel(
+            hostExe,
+            new PDM.Platform.Windows.WindowsNativeHostInstaller(),
+            new PDM.Platform.Windows.WindowsBrowserDetector());
+        _ = new BrowserSetupWindow(vm).ShowDialog(this);
+    }
+
+    private async void OnCheckForUpdates(object? sender, RoutedEventArgs e)
+    {
+        AppHost? host = App.Host;
+        if (host is null)
+        {
+            return;
+        }
+
+        var orchestrator = new UpdateOrchestrator(host);
+        PDM.Updater.UpdateCheckResult result = await orchestrator.CheckAsync().ConfigureAwait(true);
+
+        switch (result.Availability)
+        {
+            case PDM.Updater.UpdateAvailability.UpToDate:
+                _notifier.ShowInfo("Check for updates", "You are running the latest version.");
+                break;
+
+            case PDM.Updater.UpdateAvailability.UpdateAvailable:
+                var vm = new UpdateAvailableViewModel(orchestrator, result.Manifest!);
+                await new UpdateAvailableDialog(vm, orchestrator).ShowDialog<bool>(this).ConfigureAwait(true);
+                break;
+
+            case PDM.Updater.UpdateAvailability.CheckFailed:
+                _notifier.ShowError("Check for updates", result.Message ?? "Update check failed.");
+                break;
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _viewModel.FilterChanged -= OnFilterChanged;

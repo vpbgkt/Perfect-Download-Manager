@@ -111,4 +111,37 @@ public sealed class DialogRenderingTests
 
         dialog.Close();
     }
+
+    [AvaloniaFact]
+    public void BrowserSetupWindow_opens_and_lists_detected_browsers()
+    {
+        var vm = new BrowserSetupViewModel("pdm-native-host.exe", new FakeNativeHost(), new FakeBrowserDetector());
+        var window = new BrowserSetupWindow(vm);
+        window.Show();
+
+        Assert.True(window.IsVisible);
+        Assert.Equal("Browser setup", window.Title);
+        Assert.Single(vm.Browsers);
+
+        window.Close();
+    }
+
+    private sealed class FakeNativeHost : Platform.INativeHostInstaller
+    {
+        public string HostName => "com.pdm.host";
+        public string WebStoreExtensionId => "test-ext-id";
+        public string WebStoreListingUrl => "https://store.example/detail/test-ext-id";
+        public bool IsRegistered() => false;
+        public IReadOnlyList<string> GetRegisteredExtensionIds() => Array.Empty<string>();
+        public void RegisterChromium(string hostExePath, IReadOnlyList<string> extensionIds,
+            IReadOnlyList<Platform.SupportedBrowser>? browsers = null) { }
+        public void EnsureStoreExtensionRegistered(string hostExePath) { }
+        public void UnregisterChromium() { }
+    }
+
+    private sealed class FakeBrowserDetector : Platform.IBrowserDetector
+    {
+        public IReadOnlyList<Platform.DetectedBrowser> Detect() =>
+            new[] { new Platform.DetectedBrowser(Platform.SupportedBrowser.Chrome, "Google Chrome", @"C:\chrome.exe") };
+    }
 }

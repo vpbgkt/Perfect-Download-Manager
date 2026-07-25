@@ -29,6 +29,8 @@
                     <Border Width="1" Background="{DynamicResource SystemBaseMediumLowColor}" Margin="4,2" />
                     <Button Content="Settings" Click="OnOpenSettings" />
                     <Button Content="License" Click="OnOpenLicense" />
+                    <Button Content="Browser setup" Click="OnBrowserSetup" />
+                    <Button Content="Updates" Click="OnCheckForUpdates" />
                 </StackPanel>
 
                 <TextBox Grid.Column="2" Watermark="Search downloads..."
