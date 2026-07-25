@@ -1,11 +1,11 @@
 # Builds the MSI installer with WiX v5.
 #
-# Prerequisite: run build/publish.ps1 first to produce dist/PDM.
-# Installs the WiX dotnet tool on first run.
+# Prerequisite: run build/publish-aot-dist.ps1 first to produce the runtime-free dist/PDM
+# (NativeAOT app + native host + update launcher). Installs the WiX dotnet tool on first run.
 #
 # Usage:
-#   ./build/publish.ps1
-#   ./build/build-installer.ps1 -Version 1.0.0.0
+#   ./build/publish-aot-dist.ps1 -Version 1.0.23
+#   ./build/build-installer.ps1 -Version 1.0.23.0
 
 param(
     [string]$Version = "1.0.0.0"
@@ -18,7 +18,7 @@ $wxs = Join-Path $repo "installer/Package.wxs"
 $msi = Join-Path $repo "dist/PDM-$Version.msi"
 
 if (-not (Test-Path (Join-Path $publishDir "PDM.exe"))) {
-    Write-Error "Run build/publish.ps1 first (dist/PDM/PDM.exe not found)."
+    Write-Error "Run build/publish-aot-dist.ps1 first (dist/PDM/PDM.exe not found)."
     exit 1
 }
 

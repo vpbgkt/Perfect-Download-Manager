@@ -18,6 +18,12 @@
     <AssemblyName>PDM</AssemblyName>
     <RootNamespace>PDM.App.Avalonia</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      NU1903: Avalonia transitively references Tmds.DBus.Protocol (the Linux DBus backend), which
+      carries an advisory. This is the Windows head (win-x64); the Linux DBus code is never loaded or
+      shipped in the trimmed/AOT output, so the vulnerable path is unreachable here.
+    -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
 
     <!-- Compiled bindings everywhere: required for NativeAOT and faster/safer than reflection
          bindings (§3, §5). Enabled by default so every XAML binding is validated at compile time. -->
