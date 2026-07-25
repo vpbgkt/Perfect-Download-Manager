@@ -82,7 +82,7 @@ public partial class App : Application
                 var viewModel = new DownloadPopupViewModel(
                     managed,
                     Host!.DownloadManager,
-                    confirmCancel: message => window!.ConfirmCancel(message),
+                    confirmCancel: message => Task.FromResult(window!.ConfirmCancel(message)),
                     showError: message => Host!.Notifications.ShowError("Download", message));
 
                 window = new DownloadPopupWindow(viewModel, id => popupManager!.NotifyPopupClosed(id));

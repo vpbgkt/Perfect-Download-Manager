@@ -22,6 +22,8 @@
                             CommandParameter="{Binding SelectedItem}" />
                     <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
                             CommandParameter="{Binding SelectedItem}" />
+                    <Button Content="Show popup" Command="{Binding ShowPopupCommand}"
+                            CommandParameter="{Binding SelectedItem}" />
                     <Button Content="Remove" Click="OnRemoveSelected" />
                 </StackPanel>
 

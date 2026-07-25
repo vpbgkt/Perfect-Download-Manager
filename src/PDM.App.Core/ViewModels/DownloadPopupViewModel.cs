@@ -33,10 +33,12 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     private readonly DownloadManager? _manager;
 
     /// <summary>
-    /// Confirmation gate for the Cancel command. Invoked with a human-readable prompt and returns
-    /// <c>true</c> only when the user confirms cancellation (Requirements 3.7-3.9).
+    /// Confirmation gate for the Cancel command. Invoked with a human-readable prompt and completes
+    /// with <c>true</c> only when the user confirms cancellation (Requirements 3.7-3.9). Async so the
+    /// UI head can present a non-blocking dialog (WPF wraps its synchronous modal in a completed task;
+    /// Avalonia awaits <c>Window.ShowDialog</c>).
     /// </summary>
-    private readonly Func<string, bool>? _confirmCancel;
+    private readonly Func<string, Task<bool>>? _confirmCancel;
 
     /// <summary>
     /// Error indication delegate used when a manager control call fails. Invoked with a message and
@@ -70,7 +72,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     public DownloadPopupViewModel(
         ManagedDownload managed,
         DownloadManager? manager,
-        Func<string, bool>? confirmCancel,
+        Func<string, Task<bool>>? confirmCancel,
         Action<string>? showError)
     {
         _managed = managed ?? throw new ArgumentNullException(nameof(managed));
@@ -417,8 +419,11 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         }
 
         // Requirement 3.7-3.9: confirm before cancelling; a decline (or absent gate) makes no
-        // manager call and leaves the status display untouched.
-        bool confirmed = _confirmCancel?.Invoke(CancelConfirmationPrompt) ?? false;
+        // manager call and leaves the status display untouched. The gate is awaited so the head can
+        // present a non-blocking confirmation dialog; only the manager call follows, so resuming off
+        // the UI thread is safe.
+        bool confirmed = _confirmCancel is not null
+            && await _confirmCancel(CancelConfirmationPrompt).ConfigureAwait(false);
         if (!confirmed)
         {
             return;
