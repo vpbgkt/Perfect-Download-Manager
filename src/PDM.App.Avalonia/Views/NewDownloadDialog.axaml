@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PDM.App.Avalonia.Views.NewDownloadDialog"
+        Title="New download detected"
+        Width="520" SizeToContent="Height"
+        CanResize="False" ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen">
+    <StackPanel Margin="20" Spacing="10">
+        <TextBlock Text="Your browser started a download. What would you like to do?" TextWrapping="Wrap" />
+
+        <TextBlock Text="File" FontSize="12" Opacity="0.7" Margin="0,6,0,0" />
+        <TextBlock x:Name="FileNameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+
+        <TextBlock Text="Source" FontSize="12" Opacity="0.7" Margin="0,6,0,0" />
+        <SelectableTextBlock x:Name="UrlText" Opacity="0.85" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+            <Button Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
+            <Button Content="Save for later" MinWidth="120" Click="OnSaveForLater" />
+            <Button Content="Start download" MinWidth="120" Click="OnStartNow" IsDefault="True" Classes="accent" />
+        </StackPanel>
+    </StackPanel>
+</Window>

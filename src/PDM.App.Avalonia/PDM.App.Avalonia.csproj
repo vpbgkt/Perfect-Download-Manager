@@ -29,6 +29,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- App icon + logo shipped as Avalonia resources (tray icon, window icon). -->
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
