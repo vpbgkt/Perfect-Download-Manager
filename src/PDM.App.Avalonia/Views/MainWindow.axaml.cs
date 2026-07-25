@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
@@ -116,16 +117,118 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Removes the selected download (keeping files). The delete-confirmation dialog is ported in a
-    /// later Phase 2 step.
-    /// </summary>
+    /// <summary>Removes the selected download after a confirmation prompt (optionally deleting files).</summary>
     private async void OnRemoveSelected(object? sender, RoutedEventArgs e)
     {
-        if (_viewModel.SelectedItem is { } item)
+        if (_viewModel.SelectedItem is not { } item)
         {
-            await _viewModel.PerformDeleteAsync(item, deleteFiles: false).ConfigureAwait(true);
+            return;
         }
+
+        var dialog = new DeleteConfirmationDialog(item.FileName);
+        bool confirmed = await dialog.ShowDialog<bool>(this).ConfigureAwait(true);
+        if (confirmed)
+        {
+            await _viewModel.PerformDeleteAsync(item, dialog.DeleteFiles).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Opens the bulk-add dialog and queues every valid URL the user pasted.</summary>
+    private async void OnBulkAdd(object? sender, RoutedEventArgs e)
+    {
+        var dialog = new BulkAddDialog();
+        bool ok = await dialog.ShowDialog<bool>(this).ConfigureAwait(true);
+        if (!ok || dialog.Urls.Count == 0)
+        {
+            return;
+        }
+
+        int failed = 0;
+        foreach (Uri url in dialog.Urls)
+        {
+            MainViewModel.AddOutcome outcome =
+                await _viewModel.AddDownloadAsync(url.ToString()).ConfigureAwait(true);
+            if (outcome.Result != MainViewModel.AddResult.Ok)
+            {
+                failed++;
+            }
+        }
+
+        if (failed > 0)
+        {
+            _notifier.ShowInfo("Add downloads", $"{failed} of {dialog.Urls.Count} URLs could not be added.");
+        }
+    }
+
+    /// <summary>Opens the change-link dialog for the selected download (rejects completed downloads).</summary>
+    private async void OnChangeUrl(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedItem is not { } item)
+        {
+            return;
+        }
+
+        if (item.Status == DownloadStatus.Completed)
+        {
+            _notifier.ShowInfo("Change link", "This download has already finished, so its link can't be changed.");
+            return;
+        }
+
+        var dialog = new ChangeUrlDialog(item.FileName, item.SourceUrl,
+            (url, referrer, mode) => _viewModel.ChangeUrlAsync(item.Id, url, referrer, mode));
+        bool applied = await dialog.ShowDialog<bool>(this).ConfigureAwait(true);
+        if (applied)
+        {
+            _notifier.ShowSuccess("Download link updated", item.FileName);
+        }
+    }
+
+    /// <summary>
+    /// Arms a "refresh link from browser" for the selected download and opens its originating page so
+    /// the user can re-trigger the download there; the next matching capture re-links it.
+    /// </summary>
+    private void OnRefreshFromBrowser(object? sender, RoutedEventArgs e)
+    {
+        AppHost? host = App.Host;
+        if (host is null || _viewModel.SelectedItem is not { } item)
+        {
+            return;
+        }
+
+        if (item.Status == DownloadStatus.Completed)
+        {
+            _notifier.ShowInfo("Refresh link", "This download has already finished, so there is nothing to refresh.");
+            return;
+        }
+
+        host.RefreshCoordinator.Arm(item.Id, item.FileName);
+
+        string? target = item.Managed.State.Referrer;
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            target = item.SourceUrl;
+        }
+
+        bool opened = false;
+        if (!string.IsNullOrWhiteSpace(target) &&
+            Uri.TryCreate(target, UriKind.Absolute, out Uri? targetUri) &&
+            (targetUri.Scheme == Uri.UriSchemeHttp || targetUri.Scheme == Uri.UriSchemeHttps))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+                opened = true;
+            }
+            catch (Exception)
+            {
+                // No default browser / shell failure: fall back to the manual-guidance message.
+            }
+        }
+
+        _notifier.ShowInfo("Waiting for a fresh link",
+            opened
+                ? $"Opened the download page in your browser. Start \"{item.FileName}\" again there and PDM will relink it automatically."
+                : $"Reopen the page for \"{item.FileName}\" and start the download again within 2 minutes - PDM will relink it automatically.");
     }
 
     private async void OnOpenSettings(object? sender, RoutedEventArgs e)

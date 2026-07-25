@@ -14,6 +14,7 @@
             <Grid ColumnDefinitions="Auto,*,220">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
                     <Button Content="Add" Click="OnAddDownload" />
+                    <Button Content="Bulk add" Click="OnBulkAdd" />
                     <Button Content="Resume" Command="{Binding ResumeCommand}"
                             CommandParameter="{Binding SelectedItem}" />
                     <Button Content="Pause" Command="{Binding PauseCommand}"
@@ -59,6 +60,26 @@
                       CanUserReorderColumns="True"
                       CanUserResizeColumns="True"
                       GridLinesVisibility="Horizontal">
+                <DataGrid.ContextMenu>
+                    <ContextMenu x:DataType="vm:MainViewModel">
+                        <MenuItem Header="Resume" Command="{Binding ResumeCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Pause" Command="{Binding PauseCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <Separator />
+                        <MenuItem Header="Open" Command="{Binding OpenFileCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Show popup" Command="{Binding ShowPopupCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <Separator />
+                        <MenuItem Header="Change link..." Click="OnChangeUrl" />
+                        <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser" />
+                        <Separator />
+                        <MenuItem Header="Remove..." Click="OnRemoveSelected" />
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Width="*"
                                         Binding="{Binding FileName}" x:DataType="vm:DownloadItemViewModel" />

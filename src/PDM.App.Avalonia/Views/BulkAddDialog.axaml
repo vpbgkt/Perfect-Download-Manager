@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PDM.App.Avalonia.Views.BulkAddDialog"
+        Title="Add multiple downloads"
+        Width="560" Height="440"
+        MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" Text="Paste one URL per line:" Margin="0,0,0,8" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+            <TextBlock x:Name="StatusText" Foreground="#E38B00" VerticalAlignment="Center"
+                       Margin="0,0,8,0" TextWrapping="Wrap" />
+            <Button Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
+            <Button Content="Add" MinWidth="90" Click="OnOk" IsDefault="True" Classes="accent" />
+        </StackPanel>
+
+        <TextBox x:Name="UrlsBox" AcceptsReturn="True" TextWrapping="NoWrap"
+                 VerticalContentAlignment="Top"
+                 Watermark="https://example.com/a.zip&#x0a;https://example.com/b.iso" />
+    </DockPanel>
+</Window>
