@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared, UI-framework-agnostic application layer (docs/MIGRATION-AVALONIA-NATIVEAOT.md §3, Task 2).
+
+    Contains the ViewModels (CommunityToolkit.Mvvm, source-generated + AOT-safe) and the app-service
+    logic (update orchestration, refresh coordination, popup lifecycle) that every UI head drives —
+    the WPF head today, the Avalonia desktop/Android heads in Phase 2/4. It has NO dependency on any
+    UI framework: all UI-thread marshalling goes through the IUiDispatcher seam and all
+    composition-root access through IAppHost, both wired by the head.
+
+    Plain net10.0 (not -windows) so the same assembly is consumable from macOS/Android heads later.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AssemblyName>PDM.App.Core</AssemblyName>
+    <RootNamespace>PDM.App</RootNamespace>
+    <Description>Perfect Download Manager - shared, UI-agnostic ViewModels and app services.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PDM.Core\PDM.Core.csproj" />
+    <ProjectReference Include="..\PDM.Infrastructure\PDM.Infrastructure.csproj" />
+    <ProjectReference Include="..\PDM.Licensing\PDM.Licensing.csproj" />
+    <ProjectReference Include="..\PDM.Updater\PDM.Updater.csproj" />
+    <ProjectReference Include="..\PDM.Platform\PDM.Platform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PDM.App.Tests" />
+  </ItemGroup>
+
+</Project>

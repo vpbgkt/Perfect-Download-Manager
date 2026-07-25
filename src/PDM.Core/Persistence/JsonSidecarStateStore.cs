@@ -1,7 +1,7 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using PDM.Core.Abstractions;
 using PDM.Core.Models;
+using PDM.Core.Serialization;
 
 namespace PDM.Core.Persistence;
 
@@ -13,13 +13,6 @@ namespace PDM.Core.Persistence;
 /// </summary>
 public sealed class JsonSidecarStateStore : IDownloadStateStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     private readonly string _directory;
 
     public JsonSidecarStateStore(string directory)
@@ -43,7 +36,7 @@ public sealed class JsonSidecarStateStore : IDownloadStateStore
             tempPath, FileMode.Create, FileAccess.Write, FileShare.None,
             bufferSize: 4096, useAsync: true))
         {
-            await JsonSerializer.SerializeAsync(stream, state, SerializerOptions, cancellationToken)
+            await JsonSerializer.SerializeAsync(stream, state, PdmCoreJsonContext.Default.DownloadState, cancellationToken)
                 .ConfigureAwait(false);
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -73,7 +66,7 @@ public sealed class JsonSidecarStateStore : IDownloadStateStore
             path, FileMode.Open, FileAccess.Read, FileShare.Read,
             bufferSize: 4096, useAsync: true);
 
-        return await JsonSerializer.DeserializeAsync<DownloadState>(stream, SerializerOptions, cancellationToken)
+        return await JsonSerializer.DeserializeAsync(stream, PdmCoreJsonContext.Default.DownloadState, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -101,7 +94,7 @@ public sealed class JsonSidecarStateStore : IDownloadStateStore
                 await using var stream = new FileStream(
                     file, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
                 var state = await JsonSerializer
-                    .DeserializeAsync<DownloadState>(stream, SerializerOptions, cancellationToken)
+                    .DeserializeAsync(stream, PdmCoreJsonContext.Default.DownloadState, cancellationToken)
                     .ConfigureAwait(false);
                 if (state is not null)
                 {

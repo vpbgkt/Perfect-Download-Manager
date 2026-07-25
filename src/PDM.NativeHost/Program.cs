@@ -33,39 +33,36 @@ internal static class Program
                 return 0; // stdin closed; browser disconnected.
             }
 
-            object reply;
+            HostReply reply;
             try
             {
                 reply = await HandleAsync(message).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                reply = new { ok = false, error = ex.Message };
+                reply = new HostReply { Ok = false, Error = ex.Message };
             }
 
             await WriteMessageAsync(stdout, reply).ConfigureAwait(false);
         }
     }
 
-    private static async Task<object> HandleAsync(BrowserMessage message)
+    private static async Task<HostReply> HandleAsync(BrowserMessage message)
     {
         if (string.IsNullOrWhiteSpace(message.Url) ||
             !Uri.TryCreate(message.Url, UriKind.Absolute, out Uri? uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            return new { ok = false, error = "invalid_url" };
+            return new HostReply { Ok = false, Error = "invalid_url" };
         }
 
-        string payload = JsonSerializer.Serialize(new
-        {
-            url = message.Url,
-            referrer = message.Referrer,
-            filename = message.FileName
-        });
+        string payload = JsonSerializer.Serialize(
+            new PipePayload { Url = message.Url, Referrer = message.Referrer, FileName = message.FileName },
+            NativeHostJsonContext.Default.PipePayload);
 
         if (await TrySendAsync(payload).ConfigureAwait(false))
         {
-            return new { ok = true };
+            return new HostReply { Ok = true };
         }
 
         // PDM may not be running: launch it, then keep retrying while it starts. A cold start has
@@ -80,12 +77,12 @@ internal static class Program
                 await Task.Delay(500).ConfigureAwait(false);
                 if (await TrySendAsync(payload).ConfigureAwait(false))
                 {
-                    return new { ok = true };
+                    return new HostReply { Ok = true };
                 }
             }
         }
 
-        return new { ok = false, error = "pdm_unavailable" };
+        return new HostReply { Ok = false, Error = "pdm_unavailable" };
     }
 
     private static async Task<bool> TrySendAsync(string payload)
@@ -170,7 +167,7 @@ internal static class Program
 
         try
         {
-            return JsonSerializer.Deserialize<BrowserMessage>(buffer);
+            return JsonSerializer.Deserialize(buffer, NativeHostJsonContext.Default.BrowserMessage);
         }
         catch (JsonException)
         {
@@ -193,16 +190,17 @@ internal static class Program
         return total;
     }
 
-    private static async Task WriteMessageAsync(Stream stdout, object message)
+    private static async Task WriteMessageAsync(Stream stdout, HostReply message)
     {
-        byte[] json = JsonSerializer.SerializeToUtf8Bytes(message);
+        byte[] json = JsonSerializer.SerializeToUtf8Bytes(message, NativeHostJsonContext.Default.HostReply);
         byte[] length = BitConverter.GetBytes(json.Length);
         await stdout.WriteAsync(length).ConfigureAwait(false);
         await stdout.WriteAsync(json).ConfigureAwait(false);
         await stdout.FlushAsync().ConfigureAwait(false);
     }
 
-    private sealed class BrowserMessage
+    /// <summary>Incoming native-messaging payload from the browser extension.</summary>
+    internal sealed class BrowserMessage
     {
         [JsonPropertyName("url")]
         public string? Url { get; init; }
@@ -213,4 +211,40 @@ internal static class Program
         [JsonPropertyName("filename")]
         public string? FileName { get; init; }
     }
+
+    /// <summary>The newline-delimited JSON forwarded to the running PDM app over the named pipe.</summary>
+    internal sealed class PipePayload
+    {
+        [JsonPropertyName("url")]
+        public string? Url { get; init; }
+
+        [JsonPropertyName("referrer")]
+        public string? Referrer { get; init; }
+
+        [JsonPropertyName("filename")]
+        public string? FileName { get; init; }
+    }
+
+    /// <summary>Reply written back to the browser extension.</summary>
+    internal sealed class HostReply
+    {
+        [JsonPropertyName("ok")]
+        public bool Ok { get; init; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; init; }
+    }
+}
+
+/// <summary>
+/// Source-generation context for the native host's small message set. Keeps the standalone bridge
+/// AOT/trim-safe (nulls omitted on write, matching the previous behaviour where a missing field and
+/// an explicit null are equivalent to the receiver).
+/// </summary>
+[JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(Program.BrowserMessage))]
+[JsonSerializable(typeof(Program.PipePayload))]
+[JsonSerializable(typeof(Program.HostReply))]
+internal sealed partial class NativeHostJsonContext : JsonSerializerContext
+{
 }

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using PDM.Licensing.Serialization;
 
 namespace PDM.Licensing.Aws;
 
@@ -41,9 +42,10 @@ public sealed class AwsLicenseTransport : ILicenseTransport
         try
         {
             using HttpResponseMessage response = await _client
-                .PostAsJsonAsync(_trialUri, new { fingerprint }, cancellationToken).ConfigureAwait(false);
+                .PostAsJsonAsync(_trialUri, new TrialRequest { Fingerprint = fingerprint },
+                    PdmLicensingJsonContext.Default.TrialRequest, cancellationToken).ConfigureAwait(false);
             var body = await response.Content
-                .ReadFromJsonAsync<LicenseResponse>(cancellationToken).ConfigureAwait(false);
+                .ReadFromJsonAsync(PdmLicensingJsonContext.Default.LicenseResponse, cancellationToken).ConfigureAwait(false);
             // The /trial endpoint returns { ok, token, ... }; the token is present only on success.
             return body?.Token;
         }
@@ -59,7 +61,8 @@ public sealed class AwsLicenseTransport : ILicenseTransport
         var request = new LicenseRequest { LicenseKey = licenseKey, Fingerprint = fingerprint };
 
         using HttpResponseMessage response = await _client
-            .PostAsJsonAsync(uri, request, cancellationToken).ConfigureAwait(false);
+            .PostAsJsonAsync(uri, request, PdmLicensingJsonContext.Default.LicenseRequest, cancellationToken)
+            .ConfigureAwait(false);
 
         // 4xx/5xx from the gateway (throttling, server error) are treated as transient failures,
         // never as revocation.
@@ -67,7 +70,8 @@ public sealed class AwsLicenseTransport : ILicenseTransport
         try
         {
             body = await response.Content
-                .ReadFromJsonAsync<LicenseResponse>(cancellationToken).ConfigureAwait(false);
+                .ReadFromJsonAsync(PdmLicensingJsonContext.Default.LicenseResponse, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is System.Text.Json.JsonException or HttpRequestException)
         {
@@ -92,37 +96,49 @@ public sealed class AwsLicenseTransport : ILicenseTransport
             body.Message ?? "The license could not be validated.",
             revoked: body.Revoked);
     }
+}
 
-    private sealed class LicenseRequest
-    {
-        [JsonPropertyName("licenseKey")]
-        public string LicenseKey { get; init; } = string.Empty;
+// DTOs are internal top-level types (not private-nested) so the source-generation context can
+// reference them for AOT/trim-safe (de)serialization.
 
-        [JsonPropertyName("fingerprint")]
-        public string Fingerprint { get; init; } = string.Empty;
-    }
+/// <summary>Request body sent to the activate/validate endpoints.</summary>
+internal sealed class LicenseRequest
+{
+    [JsonPropertyName("licenseKey")]
+    public string LicenseKey { get; init; } = string.Empty;
 
-    private sealed class LicenseResponse
-    {
-        [JsonPropertyName("valid")]
-        public bool Valid { get; init; }
+    [JsonPropertyName("fingerprint")]
+    public string Fingerprint { get; init; } = string.Empty;
+}
 
-        [JsonPropertyName("token")]
-        public string? Token { get; init; }
+/// <summary>Request body sent to the trial-anchor endpoint.</summary>
+internal sealed class TrialRequest
+{
+    [JsonPropertyName("fingerprint")]
+    public string Fingerprint { get; init; } = string.Empty;
+}
 
-        [JsonPropertyName("owner")]
-        public string? Owner { get; init; }
+/// <summary>Response body returned by the activate/validate/trial endpoints.</summary>
+internal sealed class LicenseResponse
+{
+    [JsonPropertyName("valid")]
+    public bool Valid { get; init; }
 
-        [JsonPropertyName("features")]
-        public string[]? Features { get; init; }
+    [JsonPropertyName("token")]
+    public string? Token { get; init; }
 
-        [JsonPropertyName("message")]
-        public string? Message { get; init; }
+    [JsonPropertyName("owner")]
+    public string? Owner { get; init; }
 
-        [JsonPropertyName("revoked")]
-        public bool Revoked { get; init; }
+    [JsonPropertyName("features")]
+    public string[]? Features { get; init; }
 
-        [JsonPropertyName("tokenExpiresAt")]
-        public DateTimeOffset? TokenExpiresAt { get; init; }
-    }
+    [JsonPropertyName("message")]
+    public string? Message { get; init; }
+
+    [JsonPropertyName("revoked")]
+    public bool Revoked { get; init; }
+
+    [JsonPropertyName("tokenExpiresAt")]
+    public DateTimeOffset? TokenExpiresAt { get; init; }
 }

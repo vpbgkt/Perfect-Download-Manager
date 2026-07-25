@@ -1,8 +1,5 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Diagnostics;
-using System.Windows;
-using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PDM.App.Services;
@@ -19,12 +16,26 @@ namespace PDM.App.ViewModels;
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
-    private readonly AppHost _host;
+    private readonly IAppHost _host;
+    private readonly IUiDispatcher _dispatcher;
     private readonly Dictionary<Guid, DownloadItemViewModel> _byId = new();
     private readonly ObservableCollection<DownloadItemViewModel> _all = new();
 
-    /// <summary>All downloads, filtered by the current category and search text.</summary>
-    public ICollectionView Downloads { get; }
+    /// <summary>
+    /// The master, unfiltered download collection. The UI head wraps this in its own
+    /// framework-specific collection view (WPF <c>CollectionViewSource</c>, Avalonia
+    /// <c>DataGridCollectionView</c>) to apply <see cref="FilterItem"/> and status sorting, and
+    /// refreshes that view when <see cref="FilterChanged"/> fires. Keeping the filtering policy here
+    /// (predicate + empty-state) while leaving the view mechanism to the head is what makes this
+    /// view-model UI-framework-agnostic.
+    /// </summary>
+    public ObservableCollection<DownloadItemViewModel> Items => _all;
+
+    /// <summary>
+    /// Raised when the active category or search text changes, so the head can refresh its
+    /// collection view. The predicate itself is <see cref="FilterItem"/>.
+    /// </summary>
+    public event Action? FilterChanged;
 
     /// <summary>Window title with the running product version, e.g. "Perfect Download Manager 1.0.6".</summary>
     public string AppTitle
@@ -77,11 +88,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public PopupManager? PopupManager { get; set; }
 
-    public MainViewModel(AppHost host)
+    public MainViewModel(IAppHost host, IUiDispatcher dispatcher)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
 
-        LicenseBanner = new LicenseBannerViewModel(host);
+        LicenseBanner = new LicenseBannerViewModel(host, dispatcher);
 
         // Default to the "All Downloads" view.
         _selectedCategory = Categories[0];
@@ -91,10 +103,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             AddItem(managed);
         }
-
-        Downloads = CollectionViewSource.GetDefaultView(_all);
-        Downloads.Filter = FilterItem;
-        Downloads.SortDescriptions.Add(new SortDescription(nameof(DownloadItemViewModel.Status), ListSortDirection.Ascending));
 
         _host.DownloadManager.DownloadAdded += OnDownloadAdded;
         _host.DownloadManager.DownloadChanged += OnDownloadChanged;
@@ -111,12 +119,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void UpdateEmptyState()
     {
-        int visibleCount = 0;
-        foreach (object _ in Downloads)
-        {
-            visibleCount++;
-        }
-        IsListEmpty = visibleCount == 0;
+        IsListEmpty = !_all.Any(FilterItem);
 
         if (!IsListEmpty)
         {
@@ -147,22 +150,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedCategoryChanged(CategoryFilterItem value)
     {
-        Downloads.Refresh();
+        FilterChanged?.Invoke();
         UpdateEmptyState();
     }
 
     partial void OnSearchTextChanged(string value)
     {
-        Downloads.Refresh();
+        FilterChanged?.Invoke();
         UpdateEmptyState();
     }
 
-    private bool FilterItem(object obj)
+    /// <summary>
+    /// The filter predicate applied by the head's collection view: an item is shown when it matches
+    /// the selected category and the (optional) search text over file name / source URL.
+    /// </summary>
+    public bool FilterItem(DownloadItemViewModel item)
     {
-        if (obj is not DownloadItemViewModel item)
-        {
-            return false;
-        }
+        ArgumentNullException.ThrowIfNull(item);
 
         if (SelectedCategory?.Category is { } category && item.Category != category)
         {
@@ -186,7 +190,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var vm = new DownloadItemViewModel(managed);
+        var vm = new DownloadItemViewModel(managed, _dispatcher);
         _byId[managed.Id] = vm;
         _all.Add(vm);
     }
@@ -233,18 +237,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static void RunOnUi(Action action)
-    {
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            dispatcher.BeginInvoke(action);
-        }
-    }
+    private void RunOnUi(Action action) => _dispatcher.Post(action);
 
     /// <summary>
     /// Reopens (or brings to the foreground) the per-download popup window for the given download,

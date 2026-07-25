@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using PDM.App.Services;
+using PDM.Platform;
 
 namespace PDM.App.ViewModels;
 
@@ -23,22 +23,25 @@ public sealed partial class BrowserRowViewModel : ObservableObject
 /// <summary>
 /// Backing view-model for the Browser Setup wizard. The PDM browser extension is published on
 /// the Chrome Web Store and its permanent ID is pre-authorised in the native-host manifest on
-/// every app start (<see cref="NativeHostRegistrar.EnsureStoreExtensionRegistered"/>). So setup
+/// every app start (<see cref="INativeHostInstaller.EnsureStoreExtensionRegistered"/>). So setup
 /// is a single step: open the store listing and click "Add to &lt;browser&gt;". There is no
 /// developer-mode load-unpacked flow and nothing for the user to paste.
 /// </summary>
 public sealed partial class BrowserSetupViewModel : ObservableObject
 {
     private readonly string _hostExePath;
+    private readonly INativeHostInstaller _nativeHost;
 
-    public BrowserSetupViewModel(string hostExePath)
+    public BrowserSetupViewModel(string hostExePath, INativeHostInstaller nativeHost, IBrowserDetector browserDetector)
     {
         _hostExePath = hostExePath ?? throw new ArgumentNullException(nameof(hostExePath));
+        _nativeHost = nativeHost ?? throw new ArgumentNullException(nameof(nativeHost));
+        ArgumentNullException.ThrowIfNull(browserDetector);
 
         // Make sure the published store extension is authorised (idempotent, best-effort).
-        NativeHostRegistrar.EnsureStoreExtensionRegistered(_hostExePath);
+        _nativeHost.EnsureStoreExtensionRegistered(_hostExePath);
 
-        IReadOnlyList<DetectedBrowser> detected = BrowserDetection.Detect();
+        IReadOnlyList<DetectedBrowser> detected = browserDetector.Detect();
         foreach (DetectedBrowser b in detected)
         {
             Browsers.Add(new BrowserRowViewModel
@@ -95,7 +98,7 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
     [RelayCommand]
     private void UnregisterAll()
     {
-        NativeHostRegistrar.UnregisterChromium();
+        _nativeHost.UnregisterChromium();
         foreach (BrowserRowViewModel row in Browsers)
         {
             row.Status = "Removed. Re-add the extension to reconnect.";
@@ -107,12 +110,12 @@ public sealed partial class BrowserSetupViewModel : ObservableObject
     /// Chrome Web Store (Edge may prompt to "Allow extensions from other stores"). Firefox falls
     /// back to its debugging page until an AMO listing exists.
     /// </summary>
-    private static string StoreUrlFor(SupportedBrowser kind) => kind switch
+    private string StoreUrlFor(SupportedBrowser kind) => kind switch
     {
-        SupportedBrowser.Chrome => NativeHostRegistrar.WebStoreListingUrl,
-        SupportedBrowser.Edge => NativeHostRegistrar.WebStoreListingUrl,
-        SupportedBrowser.Brave => NativeHostRegistrar.WebStoreListingUrl,
+        SupportedBrowser.Chrome => _nativeHost.WebStoreListingUrl,
+        SupportedBrowser.Edge => _nativeHost.WebStoreListingUrl,
+        SupportedBrowser.Brave => _nativeHost.WebStoreListingUrl,
         SupportedBrowser.Firefox => "about:debugging#/runtime/this-firefox",
-        _ => NativeHostRegistrar.WebStoreListingUrl
+        _ => _nativeHost.WebStoreListingUrl
     };
 }

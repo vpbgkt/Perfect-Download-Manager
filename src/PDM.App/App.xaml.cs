@@ -6,6 +6,7 @@ using PDM.App.Services;
 using PDM.App.ViewModels;
 using PDM.App.Views;
 using PDM.Infrastructure;
+using PDM.Platform.Windows;
 using Wpf.Ui.Appearance;
 
 namespace PDM.App;
@@ -21,7 +22,7 @@ public partial class App : Application
     public static AppHost? Host { get; private set; }
 
     private SingleInstance? _instance;
-    private Services.DownloadRequestListener? _browserListener;
+    private DownloadRequestListener? _browserListener;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -30,7 +31,7 @@ public partial class App : Application
         _instance = new SingleInstance();
         if (!_instance.IsFirstInstance)
         {
-            SingleInstance.ActivateExisting();
+            _instance.ActivateExisting();
             Shutdown(0);
             return;
         }
@@ -59,7 +60,8 @@ public partial class App : Application
         // is logged and shown, and the app exits cleanly instead of lingering invisibly.
         try
         {
-            var mainViewModel = new MainViewModel(Host);
+            var uiDispatcher = new WpfUiDispatcher();
+            var mainViewModel = new MainViewModel(Host, uiDispatcher);
 
             // Wire the IDM-style per-download popup windows. The PopupManager owns the popup
             // lifecycle and event routing; the window factory builds a fully-wired popup (view-model
@@ -87,7 +89,8 @@ public partial class App : Application
                 Host.DownloadManager,
                 popupFactory,
                 showError: message => Host!.Notifications.ShowError("Download", message),
-                logger: Host.LoggerFactory.CreateLogger<PopupManager>());
+                logger: Host.LoggerFactory.CreateLogger<PopupManager>(),
+                dispatcher: uiDispatcher);
             popupManager.Start();
             mainViewModel.PopupManager = popupManager;
 
@@ -166,7 +169,7 @@ public partial class App : Application
             NativeHostRegistrar.EnsureStoreExtensionRegistered(hostExe);
         });
 
-        _browserListener = new Services.DownloadRequestListener(async request =>
+        _browserListener = new DownloadRequestListener(async request =>
         {
             if (!Uri.TryCreate(request.Url, UriKind.Absolute, out Uri? uri) ||
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -301,7 +304,8 @@ public partial class App : Application
 
         Task op = await Current.Dispatcher.InvokeAsync(() =>
             Services.DuplicatePrompt.HandleAsync(
-                Current.MainWindow, Host.DownloadManager, duplicate, uri, referrer, probedInfo,
+                new Services.WpfDuplicatePromptView(Current.MainWindow), Host.DownloadManager,
+                duplicate, uri, referrer, probedInfo,
                 reveal: _ => Current.MainWindow?.Activate()));
 
         await op.ConfigureAwait(false);

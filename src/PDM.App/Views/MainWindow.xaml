@@ -218,8 +218,10 @@
                 <!-- Downloads grid. Both horizontal and vertical grid lines are drawn in a
                      subtle stroke colour so rows and columns are easier to scan without
                      overwhelming the Fluent look. -->
+                <!-- ItemsSource is assigned in code-behind: the shared MainViewModel exposes the
+                     master Items collection and the head wraps it in a WPF CollectionView (filter +
+                     status sort). See MainWindow.xaml.cs. -->
                 <DataGrid x:Name="DownloadsGrid"
-                          ItemsSource="{Binding Downloads}"
                           SelectedItem="{Binding SelectedItem}"
                           AutoGenerateColumns="False"
                           HeadersVisibility="Column"

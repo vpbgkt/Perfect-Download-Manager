@@ -7,7 +7,7 @@ namespace PDM.App.ViewModels;
 
 /// <summary>
 /// View-model for the "Update Available" dialog. Handles the three states of the flow:
-///   - Prompt: show version + release notes with a Download & Install button.
+///   - Prompt: show version + release notes with a Download and Install button.
 ///   - Downloading: progress bar with cancel.
 ///   - Ready: brief confirmation, then Apply.
 /// </summary>

@@ -1,30 +1,32 @@
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using PDM.App.Services;
 using PDM.Licensing;
 
 namespace PDM.App.ViewModels;
 
 /// <summary>
 /// Tracks the current license status for display in the main window. Polls the app-wide
-/// snapshot on a UI-thread timer so the "days left" figure stays fresh (once a minute is
-/// plenty for a day-granularity display).
+/// snapshot on a timer so the "days left" figure stays fresh (once a minute is plenty for a
+/// day-granularity display); each tick is marshalled onto the UI thread via the injected
+/// <see cref="IUiDispatcher"/>.
 /// </summary>
 public sealed partial class LicenseBannerViewModel : ObservableObject, IDisposable
 {
-    private readonly AppHost _host;
-    private readonly System.Windows.Threading.DispatcherTimer _timer;
+    private readonly IAppHost _host;
+    private readonly IUiDispatcher _dispatcher;
+    private readonly Timer _timer;
 
-    public LicenseBannerViewModel(AppHost host)
+    public LicenseBannerViewModel(IAppHost host, IUiDispatcher dispatcher)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         Refresh();
 
-        _timer = new System.Windows.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromMinutes(1)
-        };
-        _timer.Tick += (_, _) => Refresh();
-        _timer.Start();
+        // A plain threadpool timer marshalled through the dispatcher keeps this view-model free of
+        // any UI-framework type (was a WPF DispatcherTimer). Behaviour is unchanged: Refresh runs on
+        // the UI thread once a minute.
+        _timer = new Timer(_ => _dispatcher.Post(Refresh), null,
+            TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
 
     [ObservableProperty] private string _statusText = string.Empty;
@@ -110,5 +112,5 @@ public sealed partial class LicenseBannerViewModel : ObservableObject, IDisposab
         }
     }
 
-    public void Dispose() => _timer.Stop();
+    public void Dispose() => _timer.Dispose();
 }

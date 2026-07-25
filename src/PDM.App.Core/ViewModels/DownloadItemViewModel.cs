@@ -1,6 +1,5 @@
-using System.ComponentModel;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using PDM.App.Services;
 using PDM.Core.Models;
 using PDM.Infrastructure;
 
@@ -13,10 +12,12 @@ namespace PDM.App.ViewModels;
 public sealed partial class DownloadItemViewModel : ObservableObject
 {
     private readonly ManagedDownload _managed;
+    private readonly IUiDispatcher _dispatcher;
 
-    public DownloadItemViewModel(ManagedDownload managed)
+    public DownloadItemViewModel(ManagedDownload managed, IUiDispatcher dispatcher)
     {
         _managed = managed ?? throw new ArgumentNullException(nameof(managed));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
     /// <summary>Underlying managed download.</summary>
@@ -109,14 +110,6 @@ public sealed partial class DownloadItemViewModel : ObservableObject
             OnPropertyChanged(nameof(SourceUrl));
         }
 
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
-        {
-            Raise();
-        }
-        else
-        {
-            dispatcher.BeginInvoke(Raise);
-        }
+        _dispatcher.Post(Raise);
     }
 }

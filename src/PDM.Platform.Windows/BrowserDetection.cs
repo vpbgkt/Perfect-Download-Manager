@@ -1,24 +1,18 @@
+using System.Runtime.Versioning;
 using Microsoft.Win32;
 
-namespace PDM.App.Services;
-
-/// <summary>Which browsers PDM's native host can register with.</summary>
-public enum SupportedBrowser
-{
-    Chrome,
-    Edge,
-    Brave,
-    Firefox
-}
-
-/// <summary>Detected installation of a browser.</summary>
-public sealed record DetectedBrowser(SupportedBrowser Kind, string DisplayName, string ExecutablePath);
+namespace PDM.Platform.Windows;
 
 /// <summary>
 /// Detects installed browsers on the current user's machine. Uses the registry app-paths hive
 /// (works for both per-user and per-machine installs of Chrome/Edge/Brave/Firefox) and falls
 /// back to canonical Program Files locations.
+///
+/// Relocated unchanged from <c>PDM.App.Services</c>; the <see cref="SupportedBrowser"/> /
+/// <see cref="DetectedBrowser"/> value types now live in the platform-neutral <c>PDM.Platform</c>
+/// assembly so non-Windows heads can share them.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public static class BrowserDetection
 {
     public static IReadOnlyList<DetectedBrowser> Detect()

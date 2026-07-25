@@ -1,13 +1,19 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
-namespace PDM.App.Services;
+namespace PDM.Platform.Windows;
 
 /// <summary>
 /// Ensures only one instance of PDM runs per user. Uses a named <see cref="Mutex"/> so a
 /// second launch immediately detects the primary instance and asks Windows to bring its
 /// main window to the foreground instead of starting a duplicate process.
+///
+/// Relocated unchanged (behaviour-wise) from <c>PDM.App.Services</c> to the platform layer and
+/// fitted to the <see cref="ISingleInstance"/> seam; the former <c>static ActivateExisting()</c> is
+/// now an instance method to satisfy the interface (its body is identical and stateless).
 /// </summary>
-public sealed class SingleInstance : IDisposable
+[SupportedOSPlatform("windows")]
+public sealed class SingleInstance : ISingleInstance
 {
     // "Local\\" scopes the mutex to the current session, which is what we want for per-user
     // isolation. The GUID is arbitrary but must be stable across builds.
@@ -23,7 +29,7 @@ public sealed class SingleInstance : IDisposable
         _mutex = new Mutex(initiallyOwned: true, MutexName, out _createdNew);
     }
 
-    /// <summary>True on the first instance; false when another PDM is already running.</summary>
+    /// <inheritdoc />
     public bool IsFirstInstance => _createdNew;
 
     /// <summary>
@@ -31,7 +37,7 @@ public sealed class SingleInstance : IDisposable
     /// modern Windows the OS may still refuse to steal focus depending on user settings,
     /// but the window will at least flash in the taskbar.
     /// </summary>
-    public static void ActivateExisting()
+    public void ActivateExisting()
     {
         // The main window's title is stable; find the first top-level window matching it.
         IntPtr hwnd = FindWindow(null!, "Perfect Download Manager");

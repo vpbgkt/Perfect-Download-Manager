@@ -13,10 +13,10 @@ namespace PDM.App.Services;
 /// </summary>
 public sealed class UpdateOrchestrator
 {
-    private readonly AppHost _host;
+    private readonly IAppHost _host;
     private readonly ILogger _logger;
 
-    public UpdateOrchestrator(AppHost host)
+    public UpdateOrchestrator(IAppHost host)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _logger = host.LoggerFactory.CreateLogger("PDM.Updates");

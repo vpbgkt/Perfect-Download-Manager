@@ -1,5 +1,3 @@
-using System.Windows;
-using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PDM.Core.Models;
@@ -27,6 +25,7 @@ public sealed class PopupManager : IDisposable
     private readonly Func<ManagedDownload, IDownloadPopup> _windowFactory;
     private readonly Action<string>? _showError;
     private readonly ILogger _logger;
+    private readonly IUiDispatcher _dispatcher;
 
     // Guards _open and _known. In production every mutation happens on the UI thread after
     // dispatcher marshalling, but the lock keeps HasOpenPopup/OpenPopupCount consistent when
@@ -47,12 +46,16 @@ public sealed class PopupManager : IDisposable
         DownloadManager manager,
         Func<ManagedDownload, IDownloadPopup> windowFactory,
         Action<string>? showError = null,
-        ILogger<PopupManager>? logger = null)
+        ILogger<PopupManager>? logger = null,
+        IUiDispatcher? dispatcher = null)
     {
         _manager = manager ?? throw new ArgumentNullException(nameof(manager));
         _windowFactory = windowFactory ?? throw new ArgumentNullException(nameof(windowFactory));
         _showError = showError;
         _logger = logger ?? NullLogger<PopupManager>.Instance;
+        // Defaults to inline execution when no dispatcher is supplied (headless tests), matching the
+        // prior behaviour where a null Application.Current ran handlers inline.
+        _dispatcher = dispatcher ?? InlineUiDispatcher.Instance;
     }
 
     /// <summary>Number of popups currently open. Supports the ≥20 concurrent requirement (Req 6.6).</summary>
@@ -361,20 +364,9 @@ public sealed class PopupManager : IDisposable
             or DownloadStatus.Verifying;
 
     /// <summary>
-    /// Marshals <paramref name="action"/> onto the WPF dispatcher so every window/view-model touch
-    /// happens on the UI thread (Req 7.4). Runs inline when already on the UI thread or when no
-    /// application dispatcher exists (headless tests), mirroring <c>MainViewModel.RunOnUi</c>.
+    /// Marshals <paramref name="action"/> onto the UI thread through the injected dispatcher so every
+    /// window/view-model touch happens on the UI thread (Req 7.4). Runs inline when already on the UI
+    /// thread or when no dispatcher exists (headless tests).
     /// </summary>
-    private static void RunOnUi(Action action)
-    {
-        Dispatcher? dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            dispatcher.BeginInvoke(action);
-        }
-    }
+    private void RunOnUi(Action action) => _dispatcher.Post(action);
 }

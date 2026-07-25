@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
-using System.Text.Json.Serialization;
 
 namespace PDM.Updater;
 
@@ -68,8 +67,8 @@ public sealed class UpdateService
         UpdateManifest? manifest;
         try
         {
-            manifest = await _client.GetFromJsonAsync<UpdateManifest>(
-                manifestUrl, JsonOptions, cancellationToken).ConfigureAwait(false);
+            manifest = await _client.GetFromJsonAsync(
+                manifestUrl, PdmUpdaterJsonContext.Default.UpdateManifest, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
@@ -195,10 +194,4 @@ public sealed class UpdateService
         byte[] hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
-
-    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
 }

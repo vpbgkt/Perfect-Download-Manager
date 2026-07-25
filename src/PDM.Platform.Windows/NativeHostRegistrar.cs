@@ -1,14 +1,20 @@
+using System.Runtime.Versioning;
 using System.Text.Json;
 using Microsoft.Win32;
 using PDM.Core.Util;
 
-namespace PDM.App.Services;
+namespace PDM.Platform.Windows;
 
 /// <summary>
 /// Writes the Chrome Native Messaging host manifest and the per-user registry entries so that
 /// Chromium browsers can invoke <c>pdm-native-host.exe</c>. Doing this in-app means users get a
 /// one-click "Register with PDM" experience instead of running a PowerShell script.
+///
+/// Relocated unchanged from <c>PDM.App.Services</c>. Kept as a static helper (its callers use it
+/// statically); the <see cref="WindowsNativeHostInstaller"/> wrapper exposes it through the
+/// <see cref="INativeHostInstaller"/> seam for DI-based callers.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public static class NativeHostRegistrar
 {
     public const string HostName = "com.pdm.host";
@@ -162,16 +168,16 @@ public static class NativeHostRegistrar
         Directory.CreateDirectory(manifestDir);
         string manifestPath = Path.Combine(manifestDir, $"{HostName}.json");
 
-        var manifest = new
+        var manifest = new ChromiumNativeHostManifest
         {
-            name = HostName,
-            description = "Perfect Download Manager native messaging host",
-            path = hostExePath,
-            type = "stdio",
-            allowed_origins = extensionIds.Select(id => $"chrome-extension://{id}/").ToArray()
+            Name = HostName,
+            Description = "Perfect Download Manager native messaging host",
+            Path = hostExePath,
+            Type = "stdio",
+            AllowedOrigins = extensionIds.Select(id => $"chrome-extension://{id}/").ToArray()
         };
 
-        string json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+        string json = JsonSerializer.Serialize(manifest, NativeHostJsonContext.Default.ChromiumNativeHostManifest);
         File.WriteAllText(manifestPath, json);
         return manifestPath;
     }

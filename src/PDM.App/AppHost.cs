@@ -8,6 +8,7 @@ using PDM.Core.Persistence;
 using PDM.Core.Util;
 using PDM.Infrastructure;
 using PDM.Licensing;
+using PDM.Platform;
 using PDM.Updater;
 
 namespace PDM.App;
@@ -17,7 +18,7 @@ namespace PDM.App;
 /// store, HTTP stack, download engine, repository, and manager. Kept as a small hand-rolled
 /// container to avoid pulling in a DI framework for a leaf application.
 /// </summary>
-public sealed class AppHost : IAsyncDisposable
+public sealed class AppHost : IAppHost, IAsyncDisposable
 {
     private AppHost(
         AppSettings settings,
@@ -46,6 +47,13 @@ public sealed class AppHost : IAsyncDisposable
 
     /// <summary>Notification service; disposed with the host.</summary>
     public Services.BalloonNotificationService Notifications { get; }
+
+    /// <summary>
+    /// The shared layer sees only the <see cref="INotifier"/> seam; the concrete WPF/WinForms notifier
+    /// stays private to this head (and is disposed here). Explicit implementation so the concrete
+    /// <see cref="Notifications"/> property remains available to head code that needs disposal.
+    /// </summary>
+    INotifier IAppHost.Notifications => Notifications;
 
     /// <summary>License orchestrator (trial, activation, validation).</summary>
     public LicenseService LicenseService { get; }

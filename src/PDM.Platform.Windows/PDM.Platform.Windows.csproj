@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Windows implementations of the PDM.Platform seams (docs/MIGRATION-AVALONIA-NATIVEAOT.md §4).
+
+    Most types here are thin wrappers that delegate to the existing, tested code in PDM.Core /
+    PDM.Licensing (AppPaths, MachineFingerprint, the WinHTTP handler, DPAPI). The IPC/registry/mutex
+    services (SingleInstance, DownloadRequestListener, NativeHostRegistrar, BrowserDetection) were
+    relocated here from PDM.App unchanged in behaviour so they sit below the UI head where the
+    platform seam belongs.
+
+    Targets net10.0-windows so the Windows-only reference assemblies (Microsoft.Win32.Registry,
+    System.IO.Pipes.AccessControl, System.Security.Principal.Windows, WinHttpHandler) are available.
+    Deliberately does NOT enable UseWPF/UseWindowsForms: the WPF/WinForms-coupled tray notifier stays
+    in the app head until the Avalonia rewrite (Phase 2).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AssemblyName>PDM.Platform.Windows</AssemblyName>
+    <RootNamespace>PDM.Platform.Windows</RootNamespace>
+    <Description>Perfect Download Manager - Windows implementations of the PDM.Platform seams.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PDM.Platform\PDM.Platform.csproj" />
+    <ProjectReference Include="..\PDM.Core\PDM.Core.csproj" />
+    <ProjectReference Include="..\PDM.Licensing\PDM.Licensing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Used by the relocated named-pipe capture listener for structured logging (parity with the
+         previous PDM.App implementation). -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

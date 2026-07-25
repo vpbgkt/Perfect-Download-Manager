@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Cross-platform seam layer (docs/MIGRATION-AVALONIA-NATIVEAOT.md §4).
+
+    This project contains ONLY interfaces and small platform-neutral value types. It has zero OS
+    calls and zero UI-framework dependencies, so every UI head (Avalonia desktop, Avalonia Android)
+    and the shared core can depend on it while the concrete per-OS implementations live in the
+    PDM.Platform.<OS> projects and are wired at the app head's composition root.
+
+    Target framework is plain net10.0 (NOT -windows): the interfaces must be consumable from macOS
+    and Android heads in later phases.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AssemblyName>PDM.Platform</AssemblyName>
+    <RootNamespace>PDM.Platform</RootNamespace>
+    <Description>Perfect Download Manager - cross-platform abstraction seams (interfaces only).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- For INotificationService (INotifier extends it) and shared model types. Core is the lowest,
+         UI-free, OS-free layer so this reference keeps the seam project dependency-light. -->
+    <ProjectReference Include="..\PDM.Core\PDM.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,64 @@
+name: CI
+
+# Continuous integration for the Avalonia + NativeAOT migration
+# (docs/MIGRATION-AVALONIA-NATIVEAOT.md §10). Two gates:
+#   1. build-test : the full solution builds and every existing test passes (the safety net that
+#                   guarantees the reused engine/licensing/updater never silently regress).
+#   2. aot-gate   : the core publishes with NativeAOT and the resulting native binary launches and
+#                   runs a real download on a CLEAN runner — catching exactly the startup failure
+#                   class (missing runtime, R2R crash, Win10 startup) that bit the framework build.
+
+on:
+  push:
+    branches: [main, "release/**", "migration/**"]
+  pull_request:
+    branches: [main, "release/**", "migration/**"]
+
+jobs:
+  build-test:
+    name: Build & test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore PDM.sln
+
+      - name: Build
+        run: dotnet build PDM.sln -c Debug --no-restore
+
+      - name: Test
+        run: dotnet test PDM.sln -c Debug --no-build
+
+  aot-gate:
+    name: NativeAOT gate (${{ matrix.rid }} on ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # GitHub-hosted Windows runners cover the current server images. Win10 build 19041 — the
+        # exact image the field crash appeared on — has no hosted runner; add a self-hosted
+        # 'windows-10-19041' runner to extend this matrix to it.
+        include:
+          - os: windows-2022
+            rid: win-x64
+          - os: windows-latest
+            rid: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # Publishes PDM.Cli with NativeAOT (trim/AOT findings fail the publish), then launches the
+      # native binary and runs a real 2 MB download through the reused core over the WinHTTP path.
+      - name: AOT publish + launch + download smoke
+        shell: pwsh
+        run: ./build/aot-harness.ps1 -Rid ${{ matrix.rid }} -SmokeUrl "https://speed.cloudflare.com/__down?bytes=2097152"

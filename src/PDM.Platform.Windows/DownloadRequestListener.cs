@@ -1,13 +1,15 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PDM.Core.Models;
+using PDM.Core.Serialization;
 
-namespace PDM.App.Services;
+namespace PDM.Platform.Windows;
 
 /// <summary>
 /// Listens on a per-user named pipe for download-capture requests forwarded by the browser
@@ -23,8 +25,12 @@ namespace PDM.App.Services;
 /// and a short-lived URL dedup cache. That way a broken or malicious extension cannot spawn
 /// hundreds of "New download detected" prompts in a burst, which historically hung the UI
 /// thread when Edge's session-restore replayed old download history to the extension.
+///
+/// Relocated unchanged (behaviour-wise) from <c>PDM.App.Services</c> to the platform layer and
+/// fitted to the <see cref="ICaptureListener"/> seam.
 /// </summary>
-public sealed class DownloadRequestListener : IAsyncDisposable
+[SupportedOSPlatform("windows")]
+public sealed class DownloadRequestListener : ICaptureListener
 {
     /// <summary>The per-user pipe name the native host connects to.</summary>
     public const string PipeName = "PDM.DownloadRequest";
@@ -149,7 +155,7 @@ public sealed class DownloadRequestListener : IAsyncDisposable
         DownloadRequest? request;
         try
         {
-            request = JsonSerializer.Deserialize<DownloadRequest>(line);
+            request = JsonSerializer.Deserialize(line, PdmCoreJsonContext.Default.DownloadRequest);
         }
         catch (JsonException)
         {
@@ -271,7 +277,7 @@ public sealed class DownloadRequestListener : IAsyncDisposable
 
     /// <summary>
     /// Simple thread-safe sliding-window rate limiter. Tracks the timestamps of the last
-    /// <paramref name="max"/> allowed events and rejects further requests once the window is
+    /// <c>max</c> allowed events and rejects further requests once the window is
     /// full. Public so unit tests can cover the algorithm independently of the pipe plumbing.
     /// </summary>
     internal sealed class RateLimiter

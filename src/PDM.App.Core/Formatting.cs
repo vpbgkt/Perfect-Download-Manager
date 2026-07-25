@@ -3,7 +3,7 @@ using System.Globalization;
 namespace PDM.App;
 
 /// <summary>Human-readable formatters for the UI.</summary>
-internal static class Formatting
+public static class Formatting
 {
     private static readonly string[] Units = { "B", "KB", "MB", "GB", "TB" };
 
