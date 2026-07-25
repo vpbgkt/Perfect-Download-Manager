@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PDM.App.Avalonia.Views.AddDownloadDialog"
+        Title="Add download"
+        Width="520" SizeToContent="Height"
+        CanResize="False" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="20" Spacing="12">
+        <TextBlock Text="Download URL" />
+        <TextBox x:Name="UrlBox" Watermark="https://example.com/file.zip" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
+            <Button Content="Add" MinWidth="90" Click="OnAdd" IsDefault="True" Classes="accent" />
+        </StackPanel>
+    </StackPanel>
+</Window>

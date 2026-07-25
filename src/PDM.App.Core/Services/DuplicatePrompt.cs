@@ -31,8 +31,12 @@ public sealed record DuplicatePromptCopy(string Title, string Message, string Pr
 /// </summary>
 public interface IDuplicatePromptView
 {
-    /// <summary>Shows the prompt with the given wording and returns which action the user chose.</summary>
-    DuplicateChoice Show(DuplicatePromptCopy copy);
+    /// <summary>
+    /// Shows the prompt with the given wording and completes with the user's chosen action. Async so
+    /// the UI head can present a non-blocking modal (WPF wraps its synchronous dialog in a completed
+    /// task; Avalonia awaits <c>Window.ShowDialog</c>).
+    /// </summary>
+    Task<DuplicateChoice> ShowAsync(DuplicatePromptCopy copy);
 }
 
 /// <summary>
@@ -102,7 +106,7 @@ public static class DuplicatePrompt
         ArgumentNullException.ThrowIfNull(view);
         ArgumentNullException.ThrowIfNull(dup);
 
-        DuplicateChoice choice = view.Show(DescribeFor(dup));
+        DuplicateChoice choice = await view.ShowAsync(DescribeFor(dup)).ConfigureAwait(false);
         if (choice == DuplicateChoice.Cancel)
         {
             return;

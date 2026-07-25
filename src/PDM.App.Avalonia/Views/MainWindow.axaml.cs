@@ -1,11 +1,12 @@
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
-using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using PDM.App.Avalonia.Services;
+using PDM.App.Services;
 using PDM.App.ViewModels;
+using PDM.Core.Models;
 
 namespace PDM.App.Avalonia.Views;
 
@@ -48,22 +49,70 @@ public partial class MainWindow : Window
 
     private void OnFilterChanged() => Dispatcher.UIThread.Post(() => _downloadsView.Refresh());
 
-    /// <summary>
-    /// Minimal add flow for the initial Avalonia head: adds the URL currently on the clipboard.
-    /// The full Add / Bulk-add / web-page-warning dialogs are ported in a later Phase 2 step.
-    /// </summary>
+    /// <summary>Opens the Add dialog and runs the add flow (duplicate detection + web-page guard).</summary>
     private async void OnAddDownload(object? sender, RoutedEventArgs e)
     {
-        IClipboard? clipboard = GetTopLevel(this)?.Clipboard;
-        if (clipboard is null)
+        string? url = await new AddDownloadDialog().ShowDialog<string?>(this).ConfigureAwait(true);
+        if (!string.IsNullOrWhiteSpace(url))
         {
-            return;
+            await AddOneAsync(url).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Adds a single URL, mirroring the WPF head: resolve duplicates once (reusing the probe), prompt
+    /// on a match, and offer to download anyway when the link looks like a web page.
+    /// </summary>
+    private async Task AddOneAsync(string url)
+    {
+        AppHost? host = App.Host;
+
+        RemoteFileInfo? probed = null;
+        if (host is not null &&
+            Uri.TryCreate(url, UriKind.Absolute, out Uri? parsed) &&
+            (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps))
+        {
+            var (dup, info) = await host.DownloadManager
+                .InspectForDuplicateAsync(parsed, referrer: null, candidateFileName: null)
+                .ConfigureAwait(true);
+
+            if (dup is not null)
+            {
+                await DuplicatePrompt.HandleAsync(
+                    new AvaloniaDuplicatePromptView(this), host.DownloadManager, dup, parsed,
+                    referrer: null, info, reveal: id => _viewModel.RevealExisting(id)).ConfigureAwait(true);
+                return;
+            }
+
+            probed = info;
         }
 
-        string? text = await clipboard.GetTextAsync().ConfigureAwait(true);
-        if (!string.IsNullOrWhiteSpace(text))
+        MainViewModel.AddOutcome outcome =
+            await _viewModel.AddDownloadAsync(url, probedInfo: probed).ConfigureAwait(true);
+
+        switch (outcome.Result)
         {
-            await _viewModel.AddDownloadAsync(text.Trim()).ConfigureAwait(true);
+            case MainViewModel.AddResult.Ok:
+                return;
+
+            case MainViewModel.AddResult.InvalidUrl:
+                _notifier.ShowError("Add download",
+                    "The URL could not be added. Make sure it is a valid http:// or https:// address.");
+                return;
+
+            case MainViewModel.AddResult.LooksLikeWebPage:
+                bool downloadAnyway = await ConfirmDialog.ShowAsync(this, "This looks like a web page",
+                    "That link points to a web page, not a downloadable file. Download it anyway?")
+                    .ConfigureAwait(true);
+                if (downloadAnyway)
+                {
+                    await _viewModel.AddDownloadAsync(url, allowWebPage: true).ConfigureAwait(true);
+                }
+                return;
+
+            case MainViewModel.AddResult.Failed:
+                _notifier.ShowError("Add download", outcome.ErrorMessage ?? "The URL could not be added.");
+                return;
         }
     }
 
@@ -77,6 +126,35 @@ public partial class MainWindow : Window
         {
             await _viewModel.PerformDeleteAsync(item, deleteFiles: false).ConfigureAwait(true);
         }
+    }
+
+    private async void OnOpenSettings(object? sender, RoutedEventArgs e)
+    {
+        AppHost? host = App.Host;
+        if (host is null)
+        {
+            return;
+        }
+
+        var vm = new SettingsViewModel(host.Settings, host.SettingsStore);
+        await new SettingsWindow(vm).ShowDialog<bool>(this).ConfigureAwait(true);
+    }
+
+    private async void OnOpenLicense(object? sender, RoutedEventArgs e)
+    {
+        AppHost? host = App.Host;
+        if (host is null)
+        {
+            return;
+        }
+
+        var vm = new LicenseViewModel(host.LicenseService, host.License);
+        var dialog = new LicenseWindow(vm);
+        await dialog.ShowDialog(this).ConfigureAwait(true);
+
+        // Reflect any activation/deactivation back into app state and the banner.
+        host.License = dialog.LatestSnapshot;
+        _viewModel.LicenseBanner.Refresh();
     }
 
     protected override void OnClosed(EventArgs e)

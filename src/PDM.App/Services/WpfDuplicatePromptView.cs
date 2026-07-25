@@ -20,7 +20,7 @@ public sealed class WpfDuplicatePromptView : IDuplicatePromptView
     }
 
     /// <inheritdoc />
-    public DuplicateChoice Show(DuplicatePromptCopy copy)
+    public Task<DuplicateChoice> ShowAsync(DuplicatePromptCopy copy)
     {
         ArgumentNullException.ThrowIfNull(copy);
 
@@ -30,13 +30,16 @@ public sealed class WpfDuplicatePromptView : IDuplicatePromptView
             dialog.Owner = _owner;
         }
 
+        // WPF's ShowDialog is a synchronous modal; wrap the result in a completed task to satisfy the
+        // async seam.
         dialog.ShowDialog();
 
-        return dialog.Choice switch
+        DuplicateChoice choice = dialog.Choice switch
         {
             DuplicateDownloadDialog.Result.Primary => DuplicateChoice.Primary,
             DuplicateDownloadDialog.Result.Secondary => DuplicateChoice.Secondary,
             _ => DuplicateChoice.Cancel
         };
+        return Task.FromResult(choice);
     }
 }

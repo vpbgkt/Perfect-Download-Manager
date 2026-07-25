@@ -1,0 +1,100 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PDM.App.ViewModels"
+        x:Class="PDM.App.Avalonia.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings"
+        Width="640" Height="640"
+        MinWidth="560" MinHeight="500"
+        WindowStartupLocation="CenterOwner">
+
+    <DockPanel>
+
+        <!-- Action bar -->
+        <Border DockPanel.Dock="Bottom" Padding="16,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <TextBlock Text="{Binding ValidationError}" Foreground="#E38B00"
+                           VerticalAlignment="Center" Margin="0,0,8,0" TextWrapping="Wrap" />
+                <Button Content="Cancel" MinWidth="96" Click="OnCancel" IsCancel="True" />
+                <Button Content="Save" MinWidth="96" Click="OnSave" IsDefault="True" Classes="accent" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Padding="16,12">
+            <StackPanel Spacing="6">
+
+                <TextBlock Text="General" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,4" />
+
+                <TextBlock Text="Default download folder" />
+                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                    <TextBox Grid.Column="0" Text="{Binding DefaultDownloadDirectory}" />
+                    <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Click="OnBrowseFolder" />
+                </Grid>
+
+                <CheckBox Content="Auto-start downloads when added"
+                          IsChecked="{Binding AutoStartAddedDownloads}" />
+                <CheckBox Content="Show desktop notifications on completion"
+                          IsChecked="{Binding ShowNotifications}" />
+                <CheckBox Content="Confirm browser-captured downloads before starting"
+                          IsChecked="{Binding ConfirmBrowserDownloads}" Margin="0,0,0,10" />
+
+                <TextBlock Text="Downloads" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,4" />
+
+                <Grid ColumnDefinitions="*,12,*" Margin="0,0,0,8">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="Simultaneous downloads (1-32)" />
+                        <NumericUpDown Value="{Binding MaxSimultaneousDownloads}"
+                                       Minimum="1" Maximum="32" Increment="1" FormatString="0" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="Connections per download (1-64)" />
+                        <NumericUpDown Value="{Binding MaxConnectionsPerDownload}"
+                                       Minimum="1" Maximum="64" Increment="1" FormatString="0" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="Global speed limit in KB/s (0 = unlimited)" />
+                <NumericUpDown Value="{Binding GlobalMaxKilobytesPerSecond}"
+                               Minimum="0" Maximum="10000000" Increment="128" FormatString="0"
+                               Margin="0,0,0,8" />
+
+                <TextBlock Text="If the destination file already exists" />
+                <ComboBox ItemsSource="{Binding OverwritePolicies}"
+                          SelectedItem="{Binding OverwritePolicy}"
+                          MinWidth="220" HorizontalAlignment="Left" Margin="0,0,0,8" />
+
+                <TextBlock Text="Post-download command (optional; receives the file path as its argument)" />
+                <TextBox Text="{Binding PostDownloadCommand}"
+                         Watermark="e.g. C:\Program Files\Windows Defender\MpCmdRun.exe" Margin="0,0,0,10" />
+
+                <TextBlock Text="Network" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,4" />
+
+                <TextBlock Text="User agent (optional)" />
+                <TextBox Text="{Binding UserAgent}" Watermark="Perfect Download Manager" Margin="0,0,0,8" />
+
+                <TextBlock Text="HTTP proxy (optional, e.g. http://user:pass@host:8080)" />
+                <TextBox Text="{Binding ProxyUrl}" Watermark="Direct" Margin="0,0,0,10" />
+
+                <TextBlock Text="Schedule" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,4" />
+
+                <CheckBox Content="Only download during a scheduled time window"
+                          IsChecked="{Binding ScheduleEnabled}" />
+                <Grid ColumnDefinitions="*,12,*" IsEnabled="{Binding ScheduleEnabled}" Margin="0,4,0,10">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="Start (HH:mm)" />
+                        <TextBox Text="{Binding ScheduleStart}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="End (HH:mm)" />
+                        <TextBox Text="{Binding ScheduleEnd}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="Appearance" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,4" />
+                <TextBlock Text="Theme" />
+                <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
+                          MinWidth="220" HorizontalAlignment="Left" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
