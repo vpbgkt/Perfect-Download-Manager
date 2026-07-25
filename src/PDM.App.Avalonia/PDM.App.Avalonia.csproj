@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Avalonia desktop head (docs/MIGRATION-AVALONIA-NATIVEAOT.md §7, §11 Phase 2). The new
+    cross-platform UI, starting with the Windows build. Drives the shared, UI-agnostic ViewModels in
+    PDM.App.Core and wires the Windows platform implementations (PDM.Platform.Windows) at its
+    composition root. Targets net10.0-windows so it can reference the Windows platform library;
+    macOS/Android heads are separate projects in later phases.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>PDM</AssemblyName>
+    <RootNamespace>PDM.App.Avalonia</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- Compiled bindings everywhere: required for NativeAOT and faster/safer than reflection
+         bindings (§3, §5). Enabled by default so every XAML binding is validated at compile time. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Mostly-idle desktop app: workstation GC, no background/concurrent collector (parity with WPF head). -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PDM.App.Core\PDM.App.Core.csproj" />
+    <ProjectReference Include="..\PDM.Platform\PDM.Platform.csproj" />
+    <ProjectReference Include="..\PDM.Platform.Windows\PDM.Platform.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PDM.App.ViewModels"
+        x:Class="PDM.App.Avalonia.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding AppTitle}"
+        Width="1000" Height="640"
+        MinWidth="720" MinHeight="420">
+
+    <DockPanel>
+
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Padding="12,8" Background="{DynamicResource SystemChromeLowColor}">
+            <Grid ColumnDefinitions="Auto,*,220">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                    <Button Content="Add" Click="OnAddDownload" />
+                    <Button Content="Resume" Command="{Binding ResumeCommand}"
+                            CommandParameter="{Binding SelectedItem}" />
+                    <Button Content="Pause" Command="{Binding PauseCommand}"
+                            CommandParameter="{Binding SelectedItem}" />
+                    <Button Content="Open" Command="{Binding OpenFileCommand}"
+                            CommandParameter="{Binding SelectedItem}" />
+                    <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
+                            CommandParameter="{Binding SelectedItem}" />
+                    <Button Content="Remove" Click="OnRemoveSelected" />
+                </StackPanel>
+
+                <TextBox Grid.Column="2" Watermark="Search downloads..."
+                         Text="{Binding SearchText}" />
+            </Grid>
+        </Border>
+
+        <!-- Categories sidebar -->
+        <Border DockPanel.Dock="Left" Width="200" Padding="8"
+                Background="{DynamicResource SystemChromeLowColor}">
+            <ListBox ItemsSource="{Binding Categories}"
+                     SelectedItem="{Binding SelectedCategory}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CategoryFilterItem">
+                        <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- Downloads list + empty state -->
+        <Grid>
+<!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
+                 MainViewModel's FilterItem predicate + FilterChanged signal drive category/search
+                 filtering, mirroring the WPF head. Column bindings are compiled via x:DataType. -->
+            <DataGrid x:Name="DownloadsGrid"
+                      SelectedItem="{Binding SelectedItem}"
+                      IsReadOnly="True"
+                      CanUserReorderColumns="True"
+                      CanUserResizeColumns="True"
+                      GridLinesVisibility="Horizontal">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Name" Width="*"
+                                        Binding="{Binding FileName}" x:DataType="vm:DownloadItemViewModel" />
+                    <DataGridTextColumn Header="Status" Width="120"
+                                        Binding="{Binding StatusLabel}" x:DataType="vm:DownloadItemViewModel" />
+                    <DataGridTemplateColumn Header="Progress" Width="160">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="vm:DownloadItemViewModel">
+                                <ProgressBar Minimum="0" Maximum="100"
+                                             Value="{Binding ProgressPercent}"
+                                             Height="8" VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Size" Width="110"
+                                        Binding="{Binding SizeText}" x:DataType="vm:DownloadItemViewModel" />
+                    <DataGridTextColumn Header="Speed" Width="110"
+                                        Binding="{Binding SpeedText}" x:DataType="vm:DownloadItemViewModel" />
+                    <DataGridTextColumn Header="ETA" Width="90"
+                                        Binding="{Binding EtaText}" x:DataType="vm:DownloadItemViewModel" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel IsVisible="{Binding IsListEmpty}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                <TextBlock Text="{Binding EmptyStateTitle}" FontSize="18" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding EmptyStateHint}" Opacity="0.7"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</Window>

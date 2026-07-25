@@ -26,7 +26,7 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
         HttpClientProvider httpClientProvider,
         SqliteDownloadRepository repository,
         DownloadManager downloadManager,
-        Services.BalloonNotificationService notifications,
+        INotifier notifications,
         LicenseService licenseService,
         LicenseSnapshot licenseSnapshot,
         ILoggerFactory loggerFactory)
@@ -45,15 +45,11 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     /// <summary>Root logger factory used to obtain scoped loggers.</summary>
     public ILoggerFactory LoggerFactory { get; }
 
-    /// <summary>Notification service; disposed with the host.</summary>
-    public Services.BalloonNotificationService Notifications { get; }
-
     /// <summary>
-    /// The shared layer sees only the <see cref="INotifier"/> seam; the concrete WPF/WinForms notifier
-    /// stays private to this head (and is disposed here). Explicit implementation so the concrete
-    /// <see cref="Notifications"/> property remains available to head code that needs disposal.
+    /// User-visible notification surface, supplied by the platform head (WPF tray balloon today,
+    /// an Avalonia notifier in the cross-platform head). Disposed with the host when disposable.
     /// </summary>
-    INotifier IAppHost.Notifications => Notifications;
+    public INotifier Notifications { get; }
 
     /// <summary>License orchestrator (trial, activation, validation).</summary>
     public LicenseService LicenseService { get; }
@@ -85,9 +81,20 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     /// </summary>
     public Services.RefreshCoordinator RefreshCoordinator { get; } = new();
 
-    /// <summary>Builds and initializes all singletons.</summary>
-    public static async Task<AppHost> CreateAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Builds and initializes all singletons. The two platform-specific dependencies are injected by
+    /// the head that owns the OS: <paramref name="notifications"/> (the concrete <see cref="INotifier"/>)
+    /// and <paramref name="licenseStore"/> (e.g. the Windows DPAPI-backed store). Everything else is
+    /// platform-neutral and built here, so every UI head shares one composition root.
+    /// </summary>
+    public static async Task<AppHost> CreateAsync(
+        INotifier notifications,
+        ILicenseStore licenseStore,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(notifications);
+        ArgumentNullException.ThrowIfNull(licenseStore);
+
         ILoggerFactory loggerFactory = Logging.Configure();
         ILogger startupLogger = loggerFactory.CreateLogger("PDM.Startup");
         startupLogger.LogInformation("Starting Perfect Download Manager");
@@ -107,14 +114,9 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
         var repo = new SqliteDownloadRepository(AppPaths.DatabaseFile);
         await repo.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
-        string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "pdm.ico");
-        var notifications = new Services.BalloonNotificationService(iconPath: iconPath);
-
         var manager = new DownloadManager(engine, repo, settings, notifications,
             logger: loggerFactory.CreateLogger<DownloadManager>());
         await manager.InitializeAsync(cancellationToken).ConfigureAwait(false);
-
-        var licenseStore = new DpapiLicenseStore(AppPaths.LicenseFile);
 
         // Wire the real AWS-backed transport + signed-token verifier when the build was
         // configured with a licensing backend; otherwise run trial-only (no server).
@@ -201,7 +203,7 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await DownloadManager.DisposeAsync().ConfigureAwait(false);
-        Notifications.Dispose();
+        (Notifications as IDisposable)?.Dispose();
         HttpClientProvider.Dispose();
         LoggerFactory.Dispose();
     }

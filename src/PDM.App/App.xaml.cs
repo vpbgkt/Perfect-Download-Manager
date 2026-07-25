@@ -42,7 +42,12 @@ public partial class App : Application
 
         try
         {
-            Host = await AppHost.CreateAsync().ConfigureAwait(true);
+            // The WPF head supplies the two platform-specific dependencies to the shared composition
+            // root: the WinForms/WPF tray notifier and the Windows DPAPI-backed license store.
+            string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "pdm.ico");
+            var notifier = new BalloonNotificationService(iconPath: iconPath);
+            var licenseStore = new PDM.Licensing.DpapiLicenseStore(PDM.Core.Util.AppPaths.LicenseFile);
+            Host = await AppHost.CreateAsync(notifier, licenseStore).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
