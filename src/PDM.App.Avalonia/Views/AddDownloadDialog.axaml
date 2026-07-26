@@ -2,15 +2,40 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="PDM.App.Avalonia.Views.AddDownloadDialog"
         Title="Add download"
-        Width="520" SizeToContent="Height"
+        Width="540" SizeToContent="Height"
         CanResize="False" ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner">
-    <StackPanel Margin="20" Spacing="12">
-        <TextBlock Text="Download URL" />
-        <TextBox x:Name="UrlBox" Watermark="https://example.com/file.zip" />
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
-            <Button Content="Add" MinWidth="90" Click="OnAdd" IsDefault="True" Classes="accent" />
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppWindowBackgroundBrush}">
+
+    <StackPanel Margin="24" Spacing="20">
+
+        <!-- Header -->
+        <StackPanel Orientation="Horizontal" Spacing="14">
+            <Border Width="46" Height="46" CornerRadius="12"
+                    Background="{DynamicResource AppAccentSubtleBrush}">
+                <TextBlock Classes="glyph" Text="&#xE896;" FontSize="22"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource AppAccentBrush}" />
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Classes="h1" Text="Add download" />
+                <TextBlock Classes="secondary" Text="Paste a link to start a new download." />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- URL input -->
+        <StackPanel Spacing="7">
+            <TextBlock Classes="section" Text="DOWNLOAD URL" />
+            <TextBox x:Name="UrlBox" Watermark="https://example.com/file.zip" />
+            <TextBlock Classes="caption"
+                       Text="Tip: copy a link and it will be filled in automatically." />
+        </StackPanel>
+
+        <!-- Actions -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Content="Cancel" MinWidth="96" Click="OnCancel" IsCancel="True" />
+            <Button Content="Add download" MinWidth="128" Classes="brand"
+                    Click="OnAdd" IsDefault="True" />
         </StackPanel>
     </StackPanel>
 </Window>

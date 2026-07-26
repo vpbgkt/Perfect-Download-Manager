@@ -58,7 +58,8 @@ public partial class App : Application
             var licenseStore = new DpapiLicenseStore(AppPaths.LicenseFile);
             Host = AppHost.CreateAsync(notifier, licenseStore).GetAwaiter().GetResult();
 
-            // Apply the saved theme preference at startup (light/dark/system).
+            // Apply the saved appearance preferences at startup (theme variant + accent colour).
+            ThemeApplier.ApplyAccent(Host.Settings.AccentColor);
             ThemeApplier.Apply(Host.Settings.Theme);
 
             var mainViewModel = new MainViewModel(Host, dispatcher);

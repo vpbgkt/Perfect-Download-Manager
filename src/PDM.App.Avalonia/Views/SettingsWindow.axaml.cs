@@ -1,5 +1,10 @@
+using System.Collections.Generic;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using PDM.App.Avalonia.Services;
 using PDM.App.ViewModels;
@@ -8,12 +13,15 @@ namespace PDM.App.Avalonia.Views;
 
 /// <summary>
 /// Modal settings dialog bound to the shared <see cref="SettingsViewModel"/>. Applies the chosen
-/// theme variant on save and returns a bool result (true = saved) via <see cref="Window.ShowDialog{T}"/>.
+/// theme variant and accent colour on save, previews both live, and reverts the preview on cancel.
+/// Returns a bool result (true = saved) via <see cref="Window.ShowDialog{T}"/>.
 /// </summary>
 public partial class SettingsWindow : Window
 {
     private readonly SettingsViewModel _viewModel;
     private readonly string _initialTheme;
+    private readonly string _initialAccent;
+    private readonly List<Border> _accentSwatches = new();
 
     // Parameterless constructor for the XAML designer / tooling only.
     public SettingsWindow() : this(null!)
@@ -24,8 +32,71 @@ public partial class SettingsWindow : Window
     {
         _viewModel = viewModel;
         _initialTheme = viewModel?.Theme ?? "system";
+        _initialAccent = viewModel?.AccentColor ?? "blue";
         DataContext = _viewModel;
         InitializeComponent();
+
+        if (_viewModel is not null)
+        {
+            BuildAccentSwatches();
+        }
+    }
+
+    /// <summary>Builds a selectable colour swatch per accent preset with a live-preview click.</summary>
+    private void BuildAccentSwatches()
+    {
+        foreach ((string id, string label) in ThemeApplier.Accents)
+        {
+            var fill = new SolidColorBrush(ThemeApplier.ResolveAccent(id));
+
+            var dot = new Ellipse
+            {
+                Width = 26,
+                Height = 26,
+                Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            // The ring highlights the selected accent; its brush is set in UpdateAccentSelection.
+            var ring = new Border
+            {
+                Width = 40,
+                Height = 40,
+                CornerRadius = new CornerRadius(999),
+                BorderThickness = new Thickness(2),
+                BorderBrush = Brushes.Transparent,
+                Child = dot,
+                Tag = id,
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = new global::Avalonia.Input.Cursor(global::Avalonia.Input.StandardCursorType.Hand)
+            };
+
+            ToolTip.SetTip(ring, label);
+            ring.PointerPressed += (_, _) => SelectAccent(id);
+
+            _accentSwatches.Add(ring);
+            AccentPanel.Children.Add(ring);
+        }
+
+        UpdateAccentSelection();
+    }
+
+    private void SelectAccent(string id)
+    {
+        _viewModel.AccentColor = id;
+        ThemeApplier.ApplyAccent(id);
+        UpdateAccentSelection();
+    }
+
+    private void UpdateAccentSelection()
+    {
+        IBrush selectedRing = this.FindResource("AppAccentBrush") as IBrush ?? Brushes.Gray;
+        foreach (Border ring in _accentSwatches)
+        {
+            bool selected = ring.Tag is string id && id == _viewModel.AccentColor;
+            ring.BorderBrush = selected ? selectedRing : Brushes.Transparent;
+        }
     }
 
     /// <summary>Live-previews the selected theme so the change is immediately visible.</summary>
@@ -76,13 +147,15 @@ public partial class SettingsWindow : Window
         }
 
         ThemeApplier.Apply(_viewModel.Theme);
+        ThemeApplier.ApplyAccent(_viewModel.AccentColor);
         Close(true);
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e)
     {
-        // Revert any live theme preview back to the setting that was in effect when the dialog opened.
+        // Revert any live preview back to the values in effect when the dialog opened.
         ThemeApplier.Apply(_initialTheme);
+        ThemeApplier.ApplyAccent(_initialAccent);
         Close(false);
     }
 }

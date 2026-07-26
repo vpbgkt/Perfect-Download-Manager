@@ -6,47 +6,52 @@
         x:Class="PDM.App.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding AppTitle}"
-        Width="1040" Height="660"
-        MinWidth="760" MinHeight="460">
-
-    <Window.Styles>
-        <!-- Toolbar buttons: compact, quiet chrome that reads well in both light and dark. -->
-        <Style Selector="Border.toolbar">
-            <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorSecondaryBrush}" />
-            <Setter Property="Padding" Value="14,10" />
-        </Style>
-        <Style Selector="Border.sidebar">
-            <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
-            <Setter Property="Padding" Value="8" />
-        </Style>
-        <!-- Category rows: comfortable spacing + rounded selection. -->
-        <Style Selector="ListBox.categories ListBoxItem">
-            <Setter Property="Padding" Value="10,8" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Margin" Value="0,1" />
-        </Style>
-        <Style Selector="DataGrid#DownloadsGrid">
-            <Setter Property="RowHeight" Value="44" />
-        </Style>
-        <!-- Monochrome Fluent icon glyphs (follow the theme foreground). Segoe Fluent Icons on
-             Win11, Segoe MDL2 Assets on Win10 - both ship with Windows. -->
-        <Style Selector="TextBlock.glyph">
-            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-    </Window.Styles>
+        Width="1120" Height="700"
+        MinWidth="820" MinHeight="500"
+        Background="{DynamicResource AppWindowBackgroundBrush}">
 
     <DockPanel>
 
+        <!-- ================= Sidebar ================= -->
+        <Border DockPanel.Dock="Left" Width="232"
+                Background="{DynamicResource AppSidebarBackgroundBrush}"
+                BorderThickness="0,0,1,0" BorderBrush="{DynamicResource AppDividerBrush}">
+            <DockPanel Margin="12,16,12,12">
+
+                <!-- Brand -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10"
+                            Margin="6,0,6,18">
+                    <Image Width="26" Height="26" Source="{x:Static views:MainWindow.AppIcon}" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Perfect" FontWeight="Bold" FontSize="14"
+                                   Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                        <TextBlock Text="Download Manager" Classes="caption" Margin="0,-2,0,0" />
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock DockPanel.Dock="Top" Classes="section" Text="LIBRARY" Margin="8,0,0,6" />
+
+                <ListBox Classes="categories" ItemsSource="{Binding Categories}"
+                         SelectedItem="{Binding SelectedCategory}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CategoryFilterItem">
+                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
         <!-- ================= Toolbar ================= -->
-        <Border DockPanel.Dock="Top" Classes="toolbar" BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource AppToolbarBackgroundBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource AppDividerBrush}"
+                Padding="16,12">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
 
-                <!-- Primary, frequently used actions (icons + labels) -->
+                <!-- Primary, frequently used actions -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Click="OnAddDownload" Classes="accent" ToolTip.Tip="Add a new download">
+                    <Button Click="OnAddDownload" Classes="brand" ToolTip.Tip="Add a new download">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Classes="glyph" Text="&#xE710;" />
                             <TextBlock Text="Add download" VerticalAlignment="Center" />
@@ -73,11 +78,11 @@
                             ToolTip.Tip="Delete the selected downloads">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Classes="glyph" Text="&#xE74D;" />
-                            <TextBlock Text="Delete selected" VerticalAlignment="Center" />
+                            <TextBlock Text="Delete" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
 
-                    <Border Width="1" Margin="4,2" Background="{DynamicResource CardStrokeColorDefaultBrush}" />
+                    <Border Width="1" Margin="4,2" Background="{DynamicResource AppDividerBrush}" />
 
                     <!-- Opens a detected browser; the dropdown lists all and remembers the choice. -->
                     <SplitButton x:Name="OpenBrowserButton" Click="OnOpenBrowser"
@@ -90,11 +95,18 @@
                 </StackPanel>
 
                 <!-- Search -->
-                <TextBox Grid.Column="2" Width="240" Watermark="Search downloads..."
-                         Text="{Binding SearchText}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Border Grid.Column="2" Width="260" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Grid>
+                        <TextBlock Classes="glyph" Text="&#xE721;" FontSize="14"
+                                   Margin="10,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}" IsHitTestVisible="False" />
+                        <TextBox Text="{Binding SearchText}" Watermark="Search downloads"
+                                 Padding="32,7,10,7" />
+                    </Grid>
+                </Border>
 
                 <!-- Overflow / advanced actions -->
-                <Button Grid.Column="3" VerticalAlignment="Center" ToolTip.Tip="More actions">
+                <Button Grid.Column="3" Classes="ghost" VerticalAlignment="Center" ToolTip.Tip="More actions">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="More" VerticalAlignment="Center" />
                         <TextBlock Classes="glyph" Text="&#xE70D;" FontSize="12" />
@@ -119,112 +131,140 @@
             </Grid>
         </Border>
 
-        <!-- ================= Categories sidebar ================= -->
-        <Border DockPanel.Dock="Left" Width="210" Classes="sidebar"
-                BorderThickness="0,0,1,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
-            <ListBox Classes="categories" Background="Transparent"
-                     ItemsSource="{Binding Categories}"
-                     SelectedItem="{Binding SelectedCategory}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:CategoryFilterItem">
-                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-        </Border>
-
         <!-- ================= Downloads list + empty state ================= -->
-        <Grid Margin="4">
-            <!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
-                 MainViewModel's FilterItem predicate + FilterChanged signal drive filtering.
-                 Column bindings are compiled via x:DataType. -->
-            <DataGrid x:Name="DownloadsGrid"
-                      SelectedItem="{Binding SelectedItem}"
-                      IsReadOnly="True"
-                      CanUserReorderColumns="True"
-                      CanUserResizeColumns="True"
-                      GridLinesVisibility="Horizontal"
-                      HeadersVisibility="Column">
-                <DataGrid.ContextMenu>
-                    <ContextMenu x:DataType="vm:MainViewModel">
-                        <MenuItem Header="Resume" Command="{Binding ResumeCommand}"
-                                  CommandParameter="{Binding SelectedItem}" />
-                        <MenuItem Header="Pause" Command="{Binding PauseCommand}"
-                                  CommandParameter="{Binding SelectedItem}" />
-                        <Separator />
-                        <MenuItem Header="Open" Command="{Binding OpenFileCommand}"
-                                  CommandParameter="{Binding SelectedItem}" />
-                        <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"
-                                  CommandParameter="{Binding SelectedItem}" />
-                        <MenuItem Header="Show popup" Command="{Binding ShowPopupCommand}"
-                                  CommandParameter="{Binding SelectedItem}" />
-                        <Separator />
-                        <MenuItem Header="Change link..." Click="OnChangeUrl" />
-                        <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser" />
-                        <Separator />
-                        <MenuItem Header="Remove..." Click="OnRemoveSelected" />
-                    </ContextMenu>
-                </DataGrid.ContextMenu>
-                <DataGrid.Columns>
-                    <!-- Selection checkbox (header toggles all) -->
-                    <DataGridTemplateColumn Width="44" CanUserResize="False" CanUserReorder="False">
-                        <DataGridTemplateColumn.Header>
-                            <CheckBox Click="OnToggleSelectAll" Margin="4,0,0,0" />
-                        </DataGridTemplateColumn.Header>
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="vm:DownloadItemViewModel">
-                                <CheckBox IsChecked="{Binding IsSelected}" Margin="4,0,0,0"
-                                          VerticalAlignment="Center" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+        <Grid Margin="16">
+            <Border Classes="card" Padding="6" IsVisible="{Binding !IsListEmpty}">
+                <!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
+                     MainViewModel's FilterItem predicate + FilterChanged signal drive filtering.
+                     Column bindings are compiled via x:DataType. -->
+                <DataGrid x:Name="DownloadsGrid"
+                          SelectedItem="{Binding SelectedItem}"
+                          IsReadOnly="True"
+                          RowHeight="56"
+                          CanUserReorderColumns="True"
+                          CanUserResizeColumns="True"
+                          HeadersVisibility="Column">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu x:DataType="vm:MainViewModel">
+                            <MenuItem Header="Resume" Command="{Binding ResumeCommand}"
+                                      CommandParameter="{Binding SelectedItem}" />
+                            <MenuItem Header="Pause" Command="{Binding PauseCommand}"
+                                      CommandParameter="{Binding SelectedItem}" />
+                            <Separator />
+                            <MenuItem Header="Open" Command="{Binding OpenFileCommand}"
+                                      CommandParameter="{Binding SelectedItem}" />
+                            <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"
+                                      CommandParameter="{Binding SelectedItem}" />
+                            <MenuItem Header="Show popup" Command="{Binding ShowPopupCommand}"
+                                      CommandParameter="{Binding SelectedItem}" />
+                            <Separator />
+                            <MenuItem Header="Change link..." Click="OnChangeUrl" />
+                            <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser" />
+                            <Separator />
+                            <MenuItem Header="Remove..." Click="OnRemoveSelected" />
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
+                    <DataGrid.Columns>
+                        <!-- Selection checkbox (header toggles all) -->
+                        <DataGridTemplateColumn Width="48" CanUserResize="False" CanUserReorder="False">
+                            <DataGridTemplateColumn.Header>
+                                <CheckBox Click="OnToggleSelectAll" Margin="6,0,0,0" />
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="vm:DownloadItemViewModel">
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="6,0,0,0"
+                                              VerticalAlignment="Center" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                    <!-- Name with app icon -->
-                    <DataGridTemplateColumn Header="Name" Width="*">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="vm:DownloadItemViewModel">
-                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                    <!-- The file's real shell icon (per extension, or the file's own
-                                         embedded icon once it exists); falls back to blank if none. -->
-                                    <Image Width="20" Height="20" VerticalAlignment="Center"
-                                           Source="{Binding DestinationPath, Converter={x:Static conv:FileIconConverter.Instance}}" />
-                                    <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+                        <!-- Name: real file icon + prominent filename over a muted size line -->
+                        <DataGridTemplateColumn Header="Name" Width="*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="vm:DownloadItemViewModel">
+                                    <StackPanel Orientation="Horizontal" Spacing="12"
+                                                VerticalAlignment="Center" Margin="6,0,0,0">
+                                        <!-- The file's real shell icon (per extension, or the file's
+                                             own embedded icon once it exists). -->
+                                        <Image Width="26" Height="26" VerticalAlignment="Center"
+                                               Source="{Binding DestinationPath, Converter={x:Static conv:FileIconConverter.Instance}}" />
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FileName}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding DownloadedText}" Classes="caption"
+                                                       Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="Status" Width="120"
-                                        Binding="{Binding StatusLabel}" x:DataType="vm:DownloadItemViewModel" />
-                    <DataGridTemplateColumn Header="Progress" Width="170">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="vm:DownloadItemViewModel">
-                                <Grid VerticalAlignment="Center">
-                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}"
-                                                 Height="6" />
-                                </Grid>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Size" Width="110"
-                                        Binding="{Binding SizeText}" x:DataType="vm:DownloadItemViewModel" />
-                    <DataGridTextColumn Header="Speed" Width="110"
-                                        Binding="{Binding SpeedText}" x:DataType="vm:DownloadItemViewModel" />
-                    <DataGridTextColumn Header="ETA" Width="90"
-                                        Binding="{Binding EtaText}" x:DataType="vm:DownloadItemViewModel" />
-                </DataGrid.Columns>
-            </DataGrid>
+                        <!-- Status pill -->
+                        <DataGridTemplateColumn Header="Status" Width="140">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="vm:DownloadItemViewModel">
+                                    <Border Classes="badge"
+                                            Background="{Binding Status, Converter={x:Static conv:StatusBrushConverter.Instance}, ConverterParameter=bg}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                                     Fill="{Binding Status, Converter={x:Static conv:StatusBrushConverter.Instance}}" />
+                                            <TextBlock Text="{Binding StatusLabel}"
+                                                       Foreground="{Binding Status, Converter={x:Static conv:StatusBrushConverter.Instance}}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-            <StackPanel IsVisible="{Binding IsListEmpty}"
-                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                <Image Width="56" Height="56" Opacity="0.5" HorizontalAlignment="Center"
-                       Source="{x:Static views:MainWindow.AppIcon}" />
-                <TextBlock Text="{Binding EmptyStateTitle}" FontSize="18" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" />
-                <TextBlock Text="{Binding EmptyStateHint}" Opacity="0.7"
-                           HorizontalAlignment="Center" />
-            </StackPanel>
+                        <!-- Progress bar + percent -->
+                        <DataGridTemplateColumn Header="Progress" Width="190">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="vm:DownloadItemViewModel">
+                                    <StackPanel VerticalAlignment="Center" Spacing="4" Margin="0,0,8,0">
+                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" />
+                                        <TextBlock Text="{Binding ProgressPercent, StringFormat='{}{0:0}%'}"
+                                                   Classes="caption" HorizontalAlignment="Right" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTextColumn Header="Size" Width="110"
+                                            Binding="{Binding SizeText}" x:DataType="vm:DownloadItemViewModel" />
+                        <DataGridTextColumn Header="Speed" Width="110"
+                                            Binding="{Binding SpeedText}" x:DataType="vm:DownloadItemViewModel" />
+                        <DataGridTextColumn Header="ETA" Width="90"
+                                            Binding="{Binding EtaText}" x:DataType="vm:DownloadItemViewModel" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <!-- Beautiful empty state -->
+            <Border Classes="card" IsVisible="{Binding IsListEmpty}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="48,40" MaxWidth="440">
+                <StackPanel HorizontalAlignment="Center" Spacing="14">
+                    <Border Width="88" Height="88" CornerRadius="24"
+                            Background="{DynamicResource AppAccentSubtleBrush}"
+                            HorizontalAlignment="Center">
+                        <Image Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Source="{x:Static views:MainWindow.AppIcon}" />
+                    </Border>
+                    <TextBlock Text="{Binding EmptyStateTitle}" Classes="h1"
+                               HorizontalAlignment="Center" TextAlignment="Center" />
+                    <TextBlock Text="{Binding EmptyStateHint}" Classes="secondary"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                    <Button Classes="brand" Click="OnAddDownload" HorizontalAlignment="Center"
+                            Margin="0,6,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="glyph" Text="&#xE710;" />
+                            <TextBlock Text="Add your first download" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
         </Grid>
     </DockPanel>
 </Window>

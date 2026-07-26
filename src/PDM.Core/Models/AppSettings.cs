@@ -42,6 +42,9 @@ public sealed class AppSettings
     /// <summary>Theme preference: "system", "light", or "dark".</summary>
     public string Theme { get; set; } = "system";
 
+    /// <summary>Accent colour id: "blue", "purple", "green", "orange", "pink", "red", or "teal".</summary>
+    public string AccentColor { get; set; } = "blue";
+
     /// <summary>Show desktop notifications on completion/failure.</summary>
     public bool ShowNotifications { get; set; } = true;
 

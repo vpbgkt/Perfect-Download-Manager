@@ -15,6 +15,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Themes shown in the appearance dropdown.</summary>
     public IReadOnlyList<string> Themes { get; } = new[] { "system", "light", "dark" };
 
+    /// <summary>Accent colour ids shown in the appearance picker.</summary>
+    public IReadOnlyList<string> AccentColors { get; } =
+        new[] { "blue", "purple", "green", "orange", "pink", "red", "teal" };
+
     private readonly AppSettings _live;
     private readonly JsonSettingsStore _store;
 
@@ -31,6 +35,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _userAgent = live.UserAgent ?? string.Empty;
         _proxyUrl = live.ProxyUrl ?? string.Empty;
         _theme = live.Theme;
+        _accentColor = string.IsNullOrWhiteSpace(live.AccentColor) ? "blue" : live.AccentColor;
         _showNotifications = live.ShowNotifications;
         _autoStartAddedDownloads = live.AutoStartAddedDownloads;
         _scheduleEnabled = !string.IsNullOrWhiteSpace(live.ScheduleStart) && !string.IsNullOrWhiteSpace(live.ScheduleEnd);
@@ -67,6 +72,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private string _theme = "system";
 
+    [ObservableProperty] private string _accentColor = "blue";
+
     [ObservableProperty] private bool _showNotifications;
 
     [ObservableProperty] private bool _autoStartAddedDownloads;
@@ -96,6 +103,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _live.UserAgent = string.IsNullOrWhiteSpace(UserAgent) ? null : UserAgent.Trim();
         _live.ProxyUrl = string.IsNullOrWhiteSpace(ProxyUrl) ? null : ProxyUrl.Trim();
         _live.Theme = Theme;
+        _live.AccentColor = AccentColor;
         _live.ShowNotifications = ShowNotifications;
         _live.AutoStartAddedDownloads = AutoStartAddedDownloads;
         _live.ScheduleStart = ScheduleEnabled ? ScheduleStart : null;
