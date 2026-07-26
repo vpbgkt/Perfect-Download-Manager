@@ -115,6 +115,9 @@ public sealed partial class DownloadItemViewModel : ObservableObject
             OnPropertyChanged(nameof(CanResume));
             OnPropertyChanged(nameof(FileName));
             OnPropertyChanged(nameof(SourceUrl));
+            // Re-resolve the row icon: once the file exists on disk it may carry its own embedded
+            // icon (e.g. an installer .exe) rather than the generic per-extension icon.
+            OnPropertyChanged(nameof(DestinationPath));
         }
 
         _dispatcher.Post(Raise);

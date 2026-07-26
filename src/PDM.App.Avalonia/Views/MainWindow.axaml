@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:PDM.App.ViewModels"
         xmlns:views="using:PDM.App.Avalonia.Views"
+        xmlns:conv="using:PDM.App.Avalonia.Converters"
         x:Class="PDM.App.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding AppTitle}"
@@ -183,8 +184,10 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="vm:DownloadItemViewModel">
                                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <!-- The file's real shell icon (per extension, or the file's own
+                                         embedded icon once it exists); falls back to blank if none. -->
                                     <Image Width="20" Height="20" VerticalAlignment="Center"
-                                           Source="{x:Static views:MainWindow.AppIcon}" />
+                                           Source="{Binding DestinationPath, Converter={x:Static conv:FileIconConverter.Instance}}" />
                                     <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
