@@ -87,6 +87,12 @@ public sealed class AppSettings
     /// </summary>
     public string? PreferredBrowserPath { get; set; }
 
+    /// <summary>
+    /// How many days before a time-limited license expires the main window begins showing the
+    /// expiration warning bar. Default 7; set to 0 to only warn on the final day.
+    /// </summary>
+    public int LicenseExpiryWarningDays { get; set; } = 7;
+
     /// <summary>Resolves the destination directory for the given category.</summary>
     public string ResolveCategoryFolder(DownloadCategory category)
     {

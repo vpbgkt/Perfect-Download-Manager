@@ -71,6 +71,28 @@
             </DockPanel>
         </Border>
 
+        <!-- ================= License expiration warning bar ================= -->
+        <!-- Shown only while the license banner is in a warning state (e.g. within the configured
+             expiry window). Clicking it opens the license details. -->
+        <Border DockPanel.Dock="Top" IsVisible="{Binding LicenseBanner.IsWarning}"
+                Background="{DynamicResource StatusWarningSubtleBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource AppDividerBrush}"
+                Padding="16,10">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Classes="glyph" Text="&#xE7BA;" FontSize="16"
+                           VerticalAlignment="Center" Margin="0,0,10,0"
+                           Foreground="{DynamicResource StatusWarningBrush}" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                    <TextBlock Text="{Binding LicenseBanner.StatusText}" FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                    <TextBlock Text="{Binding LicenseBanner.DetailText}" Classes="caption" />
+                </StackPanel>
+                <Button Grid.Column="2" Classes="brand" Click="OnOpenLicense"
+                        Content="{Binding LicenseBanner.ActionLabel}"
+                        IsVisible="{Binding LicenseBanner.IsActionVisible}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
         <!-- ================= Toolbar ================= -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource AppToolbarBackgroundBrush}"
@@ -80,12 +102,20 @@
 
                 <!-- Primary, frequently used actions -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Click="OnAddDownload" Classes="brand" ToolTip.Tip="Add a new download">
+                    <!-- Add download: primary click adds one; the dropdown holds Bulk add (mirrors the
+                         Open browser split-button pattern) so advanced adds stay one click away. -->
+                    <SplitButton Click="OnAddDownload" Classes="brand" ToolTip.Tip="Add a new download">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Classes="glyph" Text="&#xE710;" />
                             <TextBlock Text="Add download" VerticalAlignment="Center" />
                         </StackPanel>
-                    </Button>
+                        <SplitButton.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Add download..." Click="OnAddDownload" />
+                                <MenuItem Header="Bulk add..." Click="OnBulkAdd" />
+                            </MenuFlyout>
+                        </SplitButton.Flyout>
+                    </SplitButton>
 
                     <!-- Resume and Pause are mutually exclusive per the selected download's state. -->
                     <Button Command="{Binding ResumeCommand}" CommandParameter="{Binding SelectedItem}"
@@ -121,6 +151,15 @@
                             <TextBlock Text="Open browser" VerticalAlignment="Center" />
                         </StackPanel>
                     </SplitButton>
+
+                    <!-- One-click access to the folder where PDM saves downloads. -->
+                    <Button Classes="ghost" Click="OnOpenDownloadsFolder"
+                            ToolTip.Tip="Open the PDM downloads folder">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="glyph" Text="&#xE838;" />
+                            <TextBlock Text="Downloads folder" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <!-- Search -->
@@ -142,8 +181,6 @@
                     </StackPanel>
                     <Button.Flyout>
                         <MenuFlyout>
-                            <MenuItem Header="Bulk add..." Click="OnBulkAdd" />
-                            <Separator />
                             <MenuItem Header="Settings" Click="OnOpenSettings" />
                             <MenuItem Header="License" Click="OnOpenLicense" />
                             <MenuItem Header="Browser setup" Click="OnBrowserSetup" />

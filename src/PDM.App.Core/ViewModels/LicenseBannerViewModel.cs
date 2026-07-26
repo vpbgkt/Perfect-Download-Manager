@@ -73,20 +73,40 @@ public sealed partial class LicenseBannerViewModel : ObservableObject, IDisposab
                 }
             case LicenseStatus.Activated:
                 {
+                    string owner = string.IsNullOrEmpty(snap.Owner) ? "" : $" to {snap.Owner}";
                     if (snap.Remaining == TimeSpan.MaxValue)
                     {
-                        StatusText = "Licensed" + (string.IsNullOrEmpty(snap.Owner) ? "" : $" to {snap.Owner}");
+                        StatusText = "Licensed" + owner;
                         DetailText = "Perpetual license";
+                        IsWarning = false;
                     }
                     else
                     {
                         int days = Math.Max(0, (int)Math.Ceiling(snap.Remaining.TotalDays));
-                        StatusText = "Licensed" + (string.IsNullOrEmpty(snap.Owner) ? "" : $" to {snap.Owner}");
-                        DetailText = $"Renews / re-validates in {days} day{(days == 1 ? "" : "s")}";
+
+                        // Warn only once inside the configured window before expiry (Requirement:
+                        // "Your license will expire in X days"). Outside the window the banner stays
+                        // quiet and simply reports the renewal date.
+                        int warnWithin = Math.Max(0, _host.Settings.LicenseExpiryWarningDays);
+                        bool expiringSoon = days <= warnWithin;
+
+                        if (expiringSoon)
+                        {
+                            StatusText = days <= 0 ? "License expires today" : "License expiring soon";
+                            DetailText = days <= 0
+                                ? "Your license expires today. Renew now to keep using PDM."
+                                : $"Your license will expire in {days} day{(days == 1 ? "" : "s")}.";
+                        }
+                        else
+                        {
+                            StatusText = "Licensed" + owner;
+                            DetailText = $"Renews / re-validates in {days} day{(days == 1 ? "" : "s")}";
+                        }
+
+                        IsWarning = expiringSoon;
                     }
                     ActionLabel = "License details";
                     IsActionVisible = true;
-                    IsWarning = false;
                     break;
                 }
             case LicenseStatus.Expired:

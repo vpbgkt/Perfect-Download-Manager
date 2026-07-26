@@ -176,6 +176,28 @@ public partial class MainWindow : Window
 
     private void OnFilterChanged() => Dispatcher.UIThread.Post(() => _downloadsView.Refresh());
 
+    /// <summary>
+    /// Opens the folder where PDM saves downloads (Settings.DefaultDownloadDirectory, e.g.
+    /// %UserProfile%\Downloads\PDM) in Explorer. Creates it first so the very first click always
+    /// works even before anything has been downloaded.
+    /// </summary>
+    private void OnOpenDownloadsFolder(object? sender, RoutedEventArgs e)
+    {
+        string folder = App.Host?.Settings.DefaultDownloadDirectory
+            ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "PDM");
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            _notifier.ShowError("Downloads folder", "Could not open the PDM downloads folder.");
+        }
+    }
+
     // Expanded/collapsed widths for the sidebar. Collapsed shows icons only; the Border's
     // DoubleTransition animates between the two, and label visibility follows SidebarToggle.IsChecked.
     private const double SidebarExpandedWidth = 232;
