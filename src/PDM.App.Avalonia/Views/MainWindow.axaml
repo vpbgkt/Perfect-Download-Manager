@@ -115,12 +115,6 @@
                         <MenuFlyout>
                             <MenuItem Header="Bulk add..." Click="OnBulkAdd" />
                             <Separator />
-                            <MenuItem Header="Open" Click="OnMoreOpen" />
-                            <MenuItem Header="Show in folder" Click="OnMoreShowFolder" />
-                            <MenuItem Header="Show popup" Click="OnMoreShowPopup" />
-                            <MenuItem Header="Change link..." Click="OnChangeUrl" />
-                            <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser" />
-                            <Separator />
                             <MenuItem Header="Settings" Click="OnOpenSettings" />
                             <MenuItem Header="License" Click="OnOpenLicense" />
                             <MenuItem Header="Browser setup" Click="OnBrowserSetup" />
@@ -143,23 +137,29 @@
                           RowHeight="44"
                           CanUserReorderColumns="True"
                           CanUserResizeColumns="True"
-                          HeadersVisibility="Column">
+                          HeadersVisibility="Column"
+                          DoubleTapped="OnRowDoubleTapped">
                     <DataGrid.ContextMenu>
                         <ContextMenu x:DataType="vm:MainViewModel">
+                            <!-- Transfer actions appear only when they apply to the selected row:
+                                 Resume when paused/failed, Pause when active, and Refresh from
+                                 browser only while the download is not yet complete. -->
                             <MenuItem Header="Resume" Command="{Binding ResumeCommand}"
-                                      CommandParameter="{Binding SelectedItem}" />
+                                      CommandParameter="{Binding SelectedItem}"
+                                      IsVisible="{Binding SelectedItem.CanResume}" />
                             <MenuItem Header="Pause" Command="{Binding PauseCommand}"
-                                      CommandParameter="{Binding SelectedItem}" />
-                            <Separator />
+                                      CommandParameter="{Binding SelectedItem}"
+                                      IsVisible="{Binding SelectedItem.CanPause}" />
+                            <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser"
+                                      IsVisible="{Binding SelectedItem.CanRefreshLink}" />
+                            <Separator IsVisible="{Binding SelectedItem.CanRefreshLink}" />
                             <MenuItem Header="Open" Command="{Binding OpenFileCommand}"
                                       CommandParameter="{Binding SelectedItem}" />
                             <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"
                                       CommandParameter="{Binding SelectedItem}" />
                             <MenuItem Header="Show popup" Command="{Binding ShowPopupCommand}"
                                       CommandParameter="{Binding SelectedItem}" />
-                            <Separator />
                             <MenuItem Header="Change link..." Click="OnChangeUrl" />
-                            <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser" />
                             <Separator />
                             <MenuItem Header="Remove..." Click="OnRemoveSelected" />
                         </ContextMenu>

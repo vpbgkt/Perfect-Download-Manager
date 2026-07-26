@@ -3,6 +3,7 @@ using System.Linq;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -309,16 +310,14 @@ public partial class MainWindow : Window
         }
     }
 
-    // More-menu actions that operate on the focused row. Routed through code-behind (rather than
-    // command bindings inside the flyout) so DataContext resolution in the popup is never an issue.
-    private void OnMoreOpen(object? sender, RoutedEventArgs e) =>
-        _viewModel.OpenFileCommand.Execute(_viewModel.SelectedItem);
-
-    private void OnMoreShowFolder(object? sender, RoutedEventArgs e) =>
-        _viewModel.OpenFolderCommand.Execute(_viewModel.SelectedItem);
-
-    private void OnMoreShowPopup(object? sender, RoutedEventArgs e) =>
-        _viewModel.ShowPopupCommand.Execute(_viewModel.SelectedItem);
+    /// <summary>Double-clicking a download row opens the file (matches everyday desktop behaviour).</summary>
+    private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (_viewModel.SelectedItem is { } item && _viewModel.OpenFileCommand.CanExecute(item))
+        {
+            _viewModel.OpenFileCommand.Execute(item);
+        }
+    }
 
     /// <summary>Opens the bulk-add dialog and queues every valid URL the user pasted.</summary>
     private async void OnBulkAdd(object? sender, RoutedEventArgs e)

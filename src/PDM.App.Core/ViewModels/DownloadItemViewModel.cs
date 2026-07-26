@@ -101,6 +101,12 @@ public sealed partial class DownloadItemViewModel : ObservableObject
     public bool CanPause =>
         Status is DownloadStatus.Downloading or DownloadStatus.Connecting or DownloadStatus.Queued;
 
+    /// <summary>
+    /// True while re-linking the download from the browser still makes sense (i.e. it has not yet
+    /// completed). Drives the "Refresh from browser" context-menu item's visibility.
+    /// </summary>
+    public bool CanRefreshLink => Status != DownloadStatus.Completed;
+
     /// <summary>Marshals a full-refresh notification to the UI thread.</summary>
     public void NotifyAll()
     {
@@ -116,6 +122,7 @@ public sealed partial class DownloadItemViewModel : ObservableObject
             OnPropertyChanged(nameof(ConnectionsText));
             OnPropertyChanged(nameof(CanPause));
             OnPropertyChanged(nameof(CanResume));
+            OnPropertyChanged(nameof(CanRefreshLink));
             OnPropertyChanged(nameof(FileName));
             OnPropertyChanged(nameof(SourceUrl));
             // Re-resolve the row icon: once the file exists on disk it may carry its own embedded
