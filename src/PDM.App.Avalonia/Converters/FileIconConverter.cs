@@ -38,11 +38,16 @@ public sealed class FileIconConverter : IValueConverter
             return null;
         }
 
+        // "large" requests the 32px popup-header icon; anything else is the 16px list-row icon.
+        bool large = parameter is string p &&
+            string.Equals(p, "large", StringComparison.OrdinalIgnoreCase);
+        string sizePrefix = large ? "L:" : "S:";
+
         // Existing files may have a per-file icon (embedded .exe icon); otherwise the icon depends
         // only on the extension. Mirror the provider's own cache keying.
-        string key = File.Exists(path)
+        string key = sizePrefix + (File.Exists(path)
             ? path
-            : Path.GetExtension(path) is { Length: > 0 } ext ? ext.ToLowerInvariant() : "\x00noext";
+            : Path.GetExtension(path) is { Length: > 0 } ext ? ext.ToLowerInvariant() : "\x00noext");
 
         lock (Gate)
         {
@@ -51,7 +56,7 @@ public sealed class FileIconConverter : IValueConverter
                 return cached;
             }
 
-            Bitmap? bitmap = BuildBitmap(Provider.GetIcon(path));
+            Bitmap? bitmap = BuildBitmap(Provider.GetIcon(path, large));
             BitmapCache[key] = bitmap;
             return bitmap;
         }

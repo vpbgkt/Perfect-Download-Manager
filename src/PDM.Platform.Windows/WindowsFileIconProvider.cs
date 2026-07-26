@@ -18,17 +18,26 @@ public sealed class WindowsFileIconProvider : IFileIconProvider
 {
     private const uint SHGFI_ICON = 0x000000100;
     private const uint SHGFI_SMALLICON = 0x000000001;
+    private const uint SHGFI_LARGEICON = 0x000000000;
     private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
     private const int DIB_RGB_COLORS = 0;
     private const int BI_RGB = 0;
 
-    // FileIcon? cached so a "no icon" result is remembered too (avoids re-querying the shell).
+    // FileIcon? cached so a "no icon" result is remembered too (avoids re-querying the shell). The
+    // key is size-prefixed so the small (list) and large (popup) icons for the same file coexist.
     private static readonly ConcurrentDictionary<string, FileIcon?> Cache =
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
-    public FileIcon? GetIcon(string filePath)
+    public FileIcon? GetIcon(string filePath) => GetIcon(filePath, large: false);
+
+    /// <summary>
+    /// Returns the file's icon at the requested size: the small (16px) shell icon for list rows, or
+    /// the large (32px) icon for the premium popup header. Same resolution + caching rules as
+    /// <see cref="GetIcon(string)"/>.
+    /// </summary>
+    public FileIcon? GetIcon(string filePath, bool large)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -39,9 +48,10 @@ public sealed class WindowsFileIconProvider : IFileIconProvider
 
         // Existing files can carry a per-file icon (e.g. an .exe's embedded icon), so key on the full
         // path; for not-yet-downloaded files the icon only depends on the extension.
-        string cacheKey = exists ? filePath : GetExtensionKey(filePath);
+        string sizePrefix = large ? "L:" : "S:";
+        string cacheKey = sizePrefix + (exists ? filePath : GetExtensionKey(filePath));
 
-        return Cache.GetOrAdd(cacheKey, _ => Resolve(filePath, exists));
+        return Cache.GetOrAdd(cacheKey, _ => Resolve(filePath, exists, large));
     }
 
     private static string GetExtensionKey(string filePath)
@@ -50,9 +60,9 @@ public sealed class WindowsFileIconProvider : IFileIconProvider
         return string.IsNullOrEmpty(ext) ? "\x00noext" : ext.ToLowerInvariant();
     }
 
-    private static FileIcon? Resolve(string filePath, bool exists)
+    private static FileIcon? Resolve(string filePath, bool exists, bool large)
     {
-        uint flags = SHGFI_ICON | SHGFI_SMALLICON;
+        uint flags = SHGFI_ICON | (large ? SHGFI_LARGEICON : SHGFI_SMALLICON);
         uint attributes = 0;
         if (!exists)
         {

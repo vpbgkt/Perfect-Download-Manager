@@ -27,25 +27,33 @@
             </Border.Transitions>
             <DockPanel Margin="8,12,8,12">
 
-                <!-- Brand + collapse toggle -->
-                <Grid DockPanel.Dock="Top" Margin="4,0,4,16" ColumnDefinitions="Auto,*,Auto">
-                    <Image Grid.Column="0" Width="26" Height="26" VerticalAlignment="Center"
+                <!-- Header: collapse toggle in front of the LIBRARY heading. The heading hides while
+                     collapsed, leaving just the toggle so the user can expand again. -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8"
+                            VerticalAlignment="Center" Margin="4,0,4,12">
+                    <ToggleButton x:Name="SidebarToggle" Classes="ghost"
+                                  Click="OnToggleSidebar" VerticalAlignment="Center"
+                                  Padding="8" ToolTip.Tip="Collapse or expand the sidebar">
+                        <TextBlock Classes="glyph" Text="&#xE700;" FontSize="16" />
+                    </ToggleButton>
+                    <TextBlock Text="LIBRARY" FontWeight="Bold" FontSize="15"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource AppTextPrimaryBrush}"
+                               IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
+                </StackPanel>
+
+                <!-- Brand pinned to the bottom; text hides when collapsed, leaving the logo only. -->
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10"
+                            Margin="6,12,6,2" VerticalAlignment="Center">
+                    <Image Width="26" Height="26" VerticalAlignment="Center"
                            Source="{x:Static views:MainWindow.AppIcon}" />
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0"
+                    <StackPanel VerticalAlignment="Center"
                                 IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
                         <TextBlock Text="Perfect" FontWeight="Bold" FontSize="14"
                                    Foreground="{DynamicResource AppTextPrimaryBrush}" />
                         <TextBlock Text="Download Manager" Classes="caption" Margin="0,-2,0,0" />
                     </StackPanel>
-                    <ToggleButton Grid.Column="2" x:Name="SidebarToggle" Classes="ghost"
-                                  Click="OnToggleSidebar" VerticalAlignment="Center"
-                                  Padding="8" ToolTip.Tip="Collapse or expand the sidebar">
-                        <TextBlock Classes="glyph" Text="&#xE700;" FontSize="15" />
-                    </ToggleButton>
-                </Grid>
-
-                <TextBlock DockPanel.Dock="Top" Classes="section" Text="LIBRARY" Margin="10,0,0,6"
-                           IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
+                </StackPanel>
 
                 <ListBox Classes="categories" ItemsSource="{Binding Categories}"
                          SelectedItem="{Binding SelectedCategory}">

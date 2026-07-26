@@ -88,6 +88,39 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// <summary>Stable identifier of the bound download (one-to-one popup binding, Requirement 1.3).</summary>
     public Guid Id => _managed.Id;
 
+    /// <summary>
+    /// Destination path on disk, used by the head to render the file's real shell icon (a game or
+    /// installer .exe shows its own icon, a .zip shows the archive icon, and so on).
+    /// </summary>
+    public string DestinationPath => _managed.State.DestinationPath;
+
+    // ---------------------------------------------------------------------
+    // Post-download options (premium "when done" actions).
+    // These are user intents captured while the transfer runs; the head acts
+    // on them once the Completed event fires (open the file, and/or run a
+    // cancellable shutdown countdown). Kept as plain bindable flags so the
+    // shared VM carries no OS/UI dependency.
+    // ---------------------------------------------------------------------
+
+    /// <summary>When true, the head opens the finished file automatically once the download completes.</summary>
+    [ObservableProperty]
+    private bool _autoOpenOnComplete;
+
+    /// <summary>
+    /// When true, the head starts a short, cancellable shutdown countdown once the download completes.
+    /// </summary>
+    [ObservableProperty]
+    private bool _shutdownWhenDone;
+
+    /// <summary>Guards <see cref="Completed"/> so the "when done" actions run exactly once.</summary>
+    private bool _completionSignaled;
+
+    /// <summary>
+    /// Raised exactly once, on the UI thread, when the download first reaches the Completed state.
+    /// The head subscribes to run the post-download options (auto-open / shutdown countdown).
+    /// </summary>
+    public event Action? Completed;
+
     /// <summary>Current lifecycle status of the bound download.</summary>
     public DownloadStatus Status => _managed.State.Status;
 
@@ -341,6 +374,14 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(ProgressPercent));
         OnPropertyChanged(nameof(IsIndeterminate));
         OnPropertyChanged(nameof(SpeedText));
+
+        // Fire the one-shot completion signal so the head can run the "when done" options. Callers
+        // already marshal NotifyStatusChanged onto the UI thread, so subscribers run there too.
+        if (IsCompleted && !_completionSignaled)
+        {
+            _completionSignaled = true;
+            Completed?.Invoke();
+        }
     }
 
     // ---------------------------------------------------------------------
