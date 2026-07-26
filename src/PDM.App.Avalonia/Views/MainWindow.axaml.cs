@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using PDM.App.Avalonia.Converters;
 using PDM.App.Avalonia.Services;
 using PDM.App.Services;
 using PDM.App.ViewModels;
@@ -85,6 +86,14 @@ public partial class MainWindow : Window
             {
                 DetectedBrowser captured = browser;
                 var item = new MenuItem { Header = captured.DisplayName };
+
+                // Show each browser's own icon (Chrome, Edge, Firefox, ...) for instant recognition.
+                if (FileIconConverter.Instance.Convert(captured.ExecutablePath, typeof(Bitmap), null,
+                        System.Globalization.CultureInfo.InvariantCulture) is Bitmap icon)
+                {
+                    item.Icon = new Image { Source = icon, Width = 18, Height = 18 };
+                }
+
                 item.Click += (_, _) => OpenBrowser(captured);
                 menu.Items.Add(item);
             }
