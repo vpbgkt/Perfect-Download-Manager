@@ -33,7 +33,7 @@
             <Button Content="Close" MinWidth="96" Click="OnClose" IsCancel="True" />
             <Button Content="Deactivate" MinWidth="120" Classes="danger"
                     Command="{Binding DeactivateCommand}" IsVisible="{Binding IsActivated}" />
-            <Button Content="Activate" MinWidth="120" Classes="accent" IsDefault="True"
+            <Button Content="Activate" MinWidth="120" Classes="brand" IsDefault="True"
                     Command="{Binding ActivateCommand}" IsVisible="{Binding !IsActivated}" />
         </StackPanel>
     </StackPanel>

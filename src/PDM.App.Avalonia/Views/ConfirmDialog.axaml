@@ -9,7 +9,7 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
             <Button x:Name="NoButton" Content="No" Click="OnNo" MinWidth="84" IsCancel="True" />
             <Button x:Name="YesButton" Content="Yes" Click="OnYes" MinWidth="84"
-                    IsDefault="True" Classes="accent" />
+                    IsDefault="True" Classes="brand" />
         </StackPanel>
     </StackPanel>
 </Window>

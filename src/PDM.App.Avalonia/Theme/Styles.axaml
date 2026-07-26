@@ -113,6 +113,27 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
+    <!-- Destructive button: filled red, for irreversible actions (delete / deactivate). -->
+    <Style Selector="Button.danger /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource StatusErrorBrush}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.14" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource StatusErrorBrush}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Setter Property="Opacity" Value="0.88" />
+    </Style>
+    <Style Selector="Button.danger">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <!-- Quiet toolbar/icon button: transparent until hovered. -->
     <Style Selector="Button.ghost /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />

@@ -13,7 +13,7 @@
             <TextBlock x:Name="StatusText" Foreground="#E38B00" VerticalAlignment="Center"
                        Margin="0,0,8,0" TextWrapping="Wrap" />
             <Button Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
-            <Button Content="Add" MinWidth="90" Click="OnOk" IsDefault="True" Classes="accent" />
+            <Button Content="Add" MinWidth="90" Click="OnOk" IsDefault="True" Classes="brand" />
         </StackPanel>
 
         <TextBox x:Name="UrlsBox" AcceptsReturn="True" TextWrapping="NoWrap"

@@ -10,7 +10,7 @@
         <CheckBox x:Name="DeleteFilesCheck" Content="Also delete the downloaded file from disk" IsChecked="True" />
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
             <Button Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
-            <Button Content="Remove" MinWidth="90" Click="OnConfirm" IsDefault="True" Classes="accent" />
+            <Button Content="Remove" MinWidth="90" Click="OnConfirm" IsDefault="True" Classes="danger" />
         </StackPanel>
     </StackPanel>
 </Window>

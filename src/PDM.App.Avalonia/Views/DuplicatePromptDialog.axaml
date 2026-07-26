@@ -9,7 +9,7 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
             <Button x:Name="CancelButton" Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
             <Button x:Name="SecondaryButton" MinWidth="120" Click="OnSecondary" />
-            <Button x:Name="PrimaryButton" MinWidth="120" Click="OnPrimary" IsDefault="True" Classes="accent" />
+            <Button x:Name="PrimaryButton" MinWidth="120" Click="OnPrimary" IsDefault="True" Classes="brand" />
         </StackPanel>
     </StackPanel>
 </Window>

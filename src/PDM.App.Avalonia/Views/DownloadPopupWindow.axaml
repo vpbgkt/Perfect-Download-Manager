@@ -4,54 +4,85 @@
         x:Class="PDM.App.Avalonia.Views.DownloadPopupWindow"
         x:DataType="vm:DownloadPopupViewModel"
         Title="{Binding FileNameDisplay}"
-        Width="460" Height="300"
-        MinWidth="380" MinHeight="260"
-        WindowStartupLocation="CenterScreen">
+        Width="480" Height="320"
+        MinWidth="420" MinHeight="300"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppWindowBackgroundBrush}">
 
-    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <Border Classes="card" Margin="16">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
 
-        <!-- Identity -->
-        <TextBlock Grid.Row="0" Text="{Binding FileNameDisplay}"
-                   FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-        <TextBlock Grid.Row="1" Text="{Binding SourceUrlDisplay}" Opacity="0.7"
-                   TextTrimming="CharacterEllipsis" Margin="0,2,0,10" />
+            <!-- Identity -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="14">
+                <Border Width="44" Height="44" CornerRadius="12"
+                        Background="{DynamicResource AppAccentSubtleBrush}">
+                    <TextBlock Classes="glyph" Text="&#xE896;" FontSize="20"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{DynamicResource AppAccentBrush}" />
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <TextBlock Text="{Binding FileNameDisplay}" Classes="h2"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding SourceUrlDisplay}" Classes="caption"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </StackPanel>
 
-        <!-- Progress -->
-        <ProgressBar Grid.Row="2" Minimum="0" Maximum="100"
-                     Value="{Binding ProgressPercent}"
-                     IsIndeterminate="{Binding IsIndeterminate}"
-                     Height="10" />
+            <!-- Progress -->
+            <StackPanel Grid.Row="1" Spacing="6" Margin="0,18,0,0">
+                <ProgressBar Minimum="0" Maximum="100"
+                             Value="{Binding ProgressPercent}"
+                             IsIndeterminate="{Binding IsIndeterminate}"
+                             MinHeight="8" />
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="{Binding StatusLabel}" FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                    <TextBlock Grid.Column="1" Text="{Binding ProgressPercent, StringFormat='{}{0:0}%'}"
+                               Classes="caption" HorizontalAlignment="Right" />
+                </Grid>
+            </StackPanel>
 
-        <!-- Status + live metrics -->
-        <Grid Grid.Row="3" Margin="0,10,0,0" ColumnDefinitions="Auto,*">
-            <TextBlock Grid.Column="0" Text="{Binding StatusLabel}" FontWeight="SemiBold" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14"
-                        HorizontalAlignment="Right" IsVisible="{Binding ShowLiveMetrics}">
-                <TextBlock Text="{Binding DownloadedText}" />
-                <TextBlock Text="{Binding SpeedText}" />
-                <TextBlock Text="{Binding EtaText}" />
-                <TextBlock Text="{Binding ConnectionsText}" />
+            <!-- Live metrics -->
+            <Grid Grid.Row="2" Margin="0,16,0,0" ColumnDefinitions="*,*,*,*"
+                  IsVisible="{Binding ShowLiveMetrics}">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Classes="section" Text="TRANSFERRED" />
+                    <TextBlock Text="{Binding DownloadedText}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Classes="section" Text="SPEED" />
+                    <TextBlock Text="{Binding SpeedText}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="2">
+                    <TextBlock Classes="section" Text="ETA" />
+                    <TextBlock Text="{Binding EtaText}" />
+                </StackPanel>
+                <StackPanel Grid.Column="3" Spacing="2">
+                    <TextBlock Classes="section" Text="LINKS" />
+                    <TextBlock Text="{Binding ConnectionsText}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Failure detail -->
+            <SelectableTextBlock Grid.Row="3" Text="{Binding FailureMessage}"
+                                 IsVisible="{Binding IsFailed}" TextWrapping="Wrap"
+                                 VerticalAlignment="Top"
+                                 Foreground="{DynamicResource StatusErrorBrush}" Margin="0,14,0,0" />
+
+            <!-- Controls -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
+                        IsVisible="{Binding CanOpenFolder}" />
+                <Button Content="Pause" Command="{Binding PauseCommand}"
+                        IsEnabled="{Binding CanPause}" />
+                <Button Content="Cancel" Command="{Binding CancelCommand}"
+                        IsEnabled="{Binding CanCancel}" />
+                <Button Content="Resume" Command="{Binding ResumeCommand}"
+                        IsEnabled="{Binding CanResume}" Classes="brand" />
+                <Button Content="Open" Command="{Binding OpenFileCommand}"
+                        IsVisible="{Binding CanOpenFile}" Classes="brand" />
             </StackPanel>
         </Grid>
-
-        <!-- Failure detail -->
-        <SelectableTextBlock Grid.Row="4" Text="{Binding FailureMessage}"
-                             IsVisible="{Binding IsFailed}" TextWrapping="Wrap"
-                             Foreground="{DynamicResource SystemErrorTextColor}" Margin="0,10,0,0" />
-
-        <!-- Controls -->
-        <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="8"
-                    HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Open" Command="{Binding OpenFileCommand}"
-                    IsVisible="{Binding CanOpenFile}" />
-            <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
-                    IsVisible="{Binding CanOpenFolder}" />
-            <Button Content="Resume" Command="{Binding ResumeCommand}"
-                    IsEnabled="{Binding CanResume}" />
-            <Button Content="Pause" Command="{Binding PauseCommand}"
-                    IsEnabled="{Binding CanPause}" />
-            <Button Content="Cancel" Command="{Binding CancelCommand}"
-                    IsEnabled="{Binding CanCancel}" />
-        </StackPanel>
-    </Grid>
+    </Border>
 </Window>

@@ -27,9 +27,9 @@
                 <Button Content="Download and install" MinWidth="160"
                         Command="{Binding DownloadCommand}"
                         IsEnabled="{Binding !IsDownloading}" IsVisible="{Binding !IsComplete}"
-                        Classes="accent" />
+                        Classes="brand" />
                 <Button Content="Restart now" MinWidth="120" Click="OnRestart"
-                        IsVisible="{Binding IsComplete}" Classes="accent" />
+                        IsVisible="{Binding IsComplete}" Classes="brand" />
             </StackPanel>
         </StackPanel>
 
