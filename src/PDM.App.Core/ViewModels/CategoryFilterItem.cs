@@ -15,11 +15,40 @@ public sealed class CategoryFilterItem
     /// <summary>Display label shown in the sidebar.</summary>
     public required string Label { get; init; }
 
+    /// <summary>
+    /// Segoe Fluent / MDL2 glyph shown beside the label so the sidebar stays recognizable when
+    /// collapsed to icons only. UI-agnostic (just a string) so the shared VM carries no toolkit types.
+    /// </summary>
+    public required string Glyph { get; init; }
+
     /// <summary>True when this entry represents the unfiltered "All" view.</summary>
     public bool IsAll => Category is null;
 
-    public static CategoryFilterItem All => new() { Category = null, Label = "All Downloads" };
+    public static CategoryFilterItem All =>
+        new() { Category = null, Label = "All Downloads", Glyph = "\uE71D" };
 
     public static CategoryFilterItem For(DownloadCategory category) =>
-        new() { Category = category, Label = category.ToString() };
+        new() { Category = category, Label = LabelFor(category), Glyph = GlyphFor(category) };
+
+    private static string LabelFor(DownloadCategory category) => category switch
+    {
+        DownloadCategory.General => "General",
+        DownloadCategory.Documents => "Documents",
+        DownloadCategory.Compressed => "Compressed",
+        DownloadCategory.Music => "Music",
+        DownloadCategory.Video => "Video",
+        DownloadCategory.Programs => "Programs",
+        _ => category.ToString()
+    };
+
+    private static string GlyphFor(DownloadCategory category) => category switch
+    {
+        DownloadCategory.General => "\uE8B7",     // folder
+        DownloadCategory.Documents => "\uE8A5",   // document
+        DownloadCategory.Compressed => "\uE7B8",  // zip/archive
+        DownloadCategory.Music => "\uE8D6",       // music note
+        DownloadCategory.Video => "\uE714",       // video
+        DownloadCategory.Programs => "\uE977",    // app / installer
+        _ => "\uE8B7"
+    };
 }

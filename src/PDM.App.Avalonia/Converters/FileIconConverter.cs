@@ -1,8 +1,13 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
+using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using PDM.Platform;
 using PDM.Platform.Windows;
 
 namespace PDM.App.Avalonia.Converters;
@@ -10,9 +15,9 @@ namespace PDM.App.Avalonia.Converters;
 /// <summary>
 /// Binding converter that turns a download's destination path into the file's real Windows shell
 /// icon (a game/installer .exe shows its own icon, a .zip shows the archive icon, and so on) instead
-/// of a generic app logo. The platform provider hands back PNG bytes; this converter decodes them to
-/// an Avalonia <see cref="Bitmap"/> and caches by the same key so each icon is decoded once.
-/// Returns null when no icon is available, which simply leaves the row image blank.
+/// of a generic app logo. The platform provider hands back raw BGRA pixels; this converter builds an
+/// Avalonia <see cref="WriteableBitmap"/> once per key and caches it (no image-encode round-trip, and
+/// NativeAOT-safe). Returns null when no icon is available, which simply leaves the row image blank.
 /// </summary>
 public sealed class FileIconConverter : IValueConverter
 {
@@ -46,17 +51,32 @@ public sealed class FileIconConverter : IValueConverter
                 return cached;
             }
 
-            Bitmap? bitmap = null;
-            byte[]? png = Provider.GetIconPng(path);
-            if (png is { Length: > 0 })
-            {
-                using var stream = new MemoryStream(png);
-                bitmap = new Bitmap(stream);
-            }
-
+            Bitmap? bitmap = BuildBitmap(Provider.GetIcon(path));
             BitmapCache[key] = bitmap;
             return bitmap;
         }
+    }
+
+    private static Bitmap? BuildBitmap(FileIcon? icon)
+    {
+        if (icon is null || icon.Width <= 0 || icon.Height <= 0 ||
+            icon.Bgra.Length < icon.Width * icon.Height * 4)
+        {
+            return null;
+        }
+
+        var writeable = new WriteableBitmap(
+            new PixelSize(icon.Width, icon.Height),
+            new Vector(96, 96),
+            PixelFormat.Bgra8888,
+            AlphaFormat.Unpremul);
+
+        using (ILockedFramebuffer fb = writeable.Lock())
+        {
+            Marshal.Copy(icon.Bgra, 0, fb.Address, icon.Width * icon.Height * 4);
+        }
+
+        return writeable;
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>

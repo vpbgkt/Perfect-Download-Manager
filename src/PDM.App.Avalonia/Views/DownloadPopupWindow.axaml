@@ -74,8 +74,13 @@
                         HorizontalAlignment="Right" Margin="0,16,0,0">
                 <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
                         IsVisible="{Binding CanOpenFolder}" />
+
+                <!-- Cancel only while the transfer is still running; once it reaches a terminal
+                     state it is replaced by Close, which just dismisses the popup. -->
                 <Button Content="Cancel" Command="{Binding CancelCommand}"
-                        IsEnabled="{Binding CanCancel}" />
+                        IsVisible="{Binding CanCancel}" />
+                <Button Content="Close" Click="OnCloseClick"
+                        IsVisible="{Binding IsTerminal}" />
 
                 <!-- Single Pause/Resume slot: only the action valid for the current state shows, so
                      pausing swaps the button to Resume in the same place. -->

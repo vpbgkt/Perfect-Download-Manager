@@ -176,6 +176,15 @@ public partial class MainWindow : Window
 
     private void OnFilterChanged() => Dispatcher.UIThread.Post(() => _downloadsView.Refresh());
 
+    // Expanded/collapsed widths for the sidebar. Collapsed shows icons only; the Border's
+    // DoubleTransition animates between the two, and label visibility follows SidebarToggle.IsChecked.
+    private const double SidebarExpandedWidth = 232;
+    private const double SidebarCollapsedWidth = 60;
+
+    /// <summary>Toggle button: collapse the sidebar to icons only, or expand it back to icons + labels.</summary>
+    private void OnToggleSidebar(object? sender, RoutedEventArgs e) =>
+        Sidebar.Width = SidebarToggle.IsChecked == true ? SidebarCollapsedWidth : SidebarExpandedWidth;
+
     /// <summary>Opens the Add dialog and runs the add flow (duplicate detection + web-page guard).</summary>
     private async void OnAddDownload(object? sender, RoutedEventArgs e)
     {

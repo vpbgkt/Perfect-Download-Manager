@@ -66,6 +66,12 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
 
     // IDownloadPopup.Close() is satisfied by the inherited Window.Close().
 
+    /// <summary>
+    /// "Close" button (shown once the download has finished): dismisses the popup without touching the
+    /// completed file or the transfer. OnClosed then notifies the manager so it can be reopened later.
+    /// </summary>
+    private void OnCloseClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => Close();
+
     protected override void OnClosed(EventArgs e)
     {
         // Closing is a pure window-lifecycle event: it never pauses/cancels the download or interrupts
