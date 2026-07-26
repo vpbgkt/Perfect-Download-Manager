@@ -1,8 +1,11 @@
 using System.Diagnostics;
+using System.Linq;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using PDM.App.Avalonia.Services;
 using PDM.App.Services;
@@ -18,6 +21,10 @@ namespace PDM.App.Avalonia.Views;
 /// </summary>
 public partial class MainWindow : Window
 {
+    /// <summary>App icon shown next to each download row. Loaded once and shared across all rows.</summary>
+    public static Bitmap AppIcon { get; } =
+        new Bitmap(AssetLoader.Open(new Uri("avares://PDM/Assets/pdm-logo.png")));
+
     private readonly MainViewModel _viewModel;
     private readonly AvaloniaNotifier _notifier;
     private readonly DataGridCollectionView _downloadsView;
@@ -125,13 +132,75 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dialog = new DeleteConfirmationDialog(item.FileName);
+        var dialog = new DeleteConfirmationDialog($"Remove \"{item.FileName}\" from the list?");
         bool confirmed = await dialog.ShowDialog<bool>(this).ConfigureAwait(true);
         if (confirmed)
         {
             await _viewModel.PerformDeleteAsync(item, dialog.DeleteFiles).ConfigureAwait(true);
         }
     }
+
+    /// <summary>
+    /// Removes every checked download (bulk), falling back to the focused row when nothing is checked.
+    /// A single confirmation covers the whole set, with the "also delete files" choice.
+    /// </summary>
+    private async void OnDeleteSelected(object? sender, RoutedEventArgs e)
+    {
+        var selected = _viewModel.Items.Where(i => i.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            if (_viewModel.SelectedItem is { } focused)
+            {
+                selected.Add(focused);
+            }
+            else
+            {
+                _notifier.ShowInfo("Delete", "Tick one or more downloads first.");
+                return;
+            }
+        }
+
+        string message = selected.Count == 1
+            ? $"Remove \"{selected[0].FileName}\" from the list?"
+            : $"Remove {selected.Count} selected downloads from the list?";
+
+        var dialog = new DeleteConfirmationDialog(message);
+        bool confirmed = await dialog.ShowDialog<bool>(this).ConfigureAwait(true);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        bool deleteFiles = dialog.DeleteFiles;
+        foreach (DownloadItemViewModel item in selected)
+        {
+            await _viewModel.PerformDeleteAsync(item, deleteFiles).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Header checkbox: selects or clears every row's selection checkbox.</summary>
+    private void OnToggleSelectAll(object? sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox checkBox)
+        {
+            bool value = checkBox.IsChecked == true;
+            foreach (DownloadItemViewModel item in _viewModel.Items)
+            {
+                item.IsSelected = value;
+            }
+        }
+    }
+
+    // More-menu actions that operate on the focused row. Routed through code-behind (rather than
+    // command bindings inside the flyout) so DataContext resolution in the popup is never an issue.
+    private void OnMoreOpen(object? sender, RoutedEventArgs e) =>
+        _viewModel.OpenFileCommand.Execute(_viewModel.SelectedItem);
+
+    private void OnMoreShowFolder(object? sender, RoutedEventArgs e) =>
+        _viewModel.OpenFolderCommand.Execute(_viewModel.SelectedItem);
+
+    private void OnMoreShowPopup(object? sender, RoutedEventArgs e) =>
+        _viewModel.ShowPopupCommand.Execute(_viewModel.SelectedItem);
 
     /// <summary>Opens the bulk-add dialog and queues every valid URL the user pasted.</summary>
     private async void OnBulkAdd(object? sender, RoutedEventArgs e)

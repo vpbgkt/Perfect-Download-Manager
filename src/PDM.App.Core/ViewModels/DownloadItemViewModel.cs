@@ -20,6 +20,13 @@ public sealed partial class DownloadItemViewModel : ObservableObject
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
+    /// <summary>
+    /// Whether this row's selection checkbox is ticked, for multi-select bulk actions (e.g. deleting
+    /// several downloads at once). Independent of the grid's single "focused row" selection.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSelected;
+
     /// <summary>Underlying managed download.</summary>
     public ManagedDownload Managed => _managed;
 

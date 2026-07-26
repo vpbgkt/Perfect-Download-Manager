@@ -92,8 +92,11 @@
 
                 <TextBlock Text="Appearance" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,4" />
                 <TextBlock Text="Theme" />
-                <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
+                <ComboBox x:Name="ThemeCombo" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
+                          SelectionChanged="OnThemeChanged"
                           MinWidth="220" HorizontalAlignment="Left" />
+                <TextBlock Text="Choose Light or Dark, or System to follow Windows. Changes preview instantly."
+                           Opacity="0.6" FontSize="12" />
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

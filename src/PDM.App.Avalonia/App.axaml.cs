@@ -58,6 +58,9 @@ public partial class App : Application
             var licenseStore = new DpapiLicenseStore(AppPaths.LicenseFile);
             Host = AppHost.CreateAsync(notifier, licenseStore).GetAwaiter().GetResult();
 
+            // Apply the saved theme preference at startup (light/dark/system).
+            ThemeApplier.Apply(Host.Settings.Theme);
+
             var mainViewModel = new MainViewModel(Host, dispatcher);
             _popupManager = BuildPopupManager(Host, notifier, dispatcher);
             _popupManager.Start();

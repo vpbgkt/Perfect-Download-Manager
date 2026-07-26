@@ -1,67 +1,103 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:PDM.App.ViewModels"
+        xmlns:views="using:PDM.App.Avalonia.Views"
         x:Class="PDM.App.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding AppTitle}"
-        Width="1000" Height="640"
-        MinWidth="720" MinHeight="420">
+        Width="1040" Height="660"
+        MinWidth="760" MinHeight="460">
+
+    <Window.Styles>
+        <!-- Toolbar buttons: compact, quiet chrome that reads well in both light and dark. -->
+        <Style Selector="Border.toolbar">
+            <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorSecondaryBrush}" />
+            <Setter Property="Padding" Value="14,10" />
+        </Style>
+        <Style Selector="Border.sidebar">
+            <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+        <!-- Category rows: comfortable spacing + rounded selection. -->
+        <Style Selector="ListBox.categories ListBoxItem">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Margin" Value="0,1" />
+        </Style>
+        <Style Selector="DataGrid#DownloadsGrid">
+            <Setter Property="RowHeight" Value="44" />
+        </Style>
+    </Window.Styles>
 
     <DockPanel>
 
-        <!-- Toolbar -->
-        <Border DockPanel.Dock="Top" Padding="12,8" Background="{DynamicResource SystemChromeLowColor}">
-            <Grid ColumnDefinitions="Auto,*,220">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                    <Button Content="Add" Click="OnAddDownload" />
-                    <Button Content="Bulk add" Click="OnBulkAdd" />
+        <!-- ================= Toolbar ================= -->
+        <Border DockPanel.Dock="Top" Classes="toolbar" BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+
+                <!-- Primary, frequently used actions -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Content="Add download" Click="OnAddDownload" Classes="accent" />
                     <Button Content="Resume" Command="{Binding ResumeCommand}"
                             CommandParameter="{Binding SelectedItem}" />
                     <Button Content="Pause" Command="{Binding PauseCommand}"
                             CommandParameter="{Binding SelectedItem}" />
-                    <Button Content="Open" Command="{Binding OpenFileCommand}"
-                            CommandParameter="{Binding SelectedItem}" />
-                    <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
-                            CommandParameter="{Binding SelectedItem}" />
-                    <Button Content="Show popup" Command="{Binding ShowPopupCommand}"
-                            CommandParameter="{Binding SelectedItem}" />
-                    <Button Content="Remove" Click="OnRemoveSelected" />
-                    <Border Width="1" Background="{DynamicResource SystemBaseMediumLowColor}" Margin="4,2" />
-                    <Button Content="Settings" Click="OnOpenSettings" />
-                    <Button Content="License" Click="OnOpenLicense" />
-                    <Button Content="Browser setup" Click="OnBrowserSetup" />
-                    <Button Content="Updates" Click="OnCheckForUpdates" />
+                    <Button Content="Delete selected" Click="OnDeleteSelected" />
                 </StackPanel>
 
-                <TextBox Grid.Column="2" Watermark="Search downloads..."
-                         Text="{Binding SearchText}" />
+                <!-- Search -->
+                <TextBox Grid.Column="2" Width="240" Watermark="Search downloads..."
+                         Text="{Binding SearchText}" VerticalAlignment="Center" Margin="0,0,8,0" />
+
+                <!-- Overflow / advanced actions -->
+                <Button Grid.Column="3" Content="More  ⌄" VerticalAlignment="Center">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="Bulk add..." Click="OnBulkAdd" />
+                            <Separator />
+                            <MenuItem Header="Open" Click="OnMoreOpen" />
+                            <MenuItem Header="Show in folder" Click="OnMoreShowFolder" />
+                            <MenuItem Header="Show popup" Click="OnMoreShowPopup" />
+                            <MenuItem Header="Change link..." Click="OnChangeUrl" />
+                            <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser" />
+                            <Separator />
+                            <MenuItem Header="Settings" Click="OnOpenSettings" />
+                            <MenuItem Header="License" Click="OnOpenLicense" />
+                            <MenuItem Header="Browser setup" Click="OnBrowserSetup" />
+                            <MenuItem Header="Check for updates" Click="OnCheckForUpdates" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
             </Grid>
         </Border>
 
-        <!-- Categories sidebar -->
-        <Border DockPanel.Dock="Left" Width="200" Padding="8"
-                Background="{DynamicResource SystemChromeLowColor}">
-            <ListBox ItemsSource="{Binding Categories}"
+        <!-- ================= Categories sidebar ================= -->
+        <Border DockPanel.Dock="Left" Width="210" Classes="sidebar"
+                BorderThickness="0,0,1,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <ListBox Classes="categories" Background="Transparent"
+                     ItemsSource="{Binding Categories}"
                      SelectedItem="{Binding SelectedCategory}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:CategoryFilterItem">
-                        <TextBlock Text="{Binding Label}" />
+                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
         </Border>
 
-        <!-- Downloads list + empty state -->
-        <Grid>
-<!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
-                 MainViewModel's FilterItem predicate + FilterChanged signal drive category/search
-                 filtering, mirroring the WPF head. Column bindings are compiled via x:DataType. -->
+        <!-- ================= Downloads list + empty state ================= -->
+        <Grid Margin="4">
+            <!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
+                 MainViewModel's FilterItem predicate + FilterChanged signal drive filtering.
+                 Column bindings are compiled via x:DataType. -->
             <DataGrid x:Name="DownloadsGrid"
                       SelectedItem="{Binding SelectedItem}"
                       IsReadOnly="True"
                       CanUserReorderColumns="True"
                       CanUserResizeColumns="True"
-                      GridLinesVisibility="Horizontal">
+                      GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column">
                 <DataGrid.ContextMenu>
                     <ContextMenu x:DataType="vm:MainViewModel">
                         <MenuItem Header="Resume" Command="{Binding ResumeCommand}"
@@ -83,16 +119,42 @@
                     </ContextMenu>
                 </DataGrid.ContextMenu>
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Name" Width="*"
-                                        Binding="{Binding FileName}" x:DataType="vm:DownloadItemViewModel" />
-                    <DataGridTextColumn Header="Status" Width="120"
-                                        Binding="{Binding StatusLabel}" x:DataType="vm:DownloadItemViewModel" />
-                    <DataGridTemplateColumn Header="Progress" Width="160">
+                    <!-- Selection checkbox (header toggles all) -->
+                    <DataGridTemplateColumn Width="44" CanUserResize="False" CanUserReorder="False">
+                        <DataGridTemplateColumn.Header>
+                            <CheckBox Click="OnToggleSelectAll" Margin="4,0,0,0" />
+                        </DataGridTemplateColumn.Header>
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="vm:DownloadItemViewModel">
-                                <ProgressBar Minimum="0" Maximum="100"
-                                             Value="{Binding ProgressPercent}"
-                                             Height="8" VerticalAlignment="Center" />
+                                <CheckBox IsChecked="{Binding IsSelected}" Margin="4,0,0,0"
+                                          VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Name with app icon -->
+                    <DataGridTemplateColumn Header="Name" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="vm:DownloadItemViewModel">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <Image Width="20" Height="20" VerticalAlignment="Center"
+                                           Source="{x:Static views:MainWindow.AppIcon}" />
+                                    <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn Header="Status" Width="120"
+                                        Binding="{Binding StatusLabel}" x:DataType="vm:DownloadItemViewModel" />
+                    <DataGridTemplateColumn Header="Progress" Width="170">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="vm:DownloadItemViewModel">
+                                <Grid VerticalAlignment="Center">
+                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}"
+                                                 Height="6" />
+                                </Grid>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -106,7 +168,9 @@
             </DataGrid>
 
             <StackPanel IsVisible="{Binding IsListEmpty}"
-                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                <Image Width="56" Height="56" Opacity="0.5" HorizontalAlignment="Center"
+                       Source="{x:Static views:MainWindow.AppIcon}" />
                 <TextBlock Text="{Binding EmptyStateTitle}" FontSize="18" FontWeight="SemiBold"
                            HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding EmptyStateHint}" Opacity="0.7"

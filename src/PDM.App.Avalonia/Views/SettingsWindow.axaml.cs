@@ -1,8 +1,7 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
-using Avalonia.Styling;
+using PDM.App.Avalonia.Services;
 using PDM.App.ViewModels;
 
 namespace PDM.App.Avalonia.Views;
@@ -14,6 +13,7 @@ namespace PDM.App.Avalonia.Views;
 public partial class SettingsWindow : Window
 {
     private readonly SettingsViewModel _viewModel;
+    private readonly string _initialTheme;
 
     // Parameterless constructor for the XAML designer / tooling only.
     public SettingsWindow() : this(null!)
@@ -23,8 +23,18 @@ public partial class SettingsWindow : Window
     public SettingsWindow(SettingsViewModel viewModel)
     {
         _viewModel = viewModel;
+        _initialTheme = viewModel?.Theme ?? "system";
         DataContext = _viewModel;
         InitializeComponent();
+    }
+
+    /// <summary>Live-previews the selected theme so the change is immediately visible.</summary>
+    private void OnThemeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_viewModel is not null)
+        {
+            ThemeApplier.Apply(_viewModel.Theme);
+        }
     }
 
     private async void OnBrowseFolder(object? sender, RoutedEventArgs e)
@@ -65,25 +75,14 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        ApplyTheme(_viewModel.Theme);
+        ThemeApplier.Apply(_viewModel.Theme);
         Close(true);
     }
 
-    private void OnCancel(object? sender, RoutedEventArgs e) => Close(false);
-
-    /// <summary>Applies the chosen theme to the running Avalonia application immediately.</summary>
-    private static void ApplyTheme(string theme)
+    private void OnCancel(object? sender, RoutedEventArgs e)
     {
-        if (Application.Current is null)
-        {
-            return;
-        }
-
-        Application.Current.RequestedThemeVariant = theme.ToLowerInvariant() switch
-        {
-            "light" => ThemeVariant.Light,
-            "dark" => ThemeVariant.Dark,
-            _ => ThemeVariant.Default
-        };
+        // Revert any live theme preview back to the setting that was in effect when the dialog opened.
+        ThemeApplier.Apply(_initialTheme);
+        Close(false);
     }
 }

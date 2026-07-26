@@ -15,9 +15,10 @@ public partial class DeleteConfirmationDialog : Window
         InitializeComponent();
     }
 
-    public DeleteConfirmationDialog(string fileName) : this()
+    /// <param name="message">The full confirmation prompt (single or bulk).</param>
+    public DeleteConfirmationDialog(string message) : this()
     {
-        MessageText.Text = $"Remove \"{fileName}\" from the list?";
+        MessageText.Text = message;
     }
 
     /// <summary>True when the user chose to also delete the file from disk.</summary>
