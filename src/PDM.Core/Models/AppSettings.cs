@@ -77,6 +77,13 @@ public sealed class AppSettings
     /// </summary>
     public string? PostDownloadCommand { get; set; }
 
+    /// <summary>
+    /// Full path to the browser executable the user last chose via the toolbar "Open browser" button.
+    /// Remembered so future clicks reuse it. Null means no preference yet (use the first detected
+    /// browser).
+    /// </summary>
+    public string? PreferredBrowserPath { get; set; }
+
     /// <summary>Resolves the destination directory for the given category.</summary>
     public string ResolveCategoryFolder(DownloadCategory category)
     {

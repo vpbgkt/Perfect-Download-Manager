@@ -11,6 +11,8 @@ using PDM.App.Avalonia.Services;
 using PDM.App.Services;
 using PDM.App.ViewModels;
 using PDM.Core.Models;
+using PDM.Platform;
+using PDM.Platform.Windows;
 
 namespace PDM.App.Avalonia.Views;
 
@@ -53,6 +55,109 @@ public partial class MainWindow : Window
 
         // In-app toast notifications are shown through a window-hosted manager.
         _notifier.Attach(new WindowNotificationManager(this) { MaxItems = 3 });
+
+        InitializeBrowserMenu();
+    }
+
+    // ---- Open-browser split button: detect installed browsers, list them, remember the choice ----
+
+    private IReadOnlyList<DetectedBrowser> _browsers = Array.Empty<DetectedBrowser>();
+
+    private void InitializeBrowserMenu()
+    {
+        try
+        {
+            _browsers = new WindowsBrowserDetector().Detect();
+        }
+        catch
+        {
+            _browsers = Array.Empty<DetectedBrowser>();
+        }
+
+        var menu = new MenuFlyout();
+        if (_browsers.Count == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "No browser detected", IsEnabled = false });
+        }
+        else
+        {
+            foreach (DetectedBrowser browser in _browsers)
+            {
+                DetectedBrowser captured = browser;
+                var item = new MenuItem { Header = captured.DisplayName };
+                item.Click += (_, _) => OpenBrowser(captured);
+                menu.Items.Add(item);
+            }
+        }
+
+        OpenBrowserButton.Flyout = menu;
+    }
+
+    /// <summary>Primary click: open the remembered browser, else the first detected one.</summary>
+    private void OnOpenBrowser(object? sender, RoutedEventArgs e)
+    {
+        string? preferred = App.Host?.Settings.PreferredBrowserPath;
+
+        // Prefer the remembered browser (match a detected one, or launch its path directly).
+        if (!string.IsNullOrWhiteSpace(preferred))
+        {
+            DetectedBrowser? match = _browsers.FirstOrDefault(
+                b => string.Equals(b.ExecutablePath, preferred, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                OpenBrowser(match);
+                return;
+            }
+
+            if (File.Exists(preferred))
+            {
+                LaunchBrowser(preferred);
+                return;
+            }
+        }
+
+        DetectedBrowser? first = _browsers.FirstOrDefault();
+        if (first is null)
+        {
+            _notifier.ShowInfo("Open browser", "No web browser was detected on this PC.");
+            return;
+        }
+
+        OpenBrowser(first);
+    }
+
+    private void OpenBrowser(DetectedBrowser browser)
+    {
+        if (LaunchBrowser(browser.ExecutablePath))
+        {
+            RememberBrowser(browser.ExecutablePath);
+        }
+    }
+
+    private bool LaunchBrowser(string executablePath)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(executablePath) { UseShellExecute = true });
+            return true;
+        }
+        catch (Exception)
+        {
+            _notifier.ShowError("Open browser", "Could not open the selected browser.");
+            return false;
+        }
+    }
+
+    private static void RememberBrowser(string executablePath)
+    {
+        AppHost? host = App.Host;
+        if (host is null)
+        {
+            return;
+        }
+
+        host.Settings.PreferredBrowserPath = executablePath;
+        _ = host.SettingsStore.SaveAsync(host.Settings);
     }
 
     private void OnFilterChanged() => Dispatcher.UIThread.Post(() => _downloadsView.Refresh());

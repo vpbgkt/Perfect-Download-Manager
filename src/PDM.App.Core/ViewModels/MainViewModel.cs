@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PDM.App.Services;
@@ -56,6 +58,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private DownloadItemViewModel? _selectedItem;
+
+    /// <summary>
+    /// True when a delete action would affect something: any row's selection checkbox is ticked, or a
+    /// row is focused. Drives the "Delete selected" button's enabled state.
+    /// </summary>
+    [ObservableProperty] private bool _hasSelection;
 
     /// <summary>True when the filtered list is empty; drives the empty-state overlay.</summary>
     [ObservableProperty] private bool _isListEmpty;
@@ -191,9 +199,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         var vm = new DownloadItemViewModel(managed, _dispatcher);
+        vm.PropertyChanged += OnItemPropertyChanged;
         _byId[managed.Id] = vm;
         _all.Add(vm);
     }
+
+    private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DownloadItemViewModel.IsSelected))
+        {
+            UpdateHasSelection();
+        }
+    }
+
+    private void UpdateHasSelection() =>
+        HasSelection = SelectedItem is not null || _all.Any(i => i.IsSelected);
+
+    partial void OnSelectedItemChanged(DownloadItemViewModel? oldValue, DownloadItemViewModel? newValue)
+        => UpdateHasSelection();
 
     private void OnDownloadAdded(object? sender, DownloadEventArgs e)
     {
@@ -221,9 +244,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             if (_byId.Remove(e.Download.Id, out DownloadItemViewModel? vm))
             {
+                vm.PropertyChanged -= OnItemPropertyChanged;
                 _all.Remove(vm);
             }
             UpdateEmptyState();
+            UpdateHasSelection();
         });
     }
 
@@ -431,6 +456,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         LicenseBanner.Dispose();
+        foreach (DownloadItemViewModel vm in _all)
+        {
+            vm.PropertyChanged -= OnItemPropertyChanged;
+        }
         _host.DownloadManager.DownloadAdded -= OnDownloadAdded;
         _host.DownloadManager.DownloadChanged -= OnDownloadChanged;
         _host.DownloadManager.DownloadRemoved -= OnDownloadRemoved;

@@ -27,6 +27,13 @@
         <Style Selector="DataGrid#DownloadsGrid">
             <Setter Property="RowHeight" Value="44" />
         </Style>
+        <!-- Monochrome Fluent icon glyphs (follow the theme foreground). Segoe Fluent Icons on
+             Win11, Segoe MDL2 Assets on Win10 - both ship with Windows. -->
+        <Style Selector="TextBlock.glyph">
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
     </Window.Styles>
 
     <DockPanel>
@@ -36,14 +43,49 @@
                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
 
-                <!-- Primary, frequently used actions -->
+                <!-- Primary, frequently used actions (icons + labels) -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Content="Add download" Click="OnAddDownload" Classes="accent" />
-                    <Button Content="Resume" Command="{Binding ResumeCommand}"
-                            CommandParameter="{Binding SelectedItem}" />
-                    <Button Content="Pause" Command="{Binding PauseCommand}"
-                            CommandParameter="{Binding SelectedItem}" />
-                    <Button Content="Delete selected" Click="OnDeleteSelected" />
+                    <Button Click="OnAddDownload" Classes="accent" ToolTip.Tip="Add a new download">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="glyph" Text="&#xE710;" />
+                            <TextBlock Text="Add download" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Resume and Pause are mutually exclusive per the selected download's state. -->
+                    <Button Command="{Binding ResumeCommand}" CommandParameter="{Binding SelectedItem}"
+                            IsVisible="{Binding SelectedItem.CanResume}" ToolTip.Tip="Resume">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="glyph" Text="&#xE768;" />
+                            <TextBlock Text="Resume" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding PauseCommand}" CommandParameter="{Binding SelectedItem}"
+                            IsVisible="{Binding SelectedItem.CanPause}" ToolTip.Tip="Pause">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="glyph" Text="&#xE769;" />
+                            <TextBlock Text="Pause" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Click="OnDeleteSelected" IsEnabled="{Binding HasSelection}"
+                            ToolTip.Tip="Delete the selected downloads">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="glyph" Text="&#xE74D;" />
+                            <TextBlock Text="Delete selected" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <Border Width="1" Margin="4,2" Background="{DynamicResource CardStrokeColorDefaultBrush}" />
+
+                    <!-- Opens a detected browser; the dropdown lists all and remembers the choice. -->
+                    <SplitButton x:Name="OpenBrowserButton" Click="OnOpenBrowser"
+                                 ToolTip.Tip="Open a web browser">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="glyph" Text="&#xE774;" />
+                            <TextBlock Text="Open browser" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </SplitButton>
                 </StackPanel>
 
                 <!-- Search -->
@@ -51,7 +93,11 @@
                          Text="{Binding SearchText}" VerticalAlignment="Center" Margin="0,0,8,0" />
 
                 <!-- Overflow / advanced actions -->
-                <Button Grid.Column="3" Content="More  ⌄" VerticalAlignment="Center">
+                <Button Grid.Column="3" VerticalAlignment="Center" ToolTip.Tip="More actions">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="More" VerticalAlignment="Center" />
+                        <TextBlock Classes="glyph" Text="&#xE70D;" FontSize="12" />
+                    </StackPanel>
                     <Button.Flyout>
                         <MenuFlyout>
                             <MenuItem Header="Bulk add..." Click="OnBulkAdd" />
