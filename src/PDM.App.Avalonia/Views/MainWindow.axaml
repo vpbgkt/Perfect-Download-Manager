@@ -140,7 +140,7 @@
                 <DataGrid x:Name="DownloadsGrid"
                           SelectedItem="{Binding SelectedItem}"
                           IsReadOnly="True"
-                          RowHeight="56"
+                          RowHeight="44"
                           CanUserReorderColumns="True"
                           CanUserResizeColumns="True"
                           HeadersVisibility="Column">
@@ -166,50 +166,48 @@
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>
                         <!-- Selection checkbox (header toggles all) -->
-                        <DataGridTemplateColumn Width="48" CanUserResize="False" CanUserReorder="False">
+                        <DataGridTemplateColumn Width="40" CanUserResize="False" CanUserReorder="False">
                             <DataGridTemplateColumn.Header>
-                                <CheckBox Click="OnToggleSelectAll" Margin="6,0,0,0" />
+                                <CheckBox Click="OnToggleSelectAll" Margin="4,0,0,0" />
                             </DataGridTemplateColumn.Header>
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate x:DataType="vm:DownloadItemViewModel">
-                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="6,0,0,0"
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="4,0,0,0"
                                               VerticalAlignment="Center" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- Name: real file icon + prominent filename over a muted size line -->
-                        <DataGridTemplateColumn Header="Name" Width="*">
+                        <!-- Name (important): real file icon + filename. Star-sized with a firm
+                             MinWidth so it stays readable while the window narrows. -->
+                        <DataGridTemplateColumn Header="Name" Width="3*" MinWidth="190">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate x:DataType="vm:DownloadItemViewModel">
-                                    <StackPanel Orientation="Horizontal" Spacing="12"
-                                                VerticalAlignment="Center" Margin="6,0,0,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="9"
+                                                VerticalAlignment="Center" Margin="4,0,0,0">
                                         <!-- The file's real shell icon (per extension, or the file's
                                              own embedded icon once it exists). -->
-                                        <Image Width="26" Height="26" VerticalAlignment="Center"
+                                        <Image Width="18" Height="18" VerticalAlignment="Center"
                                                Source="{Binding DestinationPath, Converter={x:Static conv:FileIconConverter.Instance}}" />
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding FileName}" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding DownloadedText}" Classes="caption"
-                                                       Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
+                                        <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" FontSize="12.5"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- Status pill -->
-                        <DataGridTemplateColumn Header="Status" Width="140">
+                        <!-- Status (important): pill badge. Fixed so it stays visible. -->
+                        <DataGridTemplateColumn Header="Status" Width="120" MinWidth="108">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate x:DataType="vm:DownloadItemViewModel">
                                     <Border Classes="badge"
                                             Background="{Binding Status, Converter={x:Static conv:StatusBrushConverter.Instance}, ConverterParameter=bg}">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                            <Ellipse Width="6" Height="6" VerticalAlignment="Center"
                                                      Fill="{Binding Status, Converter={x:Static conv:StatusBrushConverter.Instance}}" />
-                                            <TextBlock Text="{Binding StatusLabel}"
+                                            <TextBlock Text="{Binding StatusLabel}" FontSize="11.5"
                                                        Foreground="{Binding Status, Converter={x:Static conv:StatusBrushConverter.Instance}}"
                                                        TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
@@ -218,24 +216,29 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- Progress bar + percent -->
-                        <DataGridTemplateColumn Header="Progress" Width="190">
+                        <!-- Size (important): fixed so it stays visible. -->
+                        <DataGridTextColumn Header="Size" Width="92" MinWidth="78"
+                                            Binding="{Binding SizeText}" x:DataType="vm:DownloadItemViewModel" />
+
+                        <!-- Progress / Speed / ETA (secondary): star-sized with small MinWidths so
+                             they give up space first as the window narrows. -->
+                        <DataGridTemplateColumn Header="Progress" Width="2*" MinWidth="80">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate x:DataType="vm:DownloadItemViewModel">
-                                    <StackPanel VerticalAlignment="Center" Spacing="4" Margin="0,0,8,0">
-                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" />
+                                    <StackPanel VerticalAlignment="Center" Spacing="3" Margin="0,0,8,0">
+                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}"
+                                                     MinHeight="5" />
                                         <TextBlock Text="{Binding ProgressPercent, StringFormat='{}{0:0}%'}"
-                                                   Classes="caption" HorizontalAlignment="Right" />
+                                                   FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                                   HorizontalAlignment="Right" />
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <DataGridTextColumn Header="Size" Width="110"
-                                            Binding="{Binding SizeText}" x:DataType="vm:DownloadItemViewModel" />
-                        <DataGridTextColumn Header="Speed" Width="110"
+                        <DataGridTextColumn Header="Speed" Width="1*" MinWidth="58"
                                             Binding="{Binding SpeedText}" x:DataType="vm:DownloadItemViewModel" />
-                        <DataGridTextColumn Header="ETA" Width="90"
+                        <DataGridTextColumn Header="ETA" Width="1*" MinWidth="54"
                                             Binding="{Binding EtaText}" x:DataType="vm:DownloadItemViewModel" />
                     </DataGrid.Columns>
                 </DataGrid>

@@ -32,6 +32,9 @@ public sealed partial class DownloadItemViewModel : ObservableObject
 
     public Guid Id => _managed.Id;
 
+    /// <summary>When the download was created; used to sort the list newest-first.</summary>
+    public DateTimeOffset CreatedUtc => _managed.State.CreatedUtc;
+
     public string FileName => _managed.FileName;
 
     public string SourceUrl => _managed.State.SourceUrl;

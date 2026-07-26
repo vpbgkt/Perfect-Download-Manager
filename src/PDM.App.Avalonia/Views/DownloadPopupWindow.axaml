@@ -74,12 +74,16 @@
                         HorizontalAlignment="Right" Margin="0,16,0,0">
                 <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
                         IsVisible="{Binding CanOpenFolder}" />
-                <Button Content="Pause" Command="{Binding PauseCommand}"
-                        IsEnabled="{Binding CanPause}" />
                 <Button Content="Cancel" Command="{Binding CancelCommand}"
                         IsEnabled="{Binding CanCancel}" />
+
+                <!-- Single Pause/Resume slot: only the action valid for the current state shows, so
+                     pausing swaps the button to Resume in the same place. -->
+                <Button Content="Pause" Command="{Binding PauseCommand}"
+                        IsVisible="{Binding CanPause}" Classes="brand" />
                 <Button Content="Resume" Command="{Binding ResumeCommand}"
-                        IsEnabled="{Binding CanResume}" Classes="brand" />
+                        IsVisible="{Binding CanResume}" Classes="brand" />
+
                 <Button Content="Open" Command="{Binding OpenFileCommand}"
                         IsVisible="{Binding CanOpenFile}" Classes="brand" />
             </StackPanel>

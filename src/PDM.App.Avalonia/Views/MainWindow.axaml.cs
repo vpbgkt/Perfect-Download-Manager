@@ -51,6 +51,10 @@ public partial class MainWindow : Window
         {
             Filter = o => o is DownloadItemViewModel item && _viewModel.FilterItem(item)
         };
+        // Always show the most recent downloads on top. A comparer (rather than a reflection-based
+        // property path) keeps this NativeAOT-safe.
+        _downloadsView.SortDescriptions.Add(
+            DataGridSortDescription.FromComparer(new RecencyComparer()));
         DownloadsGrid.ItemsSource = _downloadsView;
         _viewModel.FilterChanged += OnFilterChanged;
 
@@ -485,5 +489,20 @@ public partial class MainWindow : Window
     {
         _viewModel.FilterChanged -= OnFilterChanged;
         base.OnClosed(e);
+    }
+
+    /// <summary>Orders download rows newest-first by their creation time.</summary>
+    private sealed class RecencyComparer : System.Collections.IComparer
+    {
+        public int Compare(object? x, object? y)
+        {
+            if (x is not DownloadItemViewModel a || y is not DownloadItemViewModel b)
+            {
+                return 0;
+            }
+
+            // Descending: the newest CreatedUtc sorts first.
+            return b.CreatedUtc.CompareTo(a.CreatedUtc);
+        }
     }
 }
