@@ -42,6 +42,36 @@
                                IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
                 </StackPanel>
 
+                <!-- Plan badge: always visible above the brand. Premium shows an accent badge;
+                     free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
+                     leaving just the status glyph. -->
+                <Border DockPanel.Dock="Bottom" Margin="4,0,4,10" CornerRadius="10" Padding="10,8"
+                        Background="{DynamicResource AppAccentSubtleBrush}"
+                        IsVisible="{Binding LicenseBanner.IsPremiumPlan}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Classes="glyph" Text="&#xE735;" FontSize="16"
+                                   Foreground="{DynamicResource AppAccentBrush}" />
+                        <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                   IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
+                    </StackPanel>
+                </Border>
+                <Border DockPanel.Dock="Bottom" Margin="4,0,4,10" CornerRadius="10" Padding="10,8"
+                        Background="{DynamicResource StatusWarningSubtleBrush}"
+                        IsVisible="{Binding !LicenseBanner.IsPremiumPlan}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Classes="glyph" Text="&#xE7BA;" FontSize="16"
+                                   Foreground="{DynamicResource StatusWarningBrush}" />
+                        <StackPanel VerticalAlignment="Center"
+                                    IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                            <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
+                                       Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                            <TextBlock Text="Upgrade for full speed" Classes="caption" Margin="0,-1,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Brand pinned to the bottom; text hides when collapsed, leaving the logo only. -->
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10"
                             Margin="6,12,6,2" VerticalAlignment="Center">
@@ -194,6 +224,17 @@
         <!-- ================= Downloads list + empty state ================= -->
         <Grid Margin="16">
             <Border Classes="card" Padding="6" IsVisible="{Binding !IsListEmpty}">
+              <DockPanel>
+                <!-- Selection bar: a reliable, labelled "Select all" that lives in the window's
+                     compiled-binding scope (a DataGrid column header does not, and intercepts clicks).
+                     Tri-state via MainViewModel.AllSelected. -->
+                <Border DockPanel.Dock="Top" Padding="10,4,10,8">
+                    <CheckBox IsChecked="{Binding AllSelected, Mode=TwoWay}"
+                              Content="Select all" FontSize="12.5"
+                              Foreground="{DynamicResource AppTextSecondaryBrush}"
+                              ToolTip.Tip="Select or clear every download" />
+                </Border>
+
                 <!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
                      MainViewModel's FilterItem predicate + FilterChanged signal drive filtering.
                      Column bindings are compiled via x:DataType. -->
@@ -231,16 +272,8 @@
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>
-                        <!-- Selection checkbox (header toggles all) -->
+                        <!-- Per-row selection checkbox (Select all lives in the bar above the grid). -->
                         <DataGridTemplateColumn Width="40" CanUserResize="False" CanUserReorder="False">
-                            <DataGridTemplateColumn.Header>
-                                <!-- Select-all: ticks/clears every row; shows indeterminate for a
-                                     partial selection. A column header is not in the window's
-                                     compiled-binding scope and a reflection binding is not
-                                     NativeAOT-safe, so this is driven from code-behind instead. -->
-                                <CheckBox x:Name="SelectAllCheckBox" IsCheckedChanged="OnSelectAllChanged"
-                                          Margin="4,0,0,0" ToolTip.Tip="Select all" />
-                            </DataGridTemplateColumn.Header>
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate x:DataType="vm:DownloadItemViewModel">
                                     <CheckBox IsChecked="{Binding IsSelected}" Margin="4,0,0,0"
@@ -313,6 +346,7 @@
                                             Binding="{Binding EtaText}" x:DataType="vm:DownloadItemViewModel" />
                     </DataGrid.Columns>
                 </DataGrid>
+              </DockPanel>
             </Border>
 
             <!-- Beautiful empty state -->

@@ -39,10 +39,30 @@ public sealed partial class LicenseBannerViewModel : ObservableObject, IDisposab
 
     [ObservableProperty] private bool _isWarning;
 
+    /// <summary>Concise plan label for the always-visible sidebar badge, e.g. "Premium plan active".</summary>
+    [ObservableProperty] private string _planName = string.Empty;
+
+    /// <summary>True when the plan is a paid, activated license (drives the premium sidebar badge).</summary>
+    [ObservableProperty] private bool _isPremiumPlan;
+
+    /// <summary>True when the app is in the free/limited mode (no functional license).</summary>
+    [ObservableProperty] private bool _isLimitedPlan;
+
     /// <summary>Re-reads the license snapshot and updates the banner text.</summary>
     public void Refresh()
     {
         LicenseSnapshot snap = _host.License;
+
+        // Always-visible sidebar plan badge (independent of the warning banner).
+        IsPremiumPlan = snap.Status == LicenseStatus.Activated;
+        IsLimitedPlan = !snap.IsFunctional; // Expired / Invalid → reduced "free" mode
+        PlanName = snap.Status switch
+        {
+            LicenseStatus.Activated => "Premium plan active",
+            LicenseStatus.Trial => "Free trial",
+            LicenseStatus.Grace => "Grace period",
+            _ => "Free plan · limited"
+        };
 
         switch (snap.Status)
         {

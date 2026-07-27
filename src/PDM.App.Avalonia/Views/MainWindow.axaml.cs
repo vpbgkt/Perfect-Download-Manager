@@ -64,52 +64,7 @@ public partial class MainWindow : Window
         // In-app toast notifications are shown through a window-hosted manager.
         _notifier.Attach(new WindowNotificationManager(this) { MaxItems = 3 });
 
-        // Keep the header "select all" checkbox in sync with the view-model's tri-state aggregate.
-        // Done in code-behind because a column header is outside compiled-binding scope and a
-        // reflection binding would not be NativeAOT-safe.
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        SyncSelectAllCheckBox();
-
         InitializeBrowserMenu();
-    }
-
-    // ---- Select-all header checkbox (code-behind, AOT-safe) --------------------------------------
-
-    // Guards the two-way sync so a programmatic update of one side does not echo back to the other.
-    private bool _syncingSelectAll;
-
-    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(MainViewModel.AllSelected))
-        {
-            SyncSelectAllCheckBox();
-        }
-    }
-
-    /// <summary>Pushes the view-model's tri-state selection into the header checkbox.</summary>
-    private void SyncSelectAllCheckBox()
-    {
-        if (_syncingSelectAll)
-        {
-            return;
-        }
-
-        _syncingSelectAll = true;
-        SelectAllCheckBox.IsChecked = _viewModel.AllSelected;
-        _syncingSelectAll = false;
-    }
-
-    /// <summary>User toggled the header checkbox: select or clear every row.</summary>
-    private void OnSelectAllChanged(object? sender, RoutedEventArgs e)
-    {
-        if (_syncingSelectAll)
-        {
-            return;
-        }
-
-        _syncingSelectAll = true;
-        _viewModel.AllSelected = SelectAllCheckBox.IsChecked;
-        _syncingSelectAll = false;
     }
 
     // ---- Free-plan (limited mode) messaging ------------------------------------------------------
@@ -640,7 +595,6 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _viewModel.FilterChanged -= OnFilterChanged;
-        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         base.OnClosed(e);
     }
 

@@ -112,6 +112,16 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     [ObservableProperty]
     private bool _shutdownWhenDone;
 
+    /// <summary>
+    /// True when the app is on a free/limited plan (no functional license), so the popup shows a
+    /// short, professional notice that download speed is reduced. Set once by the factory.
+    /// </summary>
+    public bool IsLimitedPlan { get; init; }
+
+    /// <summary>Short, professional speed-limit notice shown on the popup while on the free plan.</summary>
+    public string LimitedPlanNotice =>
+        "Free plan: speed is limited to 2 connections. Upgrade to Premium for maximum download speed.";
+
     /// <summary>Guards <see cref="Completed"/> so the "when done" actions run exactly once.</summary>
     private bool _completionSignaled;
 

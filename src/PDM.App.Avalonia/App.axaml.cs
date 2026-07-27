@@ -111,7 +111,10 @@ public partial class App : Application
                 managed,
                 host.DownloadManager,
                 confirmCancel: message => window!.ConfirmCancelAsync(message),
-                showError: message => notifier.ShowError("Download", message));
+                showError: message => notifier.ShowError("Download", message))
+            {
+                IsLimitedPlan = host.IsLimitedMode
+            };
 
             window = new DownloadPopupWindow(viewModel, id => popupManager!.NotifyPopupClosed(id));
             window.Show();
