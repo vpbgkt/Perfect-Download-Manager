@@ -38,9 +38,24 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
         DownloadManager = downloadManager;
         Notifications = notifications;
         LicenseService = licenseService;
-        License = licenseSnapshot;
+        License = licenseSnapshot; // setter applies the connection policy (DownloadManager set above)
         LoggerFactory = loggerFactory;
     }
+
+    /// <summary>
+    /// Parallel-connection ceiling for installs without a functional license (Expired/Invalid).
+    /// Downloads still run, but accelerated multi-connection downloading is a licensed feature, so an
+    /// unlicensed install is limited to this many connections per download.
+    /// </summary>
+    private const int UnlicensedMaxConnections = 2;
+
+    /// <summary>
+    /// Applies the license-based connection policy to the download manager: no cap while the license
+    /// is functional (Trial/Grace/Activated), or a small cap when it is not (Expired/Invalid).
+    /// </summary>
+    private void ApplyLicenseConnectionPolicy() =>
+        DownloadManager.MaxConnectionsPerDownloadCap =
+            _license.IsFunctional ? null : UnlicensedMaxConnections;
 
     /// <summary>Root logger factory used to obtain scoped loggers.</summary>
     public ILoggerFactory LoggerFactory { get; }
@@ -54,8 +69,21 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     /// <summary>License orchestrator (trial, activation, validation).</summary>
     public LicenseService LicenseService { get; }
 
-    /// <summary>Snapshot of the license at app start; refresh via <see cref="LicenseService"/>.</summary>
-    public LicenseSnapshot License { get; set; }
+    private LicenseSnapshot _license;
+
+    /// <summary>
+    /// Snapshot of the license; refresh via <see cref="LicenseService"/>. Assigning it re-applies the
+    /// connection policy so activating or letting a license lapse takes effect on the next download.
+    /// </summary>
+    public LicenseSnapshot License
+    {
+        get => _license;
+        set
+        {
+            _license = value;
+            ApplyLicenseConnectionPolicy();
+        }
+    }
 
     // Auto-update is orchestrated by PDM.App.Services.UpdateOrchestrator, which uses the
     // manifest URL + public key embedded at compile time in LicensingConfig.

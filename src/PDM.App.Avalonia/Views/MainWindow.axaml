@@ -234,7 +234,11 @@
                         <!-- Selection checkbox (header toggles all) -->
                         <DataGridTemplateColumn Width="40" CanUserResize="False" CanUserReorder="False">
                             <DataGridTemplateColumn.Header>
-                                <CheckBox Click="OnToggleSelectAll" Margin="4,0,0,0" />
+                                <!-- Select-all: ticks/clears every row; shows indeterminate for a
+                                     partial selection. Bound to the VM so it is the single source
+                                     of truth (x:DataType on the grid is MainViewModel). -->
+                                <CheckBox IsChecked="{Binding AllSelected, Mode=TwoWay}"
+                                          Margin="4,0,0,0" ToolTip.Tip="Select all" />
                             </DataGridTemplateColumn.Header>
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate x:DataType="vm:DownloadItemViewModel">

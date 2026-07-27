@@ -48,6 +48,15 @@ public sealed class DownloadManager : IAsyncDisposable
     /// <summary>How often the scheduler wakes up to re-check the quiet-hours window.</summary>
     public TimeSpan ScheduleTick { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Optional upper bound on the parallel connections a single download may use, layered on top of
+    /// <see cref="AppSettings.MaxConnectionsPerDownload"/>. Null means no cap (the setting is used as-is).
+    /// The composition root sets this to a small value for unlicensed/expired installs so accelerated
+    /// multi-connection downloading is a licensed feature, while downloads still work at reduced speed.
+    /// Applies to downloads planned after it changes (new downloads and re-planned resumes).
+    /// </summary>
+    public int? MaxConnectionsPerDownloadCap { get; set; }
+
     /// <summary>Raised when a download is added.</summary>
     public event EventHandler<DownloadEventArgs>? DownloadAdded;
 
@@ -896,9 +905,16 @@ public sealed class DownloadManager : IAsyncDisposable
 
     private DownloadOptions BuildOptions()
     {
+        // Honour the user's configured connection count, but never exceed the (optional) license cap.
+        int maxConnections = _settings.MaxConnectionsPerDownload;
+        if (MaxConnectionsPerDownloadCap is int cap)
+        {
+            maxConnections = Math.Clamp(maxConnections, 1, Math.Max(1, cap));
+        }
+
         return new DownloadOptions
         {
-            MaxConnections = _settings.MaxConnectionsPerDownload,
+            MaxConnections = maxConnections,
             MaxBytesPerSecond = _settings.GlobalMaxBytesPerSecond > 0 && _settings.MaxSimultaneousDownloads > 0
                 ? _settings.GlobalMaxBytesPerSecond / Math.Max(1, _settings.MaxSimultaneousDownloads)
                 : 0,

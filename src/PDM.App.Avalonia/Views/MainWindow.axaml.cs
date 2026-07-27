@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Linq;
+using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
@@ -8,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PDM.App.Avalonia.Converters;
 using PDM.App.Avalonia.Services;
 using PDM.App.Services;
@@ -328,22 +330,26 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Header checkbox: selects or clears every row's selection checkbox.</summary>
-    private void OnToggleSelectAll(object? sender, RoutedEventArgs e)
-    {
-        if (sender is CheckBox checkBox)
-        {
-            bool value = checkBox.IsChecked == true;
-            foreach (DownloadItemViewModel item in _viewModel.Items)
-            {
-                item.IsSelected = value;
-            }
-        }
-    }
-
-    /// <summary>Double-clicking a download row opens the file (matches everyday desktop behaviour).</summary>
+    /// <summary>
+    /// Double-clicking a download <em>row</em> opens the file (matches everyday desktop behaviour).
+    /// Guarded so double-clicking the column-header bar (or a row's checkbox) never opens anything:
+    /// the gesture only counts when it originates inside a <see cref="DataGridRow"/> and not on a
+    /// <see cref="CheckBox"/>.
+    /// </summary>
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
     {
+        if (e.Source is not Visual source)
+        {
+            return;
+        }
+
+        // Header taps are not inside a DataGridRow; checkbox taps are for selection, not opening.
+        if (source.FindAncestorOfType<DataGridRow>() is null ||
+            source.FindAncestorOfType<CheckBox>() is not null)
+        {
+            return;
+        }
+
         if (_viewModel.SelectedItem is { } item && _viewModel.OpenFileCommand.CanExecute(item))
         {
             _viewModel.OpenFileCommand.Execute(item);

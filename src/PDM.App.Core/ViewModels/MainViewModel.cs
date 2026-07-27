@@ -204,6 +204,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _all.Add(vm);
     }
 
+    /// <summary>Guards <see cref="AllSelected"/>'s setter so applying it to every row does not
+    /// recurse back through each row's PropertyChanged into another aggregate recompute.</summary>
+    private bool _suppressSelectionSync;
+
     private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(DownloadItemViewModel.IsSelected))
@@ -212,8 +216,62 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void UpdateHasSelection() =>
+    private void UpdateHasSelection()
+    {
         HasSelection = SelectedItem is not null || _all.Any(i => i.IsSelected);
+        if (!_suppressSelectionSync)
+        {
+            OnPropertyChanged(nameof(AllSelected));
+        }
+    }
+
+    /// <summary>
+    /// Tri-state "select all" bound to the header checkbox: true when every row is ticked, false when
+    /// none are, and null (indeterminate) for a partial selection. Setting it ticks or clears every
+    /// row's checkbox in one go. Kept here (rather than in code-behind) so the header checkbox drives
+    /// selection through a single, testable source of truth.
+    /// </summary>
+    public bool? AllSelected
+    {
+        get
+        {
+            if (_all.Count == 0)
+            {
+                return false;
+            }
+
+            bool all = true;
+            bool any = false;
+            foreach (DownloadItemViewModel item in _all)
+            {
+                if (item.IsSelected)
+                {
+                    any = true;
+                }
+                else
+                {
+                    all = false;
+                }
+            }
+
+            return all ? true : any ? (bool?)null : false;
+        }
+        set
+        {
+            // A click cycles the header box to checked or unchecked (never to indeterminate), so treat
+            // null as "clear". Apply to every row, then refresh the aggregate once.
+            bool select = value == true;
+            _suppressSelectionSync = true;
+            foreach (DownloadItemViewModel item in _all)
+            {
+                item.IsSelected = select;
+            }
+            _suppressSelectionSync = false;
+
+            OnPropertyChanged(nameof(AllSelected));
+            UpdateHasSelection();
+        }
+    }
 
     partial void OnSelectedItemChanged(DownloadItemViewModel? oldValue, DownloadItemViewModel? newValue)
         => UpdateHasSelection();
@@ -224,6 +282,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             AddItem(e.Download);
             UpdateEmptyState();
+            UpdateHasSelection();
         });
     }
 
