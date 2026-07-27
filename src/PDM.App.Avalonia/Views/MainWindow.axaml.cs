@@ -64,8 +64,38 @@ public partial class MainWindow : Window
         // In-app toast notifications are shown through a window-hosted manager.
         _notifier.Attach(new WindowNotificationManager(this) { MaxItems = 3 });
 
+        // Keep the header "select all" checkbox in sync with the view-model's tri-state aggregate.
+        // Done in code-behind because a column header is outside compiled-binding scope.
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        SyncSelectAllCheckBox();
+
         InitializeBrowserMenu();
     }
+
+    // ---- Select-all header checkbox (code-behind; AOT-safe) --------------------------------------
+
+    /// <summary>
+    /// Toggles the whole-list selection when the header cell is pressed. Acting on <em>press</em>
+    /// (and marking it handled) means it works even though the DataGrid column header captures the
+    /// pointer afterwards; the display-only checkbox merely mirrors the resulting state.
+    /// null/false → select all; true → clear all.
+    /// </summary>
+    private void OnSelectAllPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        e.Handled = true;
+        _viewModel.AllSelected = _viewModel.AllSelected != true;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.AllSelected))
+        {
+            SyncSelectAllCheckBox();
+        }
+    }
+
+    /// <summary>Mirrors the view-model's tri-state selection into the display-only header checkbox.</summary>
+    private void SyncSelectAllCheckBox() => SelectAllCheckBox.IsChecked = _viewModel.AllSelected;
 
     // ---- Free-plan (limited mode) messaging ------------------------------------------------------
 
@@ -595,6 +625,7 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _viewModel.FilterChanged -= OnFilterChanged;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         base.OnClosed(e);
     }
 
