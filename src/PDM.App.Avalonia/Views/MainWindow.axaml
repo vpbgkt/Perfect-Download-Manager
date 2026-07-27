@@ -235,9 +235,10 @@
                         <DataGridTemplateColumn Width="40" CanUserResize="False" CanUserReorder="False">
                             <DataGridTemplateColumn.Header>
                                 <!-- Select-all: ticks/clears every row; shows indeterminate for a
-                                     partial selection. Bound to the VM so it is the single source
-                                     of truth (x:DataType on the grid is MainViewModel). -->
-                                <CheckBox IsChecked="{Binding AllSelected, Mode=TwoWay}"
+                                     partial selection. A column header is not in the window's
+                                     compiled-binding scope and a reflection binding is not
+                                     NativeAOT-safe, so this is driven from code-behind instead. -->
+                                <CheckBox x:Name="SelectAllCheckBox" IsCheckedChanged="OnSelectAllChanged"
                                           Margin="4,0,0,0" ToolTip.Tip="Select all" />
                             </DataGridTemplateColumn.Header>
                             <DataGridTemplateColumn.CellTemplate>

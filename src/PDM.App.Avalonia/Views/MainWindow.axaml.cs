@@ -64,7 +64,100 @@ public partial class MainWindow : Window
         // In-app toast notifications are shown through a window-hosted manager.
         _notifier.Attach(new WindowNotificationManager(this) { MaxItems = 3 });
 
+        // Keep the header "select all" checkbox in sync with the view-model's tri-state aggregate.
+        // Done in code-behind because a column header is outside compiled-binding scope and a
+        // reflection binding would not be NativeAOT-safe.
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        SyncSelectAllCheckBox();
+
         InitializeBrowserMenu();
+    }
+
+    // ---- Select-all header checkbox (code-behind, AOT-safe) --------------------------------------
+
+    // Guards the two-way sync so a programmatic update of one side does not echo back to the other.
+    private bool _syncingSelectAll;
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.AllSelected))
+        {
+            SyncSelectAllCheckBox();
+        }
+    }
+
+    /// <summary>Pushes the view-model's tri-state selection into the header checkbox.</summary>
+    private void SyncSelectAllCheckBox()
+    {
+        if (_syncingSelectAll)
+        {
+            return;
+        }
+
+        _syncingSelectAll = true;
+        SelectAllCheckBox.IsChecked = _viewModel.AllSelected;
+        _syncingSelectAll = false;
+    }
+
+    /// <summary>User toggled the header checkbox: select or clear every row.</summary>
+    private void OnSelectAllChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_syncingSelectAll)
+        {
+            return;
+        }
+
+        _syncingSelectAll = true;
+        _viewModel.AllSelected = SelectAllCheckBox.IsChecked;
+        _syncingSelectAll = false;
+    }
+
+    // ---- Free-plan (limited mode) messaging ------------------------------------------------------
+
+    /// <summary>Ensures the gentle "limited speed" notice is shown at most once per app session.</summary>
+    private bool _freePlanSpeedNoticeShown;
+
+    /// <summary>
+    /// True when the install is in free/limited mode and already at its simultaneous-download limit,
+    /// so a download added now will have to queue. Captured <em>before</em> the add so the follow-up
+    /// message is accurate (the new download may occupy a slot the instant it is added).
+    /// </summary>
+    private static bool IsAtFreePlanCapacity()
+    {
+        AppHost? host = App.Host;
+        return host is { IsLimitedMode: true } &&
+            host.DownloadManager.RunningCount >= host.DownloadManager.EffectiveMaxSimultaneousDownloads;
+    }
+
+    /// <summary>
+    /// Shows gentle, non-blocking upgrade messaging after a download is added while the install is in
+    /// the free/limited mode (no functional license): a "one at a time" notice when the new download
+    /// had to queue behind the simultaneous-download limit, otherwise a one-time speed notice.
+    /// </summary>
+    private void NotifyFreePlanLimitsOnAdd(bool wasAtCapacity)
+    {
+        AppHost? host = App.Host;
+        if (host is null || !host.IsLimitedMode)
+        {
+            return;
+        }
+
+        if (wasAtCapacity)
+        {
+            int limit = host.DownloadManager.EffectiveMaxSimultaneousDownloads;
+            _notifier.ShowInfo("Free plan limit",
+                $"Your plan downloads {limit} file{(limit == 1 ? "" : "s")} at a time. This one will start " +
+                "automatically when a slot frees up. Upgrade to Premium to download more at once.");
+            return;
+        }
+
+        if (!_freePlanSpeedNoticeShown)
+        {
+            _freePlanSpeedNoticeShown = true;
+            _notifier.ShowInfo("Free plan",
+                "Downloads use up to 2 connections on the free plan, so speeds are limited. " +
+                "Upgrade to Premium for full-speed, parallel downloads.");
+        }
     }
 
     // ---- Open-browser split button: detect installed browsers, list them, remember the choice ----
@@ -247,12 +340,16 @@ public partial class MainWindow : Window
             probed = info;
         }
 
+        // Snapshot the free-plan capacity before adding so the follow-up message is accurate.
+        bool wasAtCapacity = IsAtFreePlanCapacity();
+
         MainViewModel.AddOutcome outcome =
             await _viewModel.AddDownloadAsync(url, probedInfo: probed).ConfigureAwait(true);
 
         switch (outcome.Result)
         {
             case MainViewModel.AddResult.Ok:
+                NotifyFreePlanLimitsOnAdd(wasAtCapacity);
                 return;
 
             case MainViewModel.AddResult.InvalidUrl:
@@ -266,7 +363,13 @@ public partial class MainWindow : Window
                     .ConfigureAwait(true);
                 if (downloadAnyway)
                 {
-                    await _viewModel.AddDownloadAsync(url, allowWebPage: true).ConfigureAwait(true);
+                    bool wasAtCapacityWeb = IsAtFreePlanCapacity();
+                    MainViewModel.AddOutcome pageOutcome =
+                        await _viewModel.AddDownloadAsync(url, allowWebPage: true).ConfigureAwait(true);
+                    if (pageOutcome.Result == MainViewModel.AddResult.Ok)
+                    {
+                        NotifyFreePlanLimitsOnAdd(wasAtCapacityWeb);
+                    }
                 }
                 return;
 
@@ -366,7 +469,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        bool wasAtCapacity = IsAtFreePlanCapacity();
         int failed = 0;
+        int added = 0;
         foreach (Uri url in dialog.Urls)
         {
             MainViewModel.AddOutcome outcome =
@@ -375,11 +480,22 @@ public partial class MainWindow : Window
             {
                 failed++;
             }
+            else
+            {
+                added++;
+            }
         }
 
         if (failed > 0)
         {
             _notifier.ShowInfo("Add downloads", $"{failed} of {dialog.Urls.Count} URLs could not be added.");
+        }
+
+        // A bulk add of several files always exceeds the free-plan simultaneous limit, so surface the
+        // gentle upgrade message once for the whole batch.
+        if (added > 0)
+        {
+            NotifyFreePlanLimitsOnAdd(wasAtCapacity || added > 1);
         }
     }
 
@@ -524,6 +640,7 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _viewModel.FilterChanged -= OnFilterChanged;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         base.OnClosed(e);
     }
 

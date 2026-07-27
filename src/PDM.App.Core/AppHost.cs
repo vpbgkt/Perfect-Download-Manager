@@ -47,15 +47,28 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     /// Downloads still run, but accelerated multi-connection downloading is a licensed feature, so an
     /// unlicensed install is limited to this many connections per download.
     /// </summary>
-    private const int UnlicensedMaxConnections = 2;
+    public const int UnlicensedMaxConnections = 2;
+
+    /// <summary>How many downloads an unlicensed/expired install may transfer at the same time.</summary>
+    public const int UnlicensedMaxSimultaneousDownloads = 1;
 
     /// <summary>
-    /// Applies the license-based connection policy to the download manager: no cap while the license
-    /// is functional (Trial/Grace/Activated), or a small cap when it is not (Expired/Invalid).
+    /// True when the install is in the reduced "free/limited" mode (no functional license), so the
+    /// UI can show gentle upgrade messaging and explain why downloads are throttled/queued.
     /// </summary>
-    private void ApplyLicenseConnectionPolicy() =>
-        DownloadManager.MaxConnectionsPerDownloadCap =
-            _license.IsFunctional ? null : UnlicensedMaxConnections;
+    public bool IsLimitedMode => !_license.IsFunctional;
+
+    /// <summary>
+    /// Applies the license-based download policy to the manager: no caps while the license is
+    /// functional (Trial/Grace/Activated), or small connection + simultaneous caps when it is not
+    /// (Expired/Invalid). Downloads still work in limited mode, just slower and one at a time.
+    /// </summary>
+    private void ApplyLicenseConnectionPolicy()
+    {
+        bool limited = IsLimitedMode;
+        DownloadManager.MaxConnectionsPerDownloadCap = limited ? UnlicensedMaxConnections : null;
+        DownloadManager.MaxSimultaneousDownloadsCap = limited ? UnlicensedMaxSimultaneousDownloads : null;
+    }
 
     /// <summary>Root logger factory used to obtain scoped loggers.</summary>
     public ILoggerFactory LoggerFactory { get; }
