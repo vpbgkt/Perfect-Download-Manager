@@ -49,10 +49,19 @@ manifest variant can be generated the same way once the add-on is packaged for A
 
 ## UI
 
-- `popup.html` / `popup.css` / `popup.js` — toolbar popup: live PDM connection status, the
-  auto-intercept toggle, "Send this page to PDM", and "Scan page for media & links".
-- `options.html` / `options.css` / `options.js` — Settings page (interception, notifications,
-  file-type override). Reachable from the popup's Settings link or `chrome://extensions`.
+- `popup.html` / `popup.css` / `popup.js` — toolbar popup (v1.2.7 premium redesign): live PDM
+  connection status, the auto-intercept toggle, the **Smart filtering** toggle ("Send documents &
+  images"), "Send this page to PDM", and "Scan page for media & links".
+- `options.html` / `options.css` / `options.js` — Settings page (interception, cancel-after-handoff,
+  intercept-all-types, send documents & images, notifications). Reachable from the popup's Settings
+  link or `chrome://extensions`.
+
+## Smart download filtering
+
+Common documents and images (PDF, Office files, images) download directly in the browser by
+default — they are small and gain nothing from a download manager. Detection uses both the file
+extension and the Content-Type (MIME). Turn on **Send documents & images to PDM** (popup or options)
+to forward every file type instead. See `CHANGELOG.md` for the full v1.2.7 notes.
 
 ## Icons
 
