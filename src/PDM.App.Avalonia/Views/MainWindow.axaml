@@ -42,6 +42,25 @@
                                IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
                 </StackPanel>
 
+                <!-- Quick access to the PDM downloads folder. Sits just under the LIBRARY header
+                     and is set apart from the category items by a light bottom divider so it does
+                     not read as a category. Label hides when the sidebar is collapsed. -->
+                <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource AppDividerBrush}"
+                        Margin="0,0,0,8" Padding="0,0,0,8">
+                    <Button Classes="ghost" Click="OnOpenDownloadsFolder"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Padding="12,9"
+                            ToolTip.Tip="Open the PDM downloads folder">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock Classes="glyph" Text="&#xE838;" FontSize="16"
+                                       Width="18" TextAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="Downloads folder" VerticalAlignment="Center"
+                                       IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
+                        </StackPanel>
+                    </Button>
+                </Border>
+
                 <!-- Plan badge: always visible above the brand. Premium shows an accent badge;
                      free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
                      leaving just the status glyph. -->
@@ -84,21 +103,6 @@
                         <TextBlock Text="Download Manager" Classes="caption" Margin="0,-2,0,0" />
                     </StackPanel>
                 </StackPanel>
-
-                <!-- Quick access to the folder where PDM saves downloads (moved here from the
-                     toolbar for better reach). Docked below the category list; its label hides when
-                     the sidebar is collapsed, leaving just the icon. -->
-                <Button DockPanel.Dock="Bottom" Classes="ghost" Click="OnOpenDownloadsFolder"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                        Padding="12,9" Margin="0,6,0,4"
-                        ToolTip.Tip="Open the PDM downloads folder">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <TextBlock Classes="glyph" Text="&#xE838;" FontSize="16"
-                                   Width="18" TextAlignment="Center" VerticalAlignment="Center" />
-                        <TextBlock Text="Downloads folder" VerticalAlignment="Center"
-                                   IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
-                    </StackPanel>
-                </Button>
 
                 <ListBox Classes="categories" ItemsSource="{Binding Categories}"
                          SelectedItem="{Binding SelectedCategory}">
