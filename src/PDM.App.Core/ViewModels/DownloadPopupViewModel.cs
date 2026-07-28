@@ -150,20 +150,21 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     public string SourceUrlDisplay =>
         string.IsNullOrWhiteSpace(_managed.State.SourceUrl) ? SourceUrlPlaceholder : _managed.State.SourceUrl;
 
-    /// <summary>Human-readable status label for display (Requirement 1.4).</summary>
-    public string StatusLabel => Status switch
-    {
-        DownloadStatus.Queued => "Queued",
-        DownloadStatus.Connecting => "Connecting",
-        DownloadStatus.Downloading => "Downloading",
-        DownloadStatus.Paused => "Paused",
-        DownloadStatus.Assembling => "Finalizing",
-        DownloadStatus.Verifying => "Verifying",
-        DownloadStatus.Completed => "Completed",
-        DownloadStatus.Failed => "Failed",
-        DownloadStatus.Canceled => "Canceled",
-        _ => Status.ToString()
-    };
+    /// <summary>Compact status label for the header pill; issue-aware while downloading.</summary>
+    public string StatusLabel =>
+        DownloadStatusMessages.ShortLabel(Status, _latestProgress?.Issue ?? DownloadIssue.None);
+
+    /// <summary>
+    /// Full, user-friendly status sentence for the Main tab, e.g. "Waiting for the download server to
+    /// respond…" or "Connection timed out. Reconnecting… (attempt 2 of 5)". Reflects the actual
+    /// detected issue so users never have to guess why a download stalled or slowed.
+    /// </summary>
+    public string StatusMessage => DownloadStatusMessages.Detailed(
+        EffectiveStatus,
+        _latestProgress?.Issue ?? DownloadIssue.None,
+        _latestProgress?.RetryAttempt ?? 0,
+        _latestProgress?.MaxRetries ?? 0,
+        _managed.State.ErrorMessage);
 
     // ---------------------------------------------------------------------
     // Live-metric projections (Requirements 2.1-2.8, 4.3, 4.4, 5.6).
@@ -275,6 +276,9 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(SpeedText));
         OnPropertyChanged(nameof(EtaText));
         OnPropertyChanged(nameof(ConnectionsText));
+        // The detected issue (and thus the status text) can change with each snapshot.
+        OnPropertyChanged(nameof(StatusLabel));
+        OnPropertyChanged(nameof(StatusMessage));
 
         // The worker advances the download's status (Connecting -> Downloading -> Verifying ...) on
         // the shared state object without always raising a separate DownloadChanged event, so refresh
@@ -367,6 +371,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(StatusLabel));
+        OnPropertyChanged(nameof(StatusMessage));
         OnPropertyChanged(nameof(CanPause));
         OnPropertyChanged(nameof(CanResume));
         OnPropertyChanged(nameof(CanCancel));

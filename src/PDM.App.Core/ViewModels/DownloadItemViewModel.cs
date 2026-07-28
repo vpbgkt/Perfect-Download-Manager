@@ -45,19 +45,12 @@ public sealed partial class DownloadItemViewModel : ObservableObject
 
     public DownloadStatus Status => _managed.State.Status;
 
-    public string StatusLabel => Status switch
-    {
-        DownloadStatus.Queued => "Queued",
-        DownloadStatus.Connecting => "Connecting",
-        DownloadStatus.Downloading => "Downloading",
-        DownloadStatus.Paused => "Paused",
-        DownloadStatus.Assembling => "Finalizing",
-        DownloadStatus.Verifying => "Verifying",
-        DownloadStatus.Completed => "Completed",
-        DownloadStatus.Failed => _managed.State.ErrorMessage ?? "Failed",
-        DownloadStatus.Canceled => "Canceled",
-        _ => Status.ToString()
-    };
+    /// <summary>
+    /// Compact status for the list badge, including an intelligent hint when the transfer is
+    /// struggling (e.g. "No internet", "Reconnecting") instead of a silent "stuck" state.
+    /// </summary>
+    public string StatusLabel =>
+        DownloadStatusMessages.ShortLabel(Status, _managed.LatestProgress?.Issue ?? DownloadIssue.None);
 
     public string SizeText => Formatting.FormatBytes(_managed.State.TotalBytes);
 
