@@ -49,6 +49,48 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Check_RejectsValidlySignedButOlderManifest_AsRollback()
+    {
+        // A MITM replays a stale but validly-signed 1.4.0 manifest to suppress a security update,
+        // even though this install has previously seen 1.6.0. The signature is valid, so only the
+        // anti-rollback floor can catch it.
+        using var signer = new ManifestSigner();
+        byte[] package = new byte[128];
+        var manifest = BuildManifest("1.4.0", package);
+        signer.Sign(manifest);
+
+        var handler = new FakeUpdateServer(manifest, package);
+        var service = new UpdateService(new HttpClient(handler),
+            new ManifestSignatureVerifier(signer.PublicKeySpki), _staging);
+
+        var result = await service.CheckAsync(
+            handler.ManifestUrl, ReleaseChannel.Stable, new Version(1, 4, 0),
+            rollbackFloor: new Version(1, 6, 0));
+
+        Assert.Equal(UpdateAvailability.CheckFailed, result.Availability);
+        Assert.Contains("rollback", result.Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Check_AllowsManifestAtOrAboveFloor()
+    {
+        using var signer = new ManifestSigner();
+        byte[] package = new byte[128];
+        var manifest = BuildManifest("1.6.0", package);
+        signer.Sign(manifest);
+
+        var handler = new FakeUpdateServer(manifest, package);
+        var service = new UpdateService(new HttpClient(handler),
+            new ManifestSignatureVerifier(signer.PublicKeySpki), _staging);
+
+        var result = await service.CheckAsync(
+            handler.ManifestUrl, ReleaseChannel.Stable, new Version(1, 5, 0),
+            rollbackFloor: new Version(1, 6, 0));
+
+        Assert.Equal(UpdateAvailability.UpdateAvailable, result.Availability);
+    }
+
+    [Fact]
     public async Task Check_ReportsUpToDate_WhenServerVersionEqualsOrOlder()
     {
         using var signer = new ManifestSigner();

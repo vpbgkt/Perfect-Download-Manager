@@ -9,6 +9,13 @@ public sealed class LicenseRecord
     /// <summary>UTC timestamp when the app was first launched on this machine.</summary>
     public DateTimeOffset FirstLaunchUtc { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// Highest UTC time ever observed by the app (monotonic anti-rollback watermark). Trial and
+    /// token expiry are evaluated against <c>max(systemClock, MaxSeenUtc)</c>, so winding the
+    /// system clock backwards cannot extend a trial or keep an expired token alive.
+    /// </summary>
+    public DateTimeOffset? MaxSeenUtc { get; set; }
+
     /// <summary>The activation key the user entered, or null when running unlicensed.</summary>
     public string? LicenseKey { get; set; }
 

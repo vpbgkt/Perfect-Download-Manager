@@ -60,9 +60,27 @@ $RECYCLE.BIN/
 # Node / backend
 node_modules/
 backend/**/lambda.zip
-backend/**/_keygen.mjs
-backend/**/_derive-pub.mjs
+# Transient generator/signing scripts written to disk at deploy time (may echo key material)
+backend/**/_*.mjs
 *.pem
+
+# --- Secrets / signing material — NEVER commit (security-critical) ---
+# Code-signing certificate private-key containers (Authenticode / dev certs).
+*.pfx
+*.p12
+*.pvk
+*.snk
+# Exported certificates (public, but keep cert artefacts out of source control).
+*.cer
+*.crt
+# Private keys / key dumps in any form.
+*.key
+id_rsa
+id_ecdsa
+# Signed-token / key scratch outputs (canary, public-key dumps, activation responses).
+canary.txt
+*.token
+license-*.json
 
 # Local scratch
 stack-info.json

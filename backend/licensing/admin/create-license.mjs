@@ -23,6 +23,12 @@ const maxActivations = Number(arg("max-activations", "3"));
 const expires = arg("expires", null);
 const features = arg("features", "").split(",").map((s) => s.trim()).filter(Boolean);
 
+// Signed entitlements embedded in every token minted for this key. 0 = no client-imposed
+// cap (full speed) for a licensed install; the client falls back to its free-tier defaults
+// (2 connections / 1 parallel) only when there is no valid token. Override per-plan as needed.
+const maxConn = Number(arg("max-conn", "0"));
+const maxParallel = Number(arg("max-parallel", "0"));
+
 // Generates a key like PDM-4F2A-9C1B-7E30-D5A8 using crypto-strong randomness.
 function generateKey() {
   const group = () => crypto.randomBytes(2).toString("hex").toUpperCase();
@@ -42,6 +48,8 @@ await doc.send(new PutCommand({
     plan,
     owner: owner ?? undefined,
     features,
+    maxConn,
+    maxParallel,
     maxActivations,
     expiresAt: expires ? new Date(expires).toISOString() : undefined,
     activations: {},
@@ -54,3 +62,4 @@ console.log("Created license key:");
 console.log("  ", licenseKey);
 console.log("Plan:", plan, "| Max activations:", maxActivations,
   "| Expires:", expires ?? "never", "| Features:", features.join(",") || "(none)");
+console.log("Entitlements: maxConn:", maxConn || "(uncapped)", "| maxParallel:", maxParallel || "(uncapped)");

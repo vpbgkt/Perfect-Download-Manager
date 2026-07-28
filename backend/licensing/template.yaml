@@ -40,6 +40,11 @@ Resources:
         SSEEnabled: true
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+      # Auto-expire ephemeral per-IP rate-limit rows (attribute `ttl`, epoch seconds). Real
+      # license/trial rows use an ISO `expiresAt` string and are never touched by TTL.
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role

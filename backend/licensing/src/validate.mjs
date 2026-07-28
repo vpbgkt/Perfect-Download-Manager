@@ -57,7 +57,9 @@ export const handler = async (event) => {
     expiresAt: tokenExpiry,
     features: license.features ?? [],
     plan: license.plan ?? "standard",
-    owner: license.owner ?? null
+    owner: license.owner ?? null,
+    maxConn: license.maxConn,
+    maxParallel: license.maxParallel
   }, privateKeyPem);
 
   return json(200, {

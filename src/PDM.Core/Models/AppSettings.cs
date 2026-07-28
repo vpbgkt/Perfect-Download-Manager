@@ -63,6 +63,14 @@ public sealed class AppSettings
     /// <summary>Base64 SPKI of the ECDSA P-256 public key used to verify update signatures.</summary>
     public string? UpdatePublicKeyBase64 { get; set; }
 
+    /// <summary>
+    /// Highest update version this install has ever been offered by a valid signed manifest
+    /// (anti-rollback / freeze defence, M4). A later fetch of a validly-signed but <i>older</i>
+    /// manifest — e.g. a MITM replaying a stale release to suppress a security update — is rejected
+    /// when its version is below this floor. Stored as a version string; empty until the first check.
+    /// </summary>
+    public string? UpdateVersionFloor { get; set; }
+
     /// <summary>How to handle name collisions when the destination file already exists.</summary>
     public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
 

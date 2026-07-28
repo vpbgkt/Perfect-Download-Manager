@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace PDM.UpdateLauncher;
 
@@ -20,8 +21,25 @@ namespace PDM.UpdateLauncher;
 /// </summary>
 internal static class Program
 {
+    // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS — keep the native DLL search path off the current directory.
+    private const uint LoadLibrarySearchDefaultDirs = 0x00001000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetDefaultDllDirectories(uint directoryFlags);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetDllDirectoryW(string lpPathName);
+
     private static int Main(string[] args)
     {
+        // M2: this launcher is copied to %TEMP% and executed from there — a writable location where
+        // a malicious DLL could be planted for search-order hijacking. Harden the loader before any
+        // native dependency resolves.
+        try { SetDllDirectoryW(string.Empty); SetDefaultDllDirectories(LoadLibrarySearchDefaultDirs); }
+        catch { /* best-effort */ }
+
         // Register an unhandled-exception handler FIRST so any crash below still writes
         // a diagnostic file to the user's Desktop. Historically the launcher would die
         // silently before Main() even ran (missing .dll next to the temp-copied exe),

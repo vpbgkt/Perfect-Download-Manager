@@ -8,6 +8,7 @@ import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient, TABLE_NAME, getPrivateKeyPem } from "./lib/config.mjs";
 import { signClaims } from "./lib/tokens.mjs";
 import { parseBody, json } from "./lib/http.mjs";
+import { clientIp, checkRateLimit } from "./lib/rateLimit.mjs";
 
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS || "14");
 
@@ -17,6 +18,17 @@ export const handler = async (event) => {
 
   if (!/^[A-Fa-f0-9]{16,128}$/.test(fingerprint)) {
     return json(400, { ok: false, message: "invalid_fingerprint" });
+  }
+
+  // M1: throttle trial-anchor requests per IP to blunt fingerprint-rotation trial farming.
+  // A rate-limited caller simply gets no server anchor and falls back to a local trial start.
+  try {
+    const rl = await checkRateLimit("TRIAL", clientIp(event));
+    if (!rl.allowed) {
+      return json(429, { ok: false, message: "rate_limited" });
+    }
+  } catch {
+    // A rate-limiter failure must never block a legitimate trial; fail open.
   }
 
   const key = `TRIAL#${fingerprint}`;

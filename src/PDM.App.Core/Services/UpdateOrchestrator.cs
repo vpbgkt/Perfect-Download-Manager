@@ -70,17 +70,22 @@ public sealed class UpdateOrchestrator
             ? LicensingConfig.UpdateManifestUrlBeta
             : LicensingConfig.UpdateManifestUrlStable);
 
-        UpdateCheckResult result = await service.CheckAsync(manifestUrl, channel, CurrentVersion, cancellationToken)
+        Version? floor = ParseFloor(_host.Settings.UpdateVersionFloor);
+
+        UpdateCheckResult result = await service
+            .CheckAsync(manifestUrl, channel, CurrentVersion, cancellationToken, floor)
             .ConfigureAwait(false);
 
         switch (result.Availability)
         {
             case UpdateAvailability.UpToDate:
                 _logger.LogInformation("Update check: up to date ({Version})", CurrentVersion);
+                await RaiseFloorAsync(result.Manifest, floor, cancellationToken).ConfigureAwait(false);
                 break;
             case UpdateAvailability.UpdateAvailable:
                 _logger.LogInformation("Update available: {Version} ({Size} bytes)",
                     result.Manifest!.Version, result.Manifest.PackageSizeBytes);
+                await RaiseFloorAsync(result.Manifest, floor, cancellationToken).ConfigureAwait(false);
                 break;
             case UpdateAvailability.CheckFailed:
                 _logger.LogWarning("Update check failed: {Message}", result.Message);
@@ -88,6 +93,36 @@ public sealed class UpdateOrchestrator
         }
 
         return result;
+    }
+
+    private static Version? ParseFloor(string? stored) =>
+        Version.TryParse(stored, out Version? v) ? v : null;
+
+    /// <summary>
+    /// Advances the persisted anti-rollback floor when a validly-signed manifest reports a version
+    /// at or above what we have seen. Persisted so a later stale-manifest replay is rejected.
+    /// </summary>
+    private async Task RaiseFloorAsync(UpdateManifest? manifest, Version? currentFloor, CancellationToken cancellationToken)
+    {
+        if (manifest is null || !Version.TryParse(manifest.Version, out Version? seen))
+        {
+            return;
+        }
+
+        if (currentFloor is not null && seen <= currentFloor)
+        {
+            return; // floor already at or above this version
+        }
+
+        _host.Settings.UpdateVersionFloor = seen.ToString();
+        try
+        {
+            await _host.SettingsStore.SaveAsync(_host.Settings, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist the update version floor.");
+        }
     }
 
     /// <summary>Downloads the update package into staging; the caller then applies it.</summary>

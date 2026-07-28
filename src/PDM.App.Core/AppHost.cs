@@ -59,15 +59,21 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     public bool IsLimitedMode => !_license.IsFunctional;
 
     /// <summary>
-    /// Applies the license-based download policy to the manager: no caps while the license is
-    /// functional (Trial/Grace/Activated), or small connection + simultaneous caps when it is not
-    /// (Expired/Invalid). Downloads still work in limited mode, just slower and one at a time.
+    /// Applies the license-based download policy to the manager. The caps are taken from the
+    /// current snapshot's <see cref="LicenseEntitlements"/>, which for an activated/grace license
+    /// are derived from the <b>server-signed token</b> (C1) — not from a local boolean. A
+    /// <see langword="null"/> cap means "no client-imposed limit" (full speed); the free/expired
+    /// tier resolves to the throttled defaults baked into <see cref="LicenseEntitlements.Free"/>.
+    ///
+    /// <para>Security note: because the premium throughput numbers live inside a signed token,
+    /// patching an "is licensed" flag no longer unlocks accelerated downloading — the numbers
+    /// themselves cannot be fabricated without the server's private key.</para>
     /// </summary>
     private void ApplyLicenseConnectionPolicy()
     {
-        bool limited = IsLimitedMode;
-        DownloadManager.MaxConnectionsPerDownloadCap = limited ? UnlicensedMaxConnections : null;
-        DownloadManager.MaxSimultaneousDownloadsCap = limited ? UnlicensedMaxSimultaneousDownloads : null;
+        LicenseEntitlements entitlements = _license.Entitlements;
+        DownloadManager.MaxConnectionsPerDownloadCap = entitlements.MaxConnectionsPerDownload;
+        DownloadManager.MaxSimultaneousDownloadsCap = entitlements.MaxParallelDownloads;
     }
 
     /// <summary>Root logger factory used to obtain scoped loggers.</summary>
@@ -170,6 +176,26 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
         bool keyIntact = Licensing.Security.TamperGuard.VerifyPublicKeyIntegrity(
             Licensing.Aws.LicensingConfig.PublicKeyBase64, Licensing.Aws.LicensingConfig.PublicKeyHash);
 
+        // C2: verify the signed canary with the embedded public key. If the key was swapped for an
+        // attacker's (to sign forged tokens), the canary — signed by the real private key — fails,
+        // so we refuse to trust the licensing subsystem. Producing a valid canary needs the server's
+        // private key, so this is not defeatable by recomputing a hash. Skipped until configured.
+        if (keyIntact && Licensing.Aws.LicensingConfig.LicensingCanaryToken.Length > 0)
+        {
+            var canaryVerifier = Licensing.Signed.LicenseTokenVerifier.FromBase64(
+                Licensing.Aws.LicensingConfig.PublicKeyBase64);
+            if (canaryVerifier.VerifyPayload(Licensing.Aws.LicensingConfig.LicensingCanaryToken) is null)
+            {
+                keyIntact = false;
+                startupLogger.LogError(
+                    "Licensing canary failed to verify; embedded key may have been swapped. Activation disabled.");
+            }
+        }
+
+        // C3: background security monitor (debugger presence + Authenticode self-integrity). Fully
+        // off the startup path; never blocks launch.
+        _ = Task.Run(() => RunSecurityMonitorAsync(manager, startupLogger));
+
         if (Licensing.Aws.LicensingConfig.IsConfigured && keyIntact)
         {
             transport = new Licensing.Aws.AwsLicenseTransport(
@@ -211,6 +237,43 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
 
         return new AppHost(settings, settingsStore, httpProvider, repo, manager,
             notifications, licenseService, license, loggerFactory);
+    }
+
+    /// <summary>
+    /// Background anti-tamper monitor (C3). Runs well after launch with randomized delays so its
+    /// response is decoupled from the check itself — this is what actually frustrates casual
+    /// patching, more than the check's mere presence. Debugger presence is treated as
+    /// friction/telemetry only (never a hard block, to avoid punishing legitimate power users); a
+    /// <b>definitely-tampered signed binary</b> is quietly clamped to the free tier. Never throws.
+    /// </summary>
+    private static async Task RunSecurityMonitorAsync(DownloadManager manager, ILogger logger)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(8, 20))).ConfigureAwait(false);
+
+            if (Licensing.Security.TamperGuard.IsDebuggerPresent())
+            {
+                logger.LogWarning("Security: debugger presence detected.");
+            }
+
+            Licensing.Security.TamperGuard.SelfIntegrity integrity =
+                Licensing.Security.TamperGuard.VerifySelfIntegrity();
+
+            if (integrity == Licensing.Security.TamperGuard.SelfIntegrity.Tampered)
+            {
+                logger.LogError("Security: self-integrity check failed (binary appears tampered).");
+
+                // Degrade later and elsewhere, not at the check site, so the cause is hard to locate.
+                await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(20, 60))).ConfigureAwait(false);
+                manager.MaxConnectionsPerDownloadCap = UnlicensedMaxConnections;
+                manager.MaxSimultaneousDownloadsCap = UnlicensedMaxSimultaneousDownloads;
+            }
+        }
+        catch (Exception)
+        {
+            // The security monitor must never crash or destabilise the app.
+        }
     }
 
     private static IWebProxy? BuildProxy(string? proxyUrl)

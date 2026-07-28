@@ -59,7 +59,8 @@ public sealed class UpdateService
         Uri manifestUrl,
         ReleaseChannel channel,
         Version currentVersion,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Version? rollbackFloor = null)
     {
         ArgumentNullException.ThrowIfNull(manifestUrl);
         ArgumentNullException.ThrowIfNull(currentVersion);
@@ -112,6 +113,20 @@ public sealed class UpdateService
             {
                 Availability = UpdateAvailability.CheckFailed,
                 Message = $"Manifest version '{manifest.Version}' is not a valid version."
+            };
+        }
+
+        // Anti-rollback / freeze defence (M4): a validly-signed manifest whose version is below the
+        // highest we have ever seen indicates a replay of a stale release (e.g. a MITM suppressing a
+        // security update). The signature alone cannot catch this because old manifests were signed
+        // by the same key — only a monotonic floor does. Treat it as a failed (suspicious) check.
+        if (rollbackFloor is not null && remote < rollbackFloor)
+        {
+            return new UpdateCheckResult
+            {
+                Availability = UpdateAvailability.CheckFailed,
+                Message = $"Manifest version {remote} is older than a previously seen release " +
+                          $"({rollbackFloor}); rejecting as a possible rollback."
             };
         }
 

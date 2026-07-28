@@ -20,15 +20,23 @@ function b64url(input) {
  * Builds the canonical JSON payload string. Property order is fixed so the client and server
  * agree byte-for-byte on what was signed.
  */
-export function buildPayload({ licenseKey, fingerprint, expiresAt, features, plan, owner }) {
+export function buildPayload({ licenseKey, fingerprint, expiresAt, features, plan, owner, maxConn, maxParallel }) {
   // Deterministic key order — do not reorder.
+  //
+  // maxConn / maxParallel are SIGNED numeric entitlements. The client derives its
+  // per-download connection cap and simultaneous-download cap from these values rather
+  // than from a local boolean, so patching an "isLicensed" flag no longer unlocks premium
+  // throughput — the numbers themselves only exist inside a token signed by this server.
+  // A value <= 0 means "no client-imposed cap" (full speed) for a licensed install.
   const payload = {
-    v: 1,
+    v: 2,
     licenseKey,
     fingerprint,
     plan: plan ?? "standard",
     owner: owner ?? null,
     features: Array.isArray(features) ? features : [],
+    maxConn: Number.isFinite(maxConn) ? Number(maxConn) : 0,
+    maxParallel: Number.isFinite(maxParallel) ? Number(maxParallel) : 0,
     issuedAt: new Date().toISOString(),
     expiresAt, // ISO string
     nonce: crypto.randomBytes(16).toString("hex")

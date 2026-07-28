@@ -17,7 +17,15 @@
 param(
     [string]$Configuration = "Release",
     [string]$Rid = "win-x64",
-    [string]$Version = "1.0.0"
+    [string]$Version = "1.0.0",
+
+    # Authenticode code signing (C3 real anti-tamper anchor). When -CertThumbprint is supplied, the
+    # three shipped executables are signed with signtool after publish. Signing is what makes the
+    # runtime self-integrity check (TamperGuard.VerifySelfIntegrity) meaningful: any post-sign patch
+    # — including swapping the embedded licensing key — invalidates the signature. Leave blank for
+    # unsigned dev builds (the self-integrity check then reports "Unsigned" and does not punish).
+    [string]$CertThumbprint = "",
+    [string]$TimestampUrl = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -69,6 +77,28 @@ foreach ($stale in @("pdm-update.dll", "pdm-update.deps.json", "pdm-update.runti
 $assets = Join-Path $appOut "Assets"
 New-Item -ItemType Directory -Path $assets -Force | Out-Null
 Copy-Item (Join-Path $repo "src/PDM.App.Avalonia/Assets/pdm.ico") (Join-Path $assets "pdm.ico") -Force
+
+# 5) Authenticode-sign the shipped executables (C3 anchor). Only runs when a cert thumbprint is
+#    supplied; otherwise the dist is left unsigned for local/dev use.
+if ($CertThumbprint -ne "") {
+    $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if (-not $signtool) {
+        throw "signtool.exe not found on PATH. Install the Windows SDK, or omit -CertThumbprint to skip signing."
+    }
+
+    $toSign = @("PDM.exe", "pdm-native-host.exe", "pdm-update.exe") |
+        ForEach-Object { Join-Path $appOut $_ } |
+        Where-Object { Test-Path $_ }
+
+    Write-Host "Signing $($toSign.Count) executables (SHA-256, RFC-3161 timestamp)..." -ForegroundColor Cyan
+    foreach ($f in $toSign) {
+        & $signtool.Source sign /sha1 $CertThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 /q $f
+        if ($LASTEXITCODE -ne 0) { throw "signtool failed for $f" }
+    }
+    Write-Host "Signed: $($toSign -join ', ')" -ForegroundColor Green
+} else {
+    Write-Host "No -CertThumbprint supplied; dist left UNSIGNED (self-integrity check will report Unsigned)." -ForegroundColor Yellow
+}
 
 $exe = Join-Path $appOut "PDM.exe"
 $sizeMb = "{0:N1}" -f ((Get-Item $exe).Length / 1MB)
