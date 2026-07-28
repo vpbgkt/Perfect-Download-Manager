@@ -59,7 +59,8 @@ const DEFAULT_SETTINGS = {
     intercept: true,              // auto-intercept the browser's own downloads
     notifications: true,          // show toast notifications on capture
     cancelBrowserDownload: true,  // cancel the browser's copy once PDM accepts
-    interceptAllTypes: true       // forward all file types
+    interceptAllTypes: true,      // forward all file types (except docs/images, see below)
+    sendDocsAndImages: false      // when off, common documents & images stay in the browser
 };
 
 // Content-type allow-list. Empty mime is allowed through (many downloads report empty mime
@@ -75,6 +76,15 @@ const DOWNLOADABLE_MIME_PATTERNS = [
 ];
 
 const DOWNLOADABLE_EXT_RE = /\.(zip|rar|7z|tar|gz|bz2|xz|zst|iso|img|exe|msi|msix|appx|dmg|pkg|deb|rpm|apk|ipa|pdf|epub|mobi|azw3|djvu|mp3|flac|wav|ogg|opus|m4a|aac|mp4|mkv|avi|mov|wmv|flv|webm|mpg|mpeg|m4v|3gp|ts|doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|rtf|csv|json|xml|torrent)(?:[?#].*)?$/i;
+
+// Common documents & images that download instantly in the browser and gain nothing from a
+// download manager. By default these are left to the browser (see sendDocsAndImages). Detection
+// uses BOTH the Content-Type (MIME) and the file extension so it works even when one is missing or
+// generic (e.g. a .pdf served as application/octet-stream).
+const DOC_IMAGE_EXT_RE = /\.(?:jpg|jpeg|jpe|jfif|png|apng|gif|bmp|dib|webp|svg|svgz|ico|cur|tif|tiff|heic|heif|avif|pdf|doc|docx|dot|dotx|xls|xlsx|xlsm|xlt|xltx|ppt|pptx|pps|ppsx|txt|text|log|md|markdown|rtf|csv|tsv|odt|ods|odp|odg)(?:[?#].*)?$/i;
+
+const DOC_IMAGE_MIME_RE =
+    /^(?:image\/|text\/(?:plain|csv|tab-separated-values|markdown|rtf)|application\/(?:pdf|rtf|msword|vnd\.ms-excel|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.|vnd\.oasis\.opendocument\.))/i;
 
 const BROWSER_INTERNAL_HOST_RE = /^https?:\/\/[^/]*\.(?:googleapis\.com|gstatic\.com|microsoft\.com|msedge\.net|windowsupdate\.com|update\.microsoft\.com|edgeupdate\.com|firefox\.com|mozilla\.net)\//i;
 
@@ -289,7 +299,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
                 intercept: true,
                 notifications: true,
                 cancelBrowserDownload: true,
-                interceptAllTypes: true
+                interceptAllTypes: true,
+                sendDocsAndImages: false
             });
         } catch { /* ignore */ }
     }
@@ -372,8 +383,14 @@ function itemStartedRecently(item) {
     return age >= -1000 && age <= RECENCY_MS;
 }
 
-function looksDownloadable(item, url, interceptAllTypes) {
-    if (interceptAllTypes) return true;
+// True when the item is a common document or image (by MIME or extension). Either signal is enough,
+// so a .pdf served as octet-stream, or an image with no extension, is still recognised.
+function isDocumentOrImage(mime, url) {
+    if (mime && mime.length > 0 && DOC_IMAGE_MIME_RE.test(mime)) return true;
+    return DOC_IMAGE_EXT_RE.test(url);
+}
+
+function matchesDownloadableAllowlist(item, url) {
     if (item.mime && item.mime.length > 0) {
         for (const rx of DOWNLOADABLE_MIME_PATTERNS) {
             if (rx.test(item.mime)) return true;
@@ -384,6 +401,20 @@ function looksDownloadable(item, url, interceptAllTypes) {
         return false;
     }
     return DOWNLOADABLE_EXT_RE.test(url);
+}
+
+// Decides whether a file type should be auto-forwarded to PDM:
+//   1. Documents & images stay in the browser unless the user opted in (sendDocsAndImages).
+//   2. Otherwise, "intercept every file type" forwards everything.
+//   3. Otherwise, only files on the downloadable allow-list are forwarded.
+function shouldForwardType(item, url, settings) {
+    if (!settings.sendDocsAndImages && isDocumentOrImage(item.mime, url)) {
+        return false;
+    }
+    if (settings.interceptAllTypes) {
+        return true;
+    }
+    return matchesDownloadableAllowlist(item, url);
 }
 
 function pruneWindow(timestamps, windowMs) {
@@ -435,7 +466,7 @@ chrome.downloads.onCreated.addListener(async (item) => {
     // this adds no latency before the cancel below.
     if (inStartupWindow() && !itemStartedRecently(item)) return;
 
-    if (!looksDownloadable(item, url, settings.interceptAllTypes)) return;
+    if (!shouldForwardType(item, url, settings)) return;
     if (isDuplicate(url)) return;
 
     // Silent flood guard — no notification, ever. Only forward-eligible downloads reach here.

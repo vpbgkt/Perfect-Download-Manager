@@ -4,6 +4,7 @@ const DEFAULTS = {
   intercept: true,
   cancelBrowserDownload: true,
   interceptAllTypes: true,
+  sendDocsAndImages: false,
   notifications: true
 };
 
