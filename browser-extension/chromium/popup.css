@@ -2,6 +2,7 @@
    Light/dark follow the OS via prefers-color-scheme. A small design-token set keeps spacing,
    radius, and colour consistent. Interactions use short, subtle transitions only. */
 
+/* Light palette (default). Blue accent replaces the previous orange. */
 :root {
   --bg: #f7f8fa;
   --surface: #ffffff;
@@ -9,9 +10,9 @@
   --muted: #6b7280;
   --border: #e6e8ec;
   --hover: #f1f2f5;
-  --brand: #e38b00;
-  --brand-2: #f5a623;
-  --brand-soft: rgba(227, 139, 0, .12);
+  --brand: #2563eb;
+  --brand-2: #3b82f6;
+  --brand-soft: rgba(37, 99, 235, .12);
   --ok: #16a34a;
   --err: #dc2626;
   --shadow: 0 6px 20px rgba(20, 24, 31, .10);
@@ -19,19 +20,38 @@
   --radius-sm: 9px;
 }
 
+/* Dark palette shared by an explicit Dark choice and System-when-OS-is-dark. */
+:root[data-theme="dark"],
+:root[data-theme="system"] {
+  color-scheme: light dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme="system"] {
     --bg: #14171d;
     --surface: #1d212a;
     --fg: #eef0f4;
     --muted: #99a1b0;
     --border: #2b3039;
     --hover: #262b35;
-    --brand-soft: rgba(245, 166, 35, .16);
+    --brand-soft: rgba(59, 130, 246, .18);
     --ok: #22c55e;
     --err: #f87171;
     --shadow: 0 8px 24px rgba(0, 0, 0, .38);
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #14171d;
+  --surface: #1d212a;
+  --fg: #eef0f4;
+  --muted: #99a1b0;
+  --border: #2b3039;
+  --hover: #262b35;
+  --brand-soft: rgba(59, 130, 246, .18);
+  --ok: #22c55e;
+  --err: #f87171;
+  --shadow: 0 8px 24px rgba(0, 0, 0, .38);
 }
 
 * { box-sizing: border-box; }
@@ -97,7 +117,8 @@ body {
   background: #fff; border-radius: 50%; transition: transform .2s cubic-bezier(.34, 1.56, .64, 1);
   box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
 }
-@media (prefers-color-scheme: dark) { .slider { background: #3a4150; } }
+:root[data-theme="dark"] .slider { background: #3a4150; }
+@media (prefers-color-scheme: dark) { :root[data-theme="system"] .slider { background: #3a4150; } }
 .switch input:checked + .slider { background: linear-gradient(135deg, var(--brand), var(--brand-2)); }
 .switch input:checked + .slider::before { transform: translateX(18px); }
 .switch input:focus-visible + .slider { outline: 2px solid var(--brand); outline-offset: 2px; }
@@ -130,6 +151,16 @@ body {
 .scan-send:hover { background: var(--brand); color: #fff; }
 .scan-send:disabled { opacity: .5; border-color: var(--border); color: var(--muted); background: transparent; cursor: default; }
 .scan-empty { padding: 14px 10px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* ---- Segmented control (theme picker) ---- */
+.seg { display: flex; gap: 3px; padding: 3px; background: var(--hover); border: 1px solid var(--border); border-radius: 10px; }
+.seg-btn {
+  flex: 1 1 0; padding: 7px 6px; border: none; background: transparent; color: var(--muted);
+  font-size: 12px; font-weight: 600; border-radius: 7px; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.seg-btn:hover { color: var(--fg); }
+.seg-btn.active { background: var(--surface); color: var(--brand); box-shadow: 0 1px 3px rgba(0, 0, 0, .14); }
 
 /* ---- Footer ---- */
 .ftr { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border); }

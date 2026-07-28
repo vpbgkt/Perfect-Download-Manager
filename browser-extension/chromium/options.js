@@ -34,3 +34,22 @@ for (const key of KEYS) {
     chrome.storage.local.set({ [key]: el.checked }).then(flashSaved);
   });
 }
+
+// Theme segmented control (System / Light / Dark). theme.js applies + persists via PDMTheme.
+const themeSeg = document.getElementById("theme-seg");
+
+function markTheme(value) {
+  themeSeg.querySelectorAll("[data-theme-value]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.themeValue === value);
+  });
+}
+
+chrome.storage.local.get({ theme: "system" }).then(({ theme }) => markTheme(theme));
+
+themeSeg.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-theme-value]");
+  if (!btn) return;
+  const value = btn.dataset.themeValue;
+  window.PDMTheme.set(value).then(flashSaved);
+  markTheme(value);
+});

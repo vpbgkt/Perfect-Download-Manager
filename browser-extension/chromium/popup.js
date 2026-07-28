@@ -75,6 +75,26 @@ sendDocsBox.addEventListener("change", () => {
   chrome.storage.local.set({ sendDocsAndImages: sendDocsBox.checked });
 });
 
+// ---- Theme segmented control (System / Light / Dark) ------------------------
+
+const themeSeg = $("theme-seg");
+
+function markTheme(value) {
+  themeSeg.querySelectorAll("[data-theme-value]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.themeValue === value);
+  });
+}
+
+chrome.storage.local.get({ theme: "system" }).then(({ theme }) => markTheme(theme));
+
+themeSeg.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-theme-value]");
+  if (!btn) return;
+  const value = btn.dataset.themeValue;
+  window.PDMTheme.set(value); // theme.js applies data-theme + persists
+  markTheme(value);
+});
+
 // ---- Version (from manifest) ------------------------------------------------
 
 try {

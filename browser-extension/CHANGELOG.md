@@ -1,5 +1,15 @@
 # Changelog — PDM Browser Integration
 
+## 1.2.8
+
+- **Theme support** — new Appearance control (System / Light / Dark) in both the popup and the
+  options page. Defaults to System (follows the OS) and can be forced to Light or Dark; the choice
+  is saved to Chrome Storage and applied instantly across both pages.
+- **New brand accent** — buttons, switches, links and highlights changed from orange to blue.
+- **Updated links** — Website, Support and Privacy now point to
+  `https://perfectdownloadmanager.com/`, `/support`, and `/privacy`; manifest `homepage_url`
+  updated to the official site.
+
 ## 1.2.7
 
 **Smart download filtering**
