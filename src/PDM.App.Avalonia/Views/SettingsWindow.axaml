@@ -9,16 +9,18 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource AppWindowBackgroundBrush}">
 
-    <DockPanel>
+    <!-- Grid with a star middle row gives the ScrollViewer a firmly bounded height so it always
+         scrolls the whole content (a DockPanel fill child could leave it unbounded and stop short). -->
+    <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- Header -->
-        <StackPanel DockPanel.Dock="Top" Margin="24,20,24,8" Spacing="2">
+        <StackPanel Grid.Row="0" Margin="24,20,24,8" Spacing="2">
             <TextBlock Classes="h1" Text="Settings" />
             <TextBlock Classes="secondary" Text="Tune downloads, network, and appearance." />
         </StackPanel>
 
         <!-- Action bar -->
-        <Border DockPanel.Dock="Bottom" Padding="24,14"
+        <Border Grid.Row="2" Padding="24,14"
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource AppDividerBrush}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
                 <TextBlock Text="{Binding ValidationError}" Foreground="{DynamicResource StatusWarningBrush}"
@@ -28,10 +30,10 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Padding="24,12,24,28"
+        <ScrollViewer Grid.Row="1" Padding="24,12,24,24"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="16">
+            <StackPanel Spacing="16" Margin="0,0,0,8">
 
                 <!-- ===== General ===== -->
                 <Border Classes="card">
@@ -155,5 +157,5 @@
 
             </StackPanel>
         </ScrollViewer>
-    </DockPanel>
+    </Grid>
 </Window>
