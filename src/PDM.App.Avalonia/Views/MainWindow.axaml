@@ -85,6 +85,21 @@
                     </StackPanel>
                 </StackPanel>
 
+                <!-- Quick access to the folder where PDM saves downloads (moved here from the
+                     toolbar for better reach). Docked below the category list; its label hides when
+                     the sidebar is collapsed, leaving just the icon. -->
+                <Button DockPanel.Dock="Bottom" Classes="ghost" Click="OnOpenDownloadsFolder"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Padding="12,9" Margin="0,6,0,4"
+                        ToolTip.Tip="Open the PDM downloads folder">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Classes="glyph" Text="&#xE838;" FontSize="16"
+                                   Width="18" TextAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="Downloads folder" VerticalAlignment="Center"
+                                   IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
+                    </StackPanel>
+                </Button>
+
                 <ListBox Classes="categories" ItemsSource="{Binding Categories}"
                          SelectedItem="{Binding SelectedCategory}">
                     <ListBox.ItemTemplate>
@@ -181,15 +196,6 @@
                             <TextBlock Text="Open browser" VerticalAlignment="Center" />
                         </StackPanel>
                     </SplitButton>
-
-                    <!-- One-click access to the folder where PDM saves downloads. -->
-                    <Button Classes="ghost" Click="OnOpenDownloadsFolder"
-                            ToolTip.Tip="Open the PDM downloads folder">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Classes="glyph" Text="&#xE838;" />
-                            <TextBlock Text="Downloads folder" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
                 </StackPanel>
 
                 <!-- Search -->

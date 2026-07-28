@@ -28,7 +28,9 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Padding="24,12,24,16">
+        <ScrollViewer Padding="24,12,24,28"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="16">
 
                 <!-- ===== General ===== -->

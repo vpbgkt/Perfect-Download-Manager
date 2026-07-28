@@ -68,7 +68,7 @@ public partial class SettingsWindow : Window
                 BorderBrush = Brushes.Transparent,
                 Child = dot,
                 Tag = id,
-                Margin = new Thickness(0, 0, 8, 0),
+                Margin = new Thickness(0, 0, 10, 12),
                 Cursor = new global::Avalonia.Input.Cursor(global::Avalonia.Input.StandardCursorType.Hand)
             };
 
