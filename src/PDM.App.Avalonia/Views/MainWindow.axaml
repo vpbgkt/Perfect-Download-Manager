@@ -25,7 +25,10 @@
                     <DoubleTransition Property="Width" Duration="0:0:0.18" Easing="CubicEaseOut" />
                 </Transitions>
             </Border.Transitions>
-            <DockPanel Margin="8,12,8,12">
+            <!-- LastChildFill is off so the category list sizes to its content and the Downloads
+                 folder button can sit directly after it; the brand/plan badges stay pinned to the
+                 bottom. -->
+            <DockPanel Margin="8,12,8,12" LastChildFill="False">
 
                 <!-- Header: collapse toggle in front of the LIBRARY heading. The heading hides while
                      collapsed, leaving just the toggle so the user can expand again. -->
@@ -41,25 +44,6 @@
                                Foreground="{DynamicResource AppTextPrimaryBrush}"
                                IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
                 </StackPanel>
-
-                <!-- Quick access to the PDM downloads folder. Sits just under the LIBRARY header
-                     and is set apart from the category items by a light bottom divider so it does
-                     not read as a category. Label hides when the sidebar is collapsed. -->
-                <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1"
-                        BorderBrush="{DynamicResource AppDividerBrush}"
-                        Margin="0,0,0,8" Padding="0,0,0,8">
-                    <Button Classes="ghost" Click="OnOpenDownloadsFolder"
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            Padding="12,9"
-                            ToolTip.Tip="Open the PDM downloads folder">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <TextBlock Classes="glyph" Text="&#xE838;" FontSize="16"
-                                       Width="18" TextAlignment="Center" VerticalAlignment="Center" />
-                            <TextBlock Text="Downloads folder" VerticalAlignment="Center"
-                                       IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
-                        </StackPanel>
-                    </Button>
-                </Border>
 
                 <!-- Plan badge: always visible above the brand. Premium shows an accent badge;
                      free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
@@ -104,7 +88,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <ListBox Classes="categories" ItemsSource="{Binding Categories}"
+                <ListBox DockPanel.Dock="Top" Classes="categories" ItemsSource="{Binding Categories}"
                          SelectedItem="{Binding SelectedCategory}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:CategoryFilterItem">
@@ -117,6 +101,25 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+
+                <!-- Quick access to the PDM downloads folder. Placed at the end of the LIBRARY
+                     list, set off by a light divider line above it so it does not read as a
+                     category. Label hides when the sidebar is collapsed. -->
+                <Border DockPanel.Dock="Top" BorderThickness="0,1,0,0"
+                        BorderBrush="{DynamicResource AppDividerBrush}"
+                        Margin="0,8,0,0" Padding="0,8,0,0">
+                    <Button Classes="ghost" Click="OnOpenDownloadsFolder"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Padding="12,9"
+                            ToolTip.Tip="Open the PDM downloads folder">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock Classes="glyph" Text="&#xE838;" FontSize="16"
+                                       Width="18" TextAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="Downloads folder" VerticalAlignment="Center"
+                                       IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
+                        </StackPanel>
+                    </Button>
+                </Border>
             </DockPanel>
         </Border>
 
