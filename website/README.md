@@ -101,11 +101,26 @@ When you settle on one, update the two `<a>` tags with `class="btn btn-block"` i
 
 ## Roll a new version
 
+The landing page reads the current version, download URLs, and file sizes **at runtime**
+from the S3 updates bucket (`stable/downloads.json`, falling back to `stable/manifest.json`).
+See the `[data-version]` / `[data-size]` hooks in `index.html` and the fetch logic in
+`assets/js/main.js`. The hardcoded strings in the HTML are only a fallback for when that
+JSON hasn't published yet, so **do not** treat them as the source of truth.
+
 When PDM ships a new build:
 
-1. Update the version string in `index.html` (search for `1.0.10` and replace).
-2. Update the file sizes on the download cards.
-3. Commit and push. Cloudflare Pages deploys within a minute.
+1. Publish the new `downloads.json` / `manifest.json` to the S3 `stable/` prefix (the release
+   script handles this) — the site picks up the new version and links automatically, no HTML
+   edit or redeploy needed.
+2. Add a release section to `changelog.html` (it's the canonical human-readable version history)
+   and bump `SoftwareApplication.softwareVersion` in the `index.html` JSON-LD to match.
+3. Update the fallback version/size strings in `index.html` only if you want the static
+   fallback to stay current.
+4. Commit and push. Cloudflare deploys within a minute.
+
+> Keep the changelog, the JSON-LD `softwareVersion`, and the published S3 metadata in sync on
+> every release — mismatched version numbers across pages hurt both search ranking and
+> AI-answer-engine citation trust.
 
 For a longer-lived, professionally designed site (blog, docs, dashboard, checkout), migrate to
 Astro or Next.js later — the current v1 covers the introduction/download job with zero build

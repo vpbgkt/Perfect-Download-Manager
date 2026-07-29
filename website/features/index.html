@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Features — Perfect Download Manager for Windows (PDM)</title>
+    <meta name="description" content="Explore Perfect Download Manager features: up to 32 parallel connections, reliable resume, Chrome/Edge integration, scheduler with quiet hours, categories, signed auto-updates, and no telemetry." />
+    <meta name="keywords" content="multi thread download manager, resume broken downloads, download scheduling software, secure download manager, download queue manager, download manager for large files" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#E38B00" />
+
+    <meta property="og:site_name" content="Perfect Download Manager" />
+    <meta property="og:title" content="Features — Perfect Download Manager for Windows" />
+    <meta property="og:description" content="Up to 32 parallel connections, reliable resume, Chrome/Edge integration, scheduling, categories, signed auto-updates, and no telemetry." />
+    <meta property="og:image" content="https://perfectdownloadmanager.com/assets/img/og-image.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://perfectdownloadmanager.com/features/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Features — Perfect Download Manager for Windows" />
+    <meta name="twitter:description" content="Up to 32 parallel connections, reliable resume, Chrome/Edge integration, scheduling, and no telemetry." />
+    <meta name="twitter:image" content="https://perfectdownloadmanager.com/assets/img/og-image.png" />
+
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/img/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png" />
+
+    <link rel="canonical" href="https://perfectdownloadmanager.com/features/" />
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Features — Perfect Download Manager for Windows",
+      "description": "A deep look at Perfect Download Manager's features: multi-connection engine, reliable resume, browser integration, scheduling, categories, signed auto-updates, and privacy by design.",
+      "url": "https://perfectdownloadmanager.com/features/",
+      "inLanguage": "en",
+      "isPartOf": { "@type": "WebSite", "name": "Perfect Download Manager", "url": "https://perfectdownloadmanager.com/" },
+      "about": { "@type": "SoftwareApplication", "name": "Perfect Download Manager", "operatingSystem": "Windows 10, Windows 11" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://perfectdownloadmanager.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://perfectdownloadmanager.com/features/" }
+      ]
+    }
+    </script>
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="brand" aria-label="Perfect Download Manager home">
+                <img src="/assets/img/logo-48.png" alt="" width="36" height="36" />
+                <span class="brand-name">Perfect Download Manager</span>
+            </a>
+            <button class="nav-toggle" id="navToggle" aria-controls="siteNav" aria-expanded="false" aria-label="Toggle navigation menu">
+                <span></span><span></span><span></span>
+            </button>
+            <nav class="site-nav" id="siteNav" aria-label="Primary">
+                <a href="/features/">Features</a>
+                <a href="/#download">Download</a>
+                <a href="/#extension">Extension</a>
+                <a href="/alternatives/internet-download-manager/">vs IDM</a>
+                <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
+                <a href="/support">Support</a>
+            </nav>
+        </div>
+    </header>
+
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="/">Home</a> / Features
+    </nav>
+
+    <article class="article">
+        <h1>Perfect Download Manager features</h1>
+        <p class="lede">
+            Perfect Download Manager (PDM) is a free download manager for Windows 10 and 11 that splits every
+            file across up to 32 parallel connections, resumes reliably after any interruption, and captures
+            downloads straight from Chrome, Edge, and Brave — with no ads and no telemetry. Here's how each part
+            works.
+        </p>
+
+        <h2>How does the multi-connection engine speed up downloads?</h2>
+        <p>
+            PDM splits each file into multiple segments and downloads them at the same time over separate HTTP
+            range requests, then reassembles them into one file. On servers that support range requests, this
+            gets around the per-connection throttling and latency limits that make single-stream downloads slow,
+            so you use more of the bandwidth you're already paying for. You can configure up to 32 connections per
+            download and tune it per file, which matters most on large files and high-latency or rate-limited
+            hosts. When a paused download is resumed, PDM re-spreads the remaining bytes across all connections
+            so the resumed transfer runs at full speed instead of crawling on a single stream.
+        </p>
+
+        <h2>How reliable is resume after a crash or lost connection?</h2>
+        <p>
+            Every download is checkpointed to disk continuously, not just when it finishes. If the app is closed,
+            the PC reboots, or Wi-Fi drops mid-transfer, PDM picks up exactly where it left off without
+            redownloading a byte. When you resume, it also re-resolves the source link, so expiring CDN and
+            file-host URLs (the kind that Google Drive and signed links hand out) keep working instead of failing
+            with a stale address. Duplicate detection recognizes a file you already have even when the link
+            changes each time, and offers to continue the existing partial download, open the finished file, or
+            start a fresh copy. This is the core reliability feature for anyone downloading large files on an
+            unstable connection.
+        </p>
+
+        <h2>How does browser integration work?</h2>
+        <p>
+            The PDM browser extension adds a "Download with PDM" entry to the right-click menu on any link, image,
+            or media element. Optional auto-intercept can hand the browser's own downloads to PDM as well, with
+            IDM-style safety filters so old files and prefetched resources don't leak through. The extension is
+            built on Manifest V3 and works in Chrome, Edge, and Brave today; a Firefox port is planned but not yet
+            available. It requests no broad host permissions, and it's distributed through the Chrome Web Store.
+            If you'd rather not use auto-intercept, the right-click capture alone covers most workflows.
+        </p>
+
+        <h2>Can I schedule downloads and limit bandwidth?</h2>
+        <p>
+            Yes. The scheduler lets you queue large files to download overnight, set "quiet hours" when PDM should
+            hold off, and apply global bandwidth limits during work hours so downloads don't saturate your
+            connection when you need it. Downloads respect the schedule on their own — there's no need to sit and
+            babysit a queue. This is useful if you're on a metered or shared connection, or if you want big
+            transfers to run while you're away from the machine.
+        </p>
+
+        <h2>How does PDM organize downloads?</h2>
+        <p>
+            PDM sorts finished downloads into categories — videos land with videos, archives with archives — or
+            you can set a per-download destination folder when you start a transfer. Everything is tracked in a
+            SQLite-indexed catalog, so the list stays searchable and fast even after you've accumulated a lot of
+            files. That makes it a practical download queue manager for people who download frequently and want to
+            find things again later without digging through a single cluttered folder.
+        </p>
+
+        <h2>Are updates secure?</h2>
+        <p>
+            New releases are delivered through PDM's own auto-updater, and every update package is ECDSA-signed and
+            SHA-256 verified before it installs. That means the app checks both that the update came from us and
+            that it wasn't tampered with in transit, without relying on any third-party update tracker. One honest
+            caveat: the installer <code>.exe</code> itself isn't code-signed yet, so Windows SmartScreen may warn
+            you the first time you run it — click "More info" then "Run anyway." A code-signing certificate is the
+            permanent fix and is planned. See the <a href="/faq/">FAQ</a> for the full explanation.
+        </p>
+
+        <h2>What data does PDM collect?</h2>
+        <p>
+            None for tracking. PDM has no telemetry, no analytics, and no ads, and it doesn't require an account or
+            sign-in. Your downloads stay on your machine. The only times the app contacts our servers are to
+            validate a license (only if you activate one) and to check for updates. Both requests are minimal and
+            documented in the <a href="/privacy.html">privacy policy</a>. For a lot of people this is the main
+            reason to switch from ad-supported or account-gated download managers.
+        </p>
+
+        <h2>What does the interface look like?</h2>
+        <p>
+            PDM uses a modern Fluent-styled WPF interface with light and dark themes and a Mica-tinted title bar,
+            so it feels native on Windows 11 without dropping Windows 10 support. Recent versions added a
+            collapsible sidebar, real per-file icons, a redesigned download popup, and plain-language status
+            messages that explain stalls (no internet, waiting for the server, connection timed out, unstable
+            network, disk error) instead of leaving a download silently "stuck." Optional when-done actions can
+            open a file automatically or shut down the PC after a download finishes, with a cancellable countdown.
+        </p>
+
+        <div class="cta-row">
+            <a href="/#download" class="btn btn-primary">Download PDM for Windows</a>
+            <a href="/alternatives/internet-download-manager/" class="btn btn-ghost">Compare PDM vs IDM →</a>
+        </div>
+    </article>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-brand">
+                <img src="/assets/img/logo-48.png" alt="" width="28" height="28" />
+                <span>Perfect Download Manager</span>
+            </div>
+            <nav class="footer-nav" aria-label="Footer">
+                <a href="/features/">Features</a>
+                <a href="/#download">Download</a>
+                <a href="/#extension">Extension</a>
+                <a href="/alternatives/internet-download-manager/">vs IDM</a>
+                <a href="/blog/">Blog</a>
+                <a href="/changelog">Changelog</a>
+                <a href="/privacy.html">Privacy</a>
+                <a href="/support">Support</a>
+            </nav>
+            <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
+        </div>
+    </footer>
+
+    <script src="/assets/js/main.js" defer></script>
+</body>
+</html>

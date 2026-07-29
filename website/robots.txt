@@ -1,3 +1,47 @@
+# Perfect Download Manager — robots.txt
+# Marketing site: we want maximum reach in BOTH classic search and AI answer
+# engines, so we explicitly welcome the major citation crawlers. Review the
+# user-agent names periodically — this list shifts as vendors rename bots.
+
+# --- Traditional search engines ---
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# --- AI search / citation crawlers (allowed for GEO visibility) ---
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# --- Everything else ---
 User-agent: *
 Allow: /
 

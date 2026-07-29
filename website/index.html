@@ -78,13 +78,29 @@
         {
           "@type": "Question",
           "name": "How is it different from Internet Download Manager (IDM)?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Same core idea (multi-connection downloads and browser integration) with a different implementation. PDM is built on modern .NET 10 with a Fluent-styled WPF UI, ships an MV3 browser extension with strict safety filters, and uses ECDSA-signed auto-updates. Free while in early access." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Same core idea (multi-connection downloads and browser integration) with a different implementation. PDM is built on modern .NET 10 with a Fluent-styled WPF UI, ships an MV3 browser extension with strict safety filters, and uses ECDSA-signed auto-updates. Free while in early access. See the full PDM vs IDM comparison at /alternatives/internet-download-manager/." }
         },
         {
           "@type": "Question",
           "name": "Does it phone home?",
           "acceptedAnswer": { "@type": "Answer", "text": "No telemetry, no analytics, no ads. The app contacts our servers only for license validation (if you activate a license) and to check for updates." }
         }
+      ]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Perfect Download Manager",
+      "alternateName": "PDM",
+      "url": "https://perfectdownloadmanager.com/",
+      "logo": "https://perfectdownloadmanager.com/assets/img/logo-48.png",
+      "email": "support@perfectdownloadmanager.com",
+      "description": "Perfect Download Manager (PDM) is a free multi-connection download manager for Windows 10 and 11 with reliable resume, browser integration, and no telemetry.",
+      "sameAs": [
+        "https://chromewebstore.google.com/detail/perfect-download-manager/phbbcmofdbbojilmcpaghnafpamnocom",
+        "https://whatsapp.com/channel/0029VbD6BsnDJ6Gx5LoXHr2I"
       ]
     }
     </script>
@@ -104,6 +120,7 @@
                 <a href="#download">Download</a>
                 <a href="#extension">Extension</a>
                 <a href="#faq">FAQ</a>
+                <a href="/alternatives/internet-download-manager/">vs IDM</a>
                 <a href="/blog/">Blog</a>
                 <a href="/changelog">Changelog</a>
                 <a href="/support">Support</a>
@@ -219,6 +236,9 @@
                         <p>No telemetry, no analytics, no ads. Downloads stay on your machine; only your license key and a hardware fingerprint touch our servers.</p>
                     </div>
                 </div>
+                <p style="text-align:center; margin-top:32px;">
+                    <a href="/features/" class="btn btn-ghost">Explore every feature in detail →</a>
+                </p>
             </div>
         </section>
 
@@ -249,6 +269,14 @@
                         <p class="download-meta">Same app as the installer, just unpacked</p>
                     </div>
                 </div>
+                <p class="download-note" role="note">
+                    <strong>Heads-up on first install:</strong> the installer isn't code-signed yet, so
+                    Windows SmartScreen may show a "Windows protected your PC" prompt. Click
+                    <strong>More info → Run anyway</strong> to continue. A code-signing certificate is
+                    the permanent fix and is planned (no firm date yet). In the meantime every update is
+                    ECDSA-signed and SHA-256 verified before it installs, and you can check the published
+                    SHA-256 against your download.
+                </p>
                 <div class="install-steps">
                     <h3>Install in three steps</h3>
                     <ol>
@@ -257,6 +285,11 @@
                         <li>Launch PDM from the Start Menu. First run offers a free trial; you can activate a license from the toolbar any time.</li>
                     </ol>
                 </div>
+                <p style="text-align:center; margin-top:24px;">
+                    On a specific version? See the
+                    <a href="/downloads/windows-11/">Windows 11 download page</a> or the
+                    <a href="/downloads/windows-10/">Windows 10 download page</a>.
+                </p>
             </div>
         </section>
 
@@ -313,7 +346,7 @@
                     </details>
                     <details class="faq">
                         <summary>How is it different from Internet Download Manager (IDM)?</summary>
-                        <p>Same core idea (multi-connection, browser integration), a different implementation. PDM is built on modern .NET 10 with a Fluent-styled WPF UI, ships an MV3 browser extension with strict safety filters, and uses ECDSA-signed auto-updates. Free while in early access.</p>
+                        <p>Same core idea (multi-connection, browser integration), a different implementation. PDM is built on modern .NET 10 with a Fluent-styled WPF UI, ships an MV3 browser extension with strict safety filters, and uses ECDSA-signed auto-updates. Free while in early access. See the full <a href="/alternatives/internet-download-manager/">PDM vs IDM comparison</a>.</p>
                     </details>
                     <details class="faq">
                         <summary>Does it phone home?</summary>
@@ -325,9 +358,12 @@
                     </details>
                     <details class="faq">
                         <summary>Is my code signing certificate needed?</summary>
-                        <p>The MSI is currently unsigned, so Windows SmartScreen may warn you on first install — click "More info" then "Run anyway." Code signing is on the roadmap. The auto-updater itself is already safe: every update package is ECDSA-signed and SHA-256 verified before it runs.</p>
+                        <p>The MSI is currently unsigned, so Windows SmartScreen may warn you on first install — click "More info" then "Run anyway." A code-signing certificate is the permanent fix and is planned, though we don't have a firm date yet. The auto-updater itself is already safe: every update package is ECDSA-signed and SHA-256 verified before it runs.</p>
                     </details>
                 </div>
+                <p style="text-align:center; margin-top:32px;">
+                    <a href="/faq/" class="btn btn-ghost">See the full FAQ →</a>
+                </p>
             </div>
         </section>
     </main>
@@ -342,6 +378,7 @@
                 <a href="#features">Features</a>
                 <a href="#download">Download</a>
                 <a href="#extension">Extension</a>
+                <a href="/alternatives/internet-download-manager/">vs IDM</a>
                 <a href="/blog/">Blog</a>
                 <a href="/changelog">Changelog</a>
                 <a href="/privacy.html">Privacy</a>

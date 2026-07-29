@@ -2,27 +2,85 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
         <loc>https://perfectdownloadmanager.com/</loc>
-        <lastmod>2026-07-16</lastmod>
+        <lastmod>2026-07-29</lastmod>
         <changefreq>weekly</changefreq>
         <priority>1.0</priority>
     </url>
     <url>
+        <loc>https://perfectdownloadmanager.com/features/</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/faq/</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/alternatives/internet-download-manager/</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/vs/browser-downloads/</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/downloads/windows-11/</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/downloads/windows-10/</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <url>
         <loc>https://perfectdownloadmanager.com/blog/</loc>
+        <lastmod>2026-07-29</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.7</priority>
     </url>
     <url>
         <loc>https://perfectdownloadmanager.com/blog/free-idm-alternative-windows.html</loc>
+        <lastmod>2026-07-29</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.6</priority>
     </url>
     <url>
         <loc>https://perfectdownloadmanager.com/blog/speed-up-downloads-windows.html</loc>
+        <lastmod>2026-07-29</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.6</priority>
     </url>
     <url>
         <loc>https://perfectdownloadmanager.com/blog/resume-interrupted-downloads.html</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/blog/how-multi-threaded-downloading-works.html</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/blog/windows-smartscreen-warning-new-apps.html</loc>
+        <lastmod>2026-07-29</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+    <url>
+        <loc>https://perfectdownloadmanager.com/blog/is-third-party-download-manager-safe.html</loc>
+        <lastmod>2026-07-29</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.6</priority>
     </url>
@@ -33,11 +91,13 @@
     </url>
     <url>
         <loc>https://perfectdownloadmanager.com/support</loc>
+        <lastmod>2026-07-29</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.5</priority>
     </url>
     <url>
         <loc>https://perfectdownloadmanager.com/changelog</loc>
+        <lastmod>2026-07-29</lastmod>
         <changefreq>weekly</changefreq>
         <priority>0.5</priority>
     </url>
