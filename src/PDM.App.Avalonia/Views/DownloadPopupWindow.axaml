@@ -62,6 +62,12 @@
                                 <Button Content="Close" Click="OnCloseClick"
                                         IsVisible="{Binding IsTerminal}" />
 
+                                <!-- Paused: keep the download for later. Closes the popup without
+                                     cancelling, so it stays paused and resumable from the main list. -->
+                                <Button Content="Download later" Click="OnCloseClick"
+                                        IsVisible="{Binding IsPaused}"
+                                        ToolTip.Tip="Close this window and keep the download paused so you can resume it later" />
+
                                 <!-- Single Pause/Resume slot: only the valid action shows. -->
                                 <Button Content="Pause" Command="{Binding PauseCommand}"
                                         IsVisible="{Binding CanPause}" Classes="brand" />

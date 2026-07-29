@@ -326,6 +326,13 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     public bool IsCanceled => EffectiveStatus == DownloadStatus.Canceled;
 
     /// <summary>
+    /// True while the download is Paused. Drives the popup's "Download later" action, which closes the
+    /// popup without cancelling so the download stays paused and can be resumed later from the main
+    /// list (unlike Cancel, which deletes the partial data).
+    /// </summary>
+    public bool IsPaused => EffectiveStatus == DownloadStatus.Paused;
+
+    /// <summary>
     /// Failure detail shown while the download is Failed: the recorded error message when one exists,
     /// otherwise a non-empty generic message (Requirements 8.2, 8.3). <c>null</c> when not failed.
     /// </summary>
@@ -378,6 +385,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsFailed));
         OnPropertyChanged(nameof(IsCanceled));
+        OnPropertyChanged(nameof(IsPaused));
         OnPropertyChanged(nameof(FailureMessage));
         OnPropertyChanged(nameof(CanOpenFile));
         OnPropertyChanged(nameof(CanOpenFolder));
