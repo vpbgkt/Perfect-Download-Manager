@@ -79,7 +79,7 @@ public sealed class CancelConfirmationGatePropertyTests : IAsyncLifetime
             {
                 confirmWasInvoked = true;
                 capturedPrompt = msg;
-                return userConfirms;
+                return Task.FromResult(userConfirms);
             },
             showError: null);
 
@@ -174,7 +174,7 @@ public sealed class CancelConfirmationGatePropertyTests : IAsyncLifetime
         var vm = new DownloadPopupViewModel(
             managed,
             manager: _downloadManager,
-            confirmCancel: _ => false, // always decline
+            confirmCancel: _ => Task.FromResult(false), // always decline
             showError: null);
 
         // Capture before

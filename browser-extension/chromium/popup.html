@@ -8,56 +8,99 @@
 </head>
 
 <body>
+  <!-- Header: logo + connection status -->
   <header class="hdr">
-    <img class="logo" src="icons/icon48.png" alt="" width="28" height="28" />
+    <img class="logo" src="icons/icon48.png" alt="" width="34" height="34" />
     <div class="hdr-text">
       <div class="title">Perfect Download Manager</div>
       <div class="subtitle">Browser integration</div>
     </div>
+    <div id="status" class="status-pill status-pill--checking" title="Connection status">
+      <span class="dot"></span>
+      <span id="status-text">Checking…</span>
+    </div>
   </header>
 
-  <div id="status" class="status status--checking">
-    <span class="dot"></span>
-    <span id="status-text">Checking connection…</span>
-  </div>
-
-  <div class="card">
-    <label class="switch-row">
-      <span class="switch-label">
-        Automatically send downloads to PDM
-        <span class="switch-hint">Intercept the browser's own downloads</span>
-      </span>
-      <span class="switch">
-        <input type="checkbox" id="intercept" />
-        <span class="slider"></span>
-      </span>
-    </label>
-  </div>
-
-  <div class="actions">
-    <button id="send-page" class="btn btn--primary">
-      <svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
-      Send this page to PDM
-    </button>
-    <button id="scan" class="btn btn--ghost">
-      <svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
-      Scan page for media &amp; links
-    </button>
-  </div>
-
-  <div id="scan-results" class="scan hidden">
-    <div class="scan-head">
-      <span id="scan-count">0 items found</span>
-      <button id="send-all" class="link-btn">Send all</button>
+  <!-- Download integration -->
+  <section class="group">
+    <div class="group-title">Download integration</div>
+    <div class="card">
+      <label class="switch-row">
+        <span class="switch-label">
+          Auto-send downloads to PDM
+          <span class="switch-hint">Intercept the browser's own downloads.</span>
+        </span>
+        <span class="switch">
+          <input type="checkbox" id="intercept" />
+          <span class="slider"></span>
+        </span>
+      </label>
     </div>
-    <ul id="scan-list" class="scan-list"></ul>
-  </div>
+  </section>
 
+  <!-- Smart filtering -->
+  <section class="group">
+    <div class="group-title">Smart filtering</div>
+    <div class="card">
+      <label class="switch-row">
+        <span class="switch-label">
+          Send documents &amp; images
+          <span class="switch-hint">Off: PDFs, Office files &amp; images download in the browser.
+            On: send everything to PDM.</span>
+        </span>
+        <span class="switch">
+          <input type="checkbox" id="sendDocsAndImages" />
+          <span class="slider"></span>
+        </span>
+      </label>
+    </div>
+  </section>
+
+  <!-- Quick actions -->
+  <section class="group">
+    <div class="group-title">This page</div>
+    <div class="actions">
+      <button id="send-page" class="btn btn--primary">
+        <svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+        Send this page to PDM
+      </button>
+      <button id="scan" class="btn btn--ghost">
+        <svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+        Scan for media &amp; links
+      </button>
+    </div>
+
+    <div id="scan-results" class="scan hidden">
+      <div class="scan-head">
+        <span id="scan-count">0 items found</span>
+        <button id="send-all" class="link-btn">Send all</button>
+      </div>
+      <ul id="scan-list" class="scan-list"></ul>
+    </div>
+  </section>
+
+  <!-- Preferences: theme -->
+  <section class="group">
+    <div class="group-title">Appearance</div>
+    <div class="seg" id="theme-seg" role="group" aria-label="Theme">
+      <button type="button" class="seg-btn" data-theme-value="system">System</button>
+      <button type="button" class="seg-btn" data-theme-value="light">Light</button>
+      <button type="button" class="seg-btn" data-theme-value="dark">Dark</button>
+    </div>
+  </section>
+
+  <!-- Footer -->
   <footer class="ftr">
-    <span class="hint">Right-click any link → “Download with PDM”.</span>
-    <button id="open-options" class="link-btn">Settings</button>
+    <span class="ver">v<span id="version">0.0.0</span></span>
+    <nav class="ftr-links">
+      <button id="open-options" class="link-btn">Settings</button>
+      <a class="link-btn" href="https://perfectdownloadmanager.com/" target="_blank" rel="noopener">Website</a>
+      <a class="link-btn" href="https://perfectdownloadmanager.com/support" target="_blank" rel="noopener">Support</a>
+      <a class="link-btn" href="https://perfectdownloadmanager.com/privacy" target="_blank" rel="noopener">Privacy</a>
+    </nav>
   </footer>
 
+  <script src="theme.js"></script>
   <script src="popup.js"></script>
 </body>
 

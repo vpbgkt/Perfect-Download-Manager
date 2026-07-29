@@ -16,8 +16,10 @@
       Start Menu shortcut.
     - Feature "DesktopShortcut" (optional, on by default): creates a desktop shortcut.
 
-  Per-user install: no admin required, matches the app's per-user data model. The MSI is
-  unsigned - sign PDM.exe, the helpers, and the .msi with signtool for public distribution.
+  Per-user install: no admin required, matches the app's per-user data model. The payload is the
+  NativeAOT self-contained build (PDM.exe + native host + update launcher + native deps); there is
+  NO .NET runtime prerequisite. The MSI is unsigned - sign PDM.exe, the helpers, and the .msi with
+  signtool for public distribution.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"

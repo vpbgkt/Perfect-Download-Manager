@@ -30,6 +30,17 @@ public static class LicensingConfig
         "B58E82BB16FC426218A5D6842DA8FAF223C44F278D2F00C4E2A5C686DBBACF0A";
 
     /// <summary>
+    /// A fixed canary token signed by the licensing <b>private</b> key at key-generation time
+    /// (see <c>admin/generate-canary.mjs</c>). At startup the client verifies this canary with the
+    /// embedded public key: if an attacker swaps the public key for their own (to sign forged
+    /// license tokens), the canary — signed by the real key — stops verifying, so activation is
+    /// disabled. Unlike a self-referential SHA pin (which an attacker recomputes for their own key),
+    /// producing a valid canary requires the server's private key. Empty = not yet configured.
+    /// </summary>
+    public const string LicensingCanaryToken =
+        "eyJ2IjoxLCJ0eXBlIjoiY2FuYXJ5IiwibGljZW5zZUtleSI6IlBETS1DQU5BUlktMDAwMC0wMDAwLTAwMDAiLCJmaW5nZXJwcmludCI6ImNhbmFyeSIsImlzc3VlZEF0IjoiMjAyNi0wNy0yOFQxNzo0NDoxMC4xOTRaIiwibm9uY2UiOiI4MmZmYjk2ODUzZDdhNmRmMjVmMzY0OTc1M2YzNjRjNCJ9.MEYCIQCfnOwOpCjv-vivYcQ2iNM3uffagM0_6Qo7e9E3zAezoAIhAO1MYsVtiOr_SLwbGu9ONVSkmN60Fwg4SFr7GNPO68LV";
+
+    /// <summary>
     /// Manifest URL for the stable auto-update channel. The client fetches this on every
     /// "Check for Updates" and on startup; the manifest is ECDSA-signed with the update key
     /// below. Set at build time by backend/updates/deploy.ps1.

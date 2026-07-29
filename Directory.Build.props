@@ -1,6 +1,18 @@
 <Project>
 
   <!--
+    Cross-platform migration (docs/MIGRATION-AVALONIA-NATIVEAOT.md) pins.
+
+    AvaloniaVersion: the Avalonia line the migration targets. Per the §14 decision the app stays on
+    the 11.x LTS-style line for the first (Windows) release train rather than jumping to 12.x, so the
+    UI port lands on a version with mature NativeAOT + compiled-binding support. Consumed by the new
+    Avalonia heads once Phase 2 starts; recorded here now so the whole solution shares one pin.
+  -->
+  <PropertyGroup>
+    <AvaloniaVersion>11.3.12</AvaloniaVersion>
+  </PropertyGroup>
+
+  <!--
     Repo-wide defaults. Release builds strip debug symbols and enable optimization so shipped
     binaries carry less information for reverse engineering. Obfuscation of the security-sensitive
     assembly is a separate, opt-in step (build/obfuscate.ps1).

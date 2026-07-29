@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PDM.App.ViewModels"
+        x:Class="PDM.App.Avalonia.Views.BrowserSetupWindow"
+        x:DataType="vm:BrowserSetupViewModel"
+        Title="Browser setup"
+        Width="620" Height="480"
+        MinWidth="520" MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="16">
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding SummaryText}" TextWrapping="Wrap" Margin="0,0,0,4" />
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Opacity="0.75" Margin="0,0,0,12"
+                   Text="Add the PDM extension from your browser's store. PDM is already authorised, so it works the moment it's added." />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+            <Button Content="Remove integration" Command="{Binding UnregisterAllCommand}" />
+            <Button Content="Close" MinWidth="90" Click="OnClose" IsCancel="True" />
+        </StackPanel>
+
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Browsers}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BrowserRowViewModel">
+                        <Border BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8"
+                                BorderBrush="{DynamicResource SystemChromeLowColor}">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding DisplayName}"
+                                           FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Grid.Row="0" Grid.Column="1" Content="Add to browser"
+                                        Command="{Binding $parent[ItemsControl].((vm:BrowserSetupViewModel)DataContext).OpenStorePageCommand}"
+                                        CommandParameter="{Binding}" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                           Text="{Binding Status}" Opacity="0.75" TextWrapping="Wrap"
+                                           Margin="0,6,0,0" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

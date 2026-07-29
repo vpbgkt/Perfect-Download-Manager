@@ -1,0 +1,161 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PDM.App.ViewModels"
+        x:Class="PDM.App.Avalonia.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings"
+        Width="680" Height="720"
+        MinWidth="600" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppWindowBackgroundBrush}">
+
+    <!-- Grid with a star middle row gives the ScrollViewer a firmly bounded height so it always
+         scrolls the whole content (a DockPanel fill child could leave it unbounded and stop short). -->
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="24,20,24,8" Spacing="2">
+            <TextBlock Classes="h1" Text="Settings" />
+            <TextBlock Classes="secondary" Text="Tune downloads, network, and appearance." />
+        </StackPanel>
+
+        <!-- Action bar -->
+        <Border Grid.Row="2" Padding="24,14"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource AppDividerBrush}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                <TextBlock Text="{Binding ValidationError}" Foreground="{DynamicResource StatusWarningBrush}"
+                           VerticalAlignment="Center" Margin="0,0,8,0" TextWrapping="Wrap" />
+                <Button Content="Cancel" MinWidth="96" Click="OnCancel" IsCancel="True" />
+                <Button Content="Save changes" MinWidth="120" Click="OnSave" IsDefault="True" Classes="brand" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" Padding="24,12,24,24"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16" Margin="0,0,0,8">
+
+                <!-- ===== General ===== -->
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Classes="h2" Text="General" />
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Classes="section" Text="DEFAULT DOWNLOAD FOLDER" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding DefaultDownloadDirectory}" />
+                                <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Click="OnBrowseFolder" />
+                            </Grid>
+                        </StackPanel>
+
+                        <CheckBox Content="Auto-start downloads when added"
+                                  IsChecked="{Binding AutoStartAddedDownloads}" />
+                        <CheckBox Content="Show desktop notifications on completion"
+                                  IsChecked="{Binding ShowNotifications}" />
+                        <CheckBox Content="Confirm browser-captured downloads before starting"
+                                  IsChecked="{Binding ConfirmBrowserDownloads}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Downloads ===== -->
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Classes="h2" Text="Downloads" />
+
+                        <Grid ColumnDefinitions="*,16,*">
+                            <StackPanel Grid.Column="0" Spacing="7">
+                                <TextBlock Classes="section" Text="SIMULTANEOUS DOWNLOADS (1-32)" />
+                                <NumericUpDown Value="{Binding MaxSimultaneousDownloads}"
+                                               Minimum="1" Maximum="32" Increment="1" FormatString="0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="7">
+                                <TextBlock Classes="section" Text="CONNECTIONS PER DOWNLOAD (1-64)" />
+                                <NumericUpDown Value="{Binding MaxConnectionsPerDownload}"
+                                               Minimum="1" Maximum="64" Increment="1" FormatString="0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Classes="section" Text="GLOBAL SPEED LIMIT - KB/S (0 = UNLIMITED)" />
+                            <NumericUpDown Value="{Binding GlobalMaxKilobytesPerSecond}"
+                                           Minimum="0" Maximum="10000000" Increment="128" FormatString="0" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Classes="section" Text="IF THE DESTINATION FILE ALREADY EXISTS" />
+                            <ComboBox ItemsSource="{Binding OverwritePolicies}"
+                                      SelectedItem="{Binding OverwritePolicy}"
+                                      MinWidth="240" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Classes="section" Text="POST-DOWNLOAD COMMAND (OPTIONAL)" />
+                            <TextBox Text="{Binding PostDownloadCommand}"
+                                     Watermark="e.g. C:\Program Files\Windows Defender\MpCmdRun.exe" />
+                            <TextBlock Classes="caption" Text="Runs after each download, receiving the file path as its argument." />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Network ===== -->
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Classes="h2" Text="Network" />
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Classes="section" Text="USER AGENT (OPTIONAL)" />
+                            <TextBox Text="{Binding UserAgent}" Watermark="Perfect Download Manager" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Classes="section" Text="HTTP PROXY (OPTIONAL)" />
+                            <TextBox Text="{Binding ProxyUrl}" Watermark="http://user:pass@host:8080" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Schedule ===== -->
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Classes="h2" Text="Schedule" />
+                        <CheckBox Content="Only download during a scheduled time window"
+                                  IsChecked="{Binding ScheduleEnabled}" />
+                        <Grid ColumnDefinitions="*,16,*" IsEnabled="{Binding ScheduleEnabled}">
+                            <StackPanel Grid.Column="0" Spacing="7">
+                                <TextBlock Classes="section" Text="START (HH:MM)" />
+                                <TextBox Text="{Binding ScheduleStart}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="7">
+                                <TextBlock Classes="section" Text="END (HH:MM)" />
+                                <TextBox Text="{Binding ScheduleEnd}" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Appearance ===== -->
+                <Border Classes="card">
+                    <StackPanel Spacing="14">
+                        <TextBlock Classes="h2" Text="Appearance" />
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Classes="section" Text="THEME" />
+                            <ComboBox x:Name="ThemeCombo" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
+                                      SelectionChanged="OnThemeChanged"
+                                      MinWidth="240" HorizontalAlignment="Left" />
+                            <TextBlock Classes="caption"
+                                       Text="Choose Light or Dark, or System to follow Windows. Changes preview instantly." />
+                        </StackPanel>
+
+                        <StackPanel Spacing="9">
+                            <TextBlock Classes="section" Text="ACCENT COLOUR" />
+                            <!-- Swatches are populated in code-behind for full click/selection control. -->
+                            <WrapPanel x:Name="AccentPanel" Orientation="Horizontal" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

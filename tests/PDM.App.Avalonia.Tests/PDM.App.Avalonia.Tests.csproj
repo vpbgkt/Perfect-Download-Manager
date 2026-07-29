@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Headless Avalonia UI tests (docs/MIGRATION-AVALONIA-NATIVEAOT.md §10). Renders ported views on
+    the Avalonia headless platform to assert they open and their compiled bindings resolve at
+    runtime - catching theme/render regressions that compile-time binding validation cannot.
+    Targets net10.0-windows to match the Avalonia head it references.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PDM.App.Avalonia\PDM.App.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\PDM.Infrastructure\PDM.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using PDM.App.ViewModels;
 using Wpf.Ui.Controls;
 
@@ -9,6 +11,7 @@ namespace PDM.App.Views;
 public partial class MainWindow : FluentWindow
 {
     private readonly MainViewModel _viewModel;
+    private readonly ICollectionView _downloadsView;
 
     public MainWindow(MainViewModel viewModel)
     {
@@ -16,6 +19,17 @@ public partial class MainWindow : FluentWindow
         DataContext = _viewModel;
         InitializeComponent();
         // The "All Downloads" entry is selected by default via the view-model.
+
+        // The shared MainViewModel is UI-framework-agnostic: it exposes the master Items collection
+        // plus the FilterItem predicate and a FilterChanged signal, and leaves the collection-view
+        // mechanism to the head. Wire WPF's CollectionView here (filter + status sort) and refresh it
+        // whenever the view-model's category/search filter changes.
+        _downloadsView = CollectionViewSource.GetDefaultView(_viewModel.Items);
+        _downloadsView.Filter = o => o is DownloadItemViewModel item && _viewModel.FilterItem(item);
+        _downloadsView.SortDescriptions.Add(
+            new SortDescription(nameof(DownloadItemViewModel.Status), ListSortDirection.Ascending));
+        DownloadsGrid.ItemsSource = _downloadsView;
+        _viewModel.FilterChanged += () => _downloadsView.Refresh();
 
         if (App.Host is not null)
         {
@@ -97,7 +111,8 @@ public partial class MainWindow : FluentWindow
             if (dup is not null)
             {
                 await Services.DuplicatePrompt.HandleAsync(
-                    this, App.Host.DownloadManager, dup, parsed, referrer: null, info,
+                    new Services.WpfDuplicatePromptView(this), App.Host.DownloadManager, dup, parsed,
+                    referrer: null, info,
                     reveal: id => _viewModel.RevealExisting(id)).ConfigureAwait(true);
                 return;
             }
@@ -339,7 +354,10 @@ public partial class MainWindow : FluentWindow
     private void OnBrowserSetup(object sender, RoutedEventArgs e)
     {
         string host = System.IO.Path.Combine(AppContext.BaseDirectory, "pdm-native-host.exe");
-        var vm = new PDM.App.ViewModels.BrowserSetupViewModel(host);
+        var vm = new PDM.App.ViewModels.BrowserSetupViewModel(
+            host,
+            new PDM.Platform.Windows.WindowsNativeHostInstaller(),
+            new PDM.Platform.Windows.WindowsBrowserDetector());
         var dlg = new BrowserSetupWindow(vm) { Owner = this };
         dlg.ShowDialog();
     }

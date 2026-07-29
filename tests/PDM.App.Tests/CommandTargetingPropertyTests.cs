@@ -161,7 +161,7 @@ public sealed class CommandTargetingPropertyTests : IAsyncLifetime
         var managed2 = CreateManagedDownload(state2);
 
         // VM1 has confirmCancel that always confirms (so the cancel path actually runs)
-        var vm1 = new DownloadPopupViewModel(managed1, _downloadManager, _ => true, null);
+        var vm1 = new DownloadPopupViewModel(managed1, _downloadManager, _ => Task.FromResult(true), null);
         var vm2 = new DownloadPopupViewModel(managed2, _downloadManager, null, null);
 
         var statusBefore = vm2.Status;

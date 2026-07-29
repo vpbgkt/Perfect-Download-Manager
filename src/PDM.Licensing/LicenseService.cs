@@ -3,13 +3,36 @@ using PDM.Licensing.Signed;
 namespace PDM.Licensing;
 
 /// <summary>
+/// Resolved, ready-to-apply capability limits for the current licensing state. These are derived
+/// from the <b>signed</b> token claims (for activated/grace licenses) or from fixed tier defaults
+/// (trial / expired), never from a single boolean. A <see langword="null"/> cap means "no
+/// client-imposed limit" (full speed).
+///
+/// <para>Security intent (C1): the premium throughput numbers ride inside a server-signed token, so
+/// forcing a status flag on a patched client cannot fabricate them. Callers apply these caps at the
+/// point of use rather than reading one central "is licensed" bool.</para>
+/// </summary>
+public readonly record struct LicenseEntitlements(
+    int? MaxConnectionsPerDownload,
+    int? MaxParallelDownloads,
+    string[] Features)
+{
+    /// <summary>Reduced free/expired tier: throttled, one-at-a-time.</summary>
+    public static readonly LicenseEntitlements Free = new(2, 1, Array.Empty<string>());
+
+    /// <summary>Full trial/licensed tier when no explicit signed cap is present: uncapped.</summary>
+    public static readonly LicenseEntitlements Full = new(null, null, Array.Empty<string>());
+}
+
+/// <summary>
 /// Immutable, coarse view of the current licensing state used by the UI.
 /// </summary>
 public readonly record struct LicenseSnapshot(
     LicenseStatus Status,
     TimeSpan Remaining,
     string? Owner,
-    string? Message)
+    string? Message,
+    LicenseEntitlements Entitlements = default)
 {
     /// <summary>True when the app should offer full commercial features.</summary>
     public bool IsFunctional => Status is LicenseStatus.Trial or LicenseStatus.Grace or LicenseStatus.Activated;
@@ -66,7 +89,33 @@ public sealed class LicenseService
     public async Task<LicenseSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
         LicenseRecord record = await LoadOrInitializeAsync(cancellationToken).ConfigureAwait(false);
+        await AdvanceMonotonicClockAsync(record, cancellationToken).ConfigureAwait(false);
         return BuildSnapshot(record);
+    }
+
+    /// <summary>
+    /// Advances the persisted anti-rollback watermark (H3) when the real clock is ahead of it, so
+    /// the highest-ever-seen time is durable. A single small write only when the clock moves
+    /// forward — no cost on the download hot path.
+    /// </summary>
+    private async Task AdvanceMonotonicClockAsync(LicenseRecord record, CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = _clock();
+        if (record.MaxSeenUtc is null || now > record.MaxSeenUtc.Value)
+        {
+            record.MaxSeenUtc = now;
+            await _store.SaveAsync(record, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The trustworthy "now" for expiry math: the later of the system clock and the persisted
+    /// watermark. Winding the clock back therefore cannot roll time backwards for licensing.
+    /// </summary>
+    private DateTimeOffset EffectiveNow(LicenseRecord record)
+    {
+        DateTimeOffset now = _clock();
+        return record.MaxSeenUtc is { } seen && seen > now ? seen : now;
     }
 
     /// <summary>
@@ -132,12 +181,14 @@ public sealed class LicenseService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, null,
-                "Could not reach the licensing server. Check your connection and try again.");
+                "Could not reach the licensing server. Check your connection and try again.",
+                LicenseEntitlements.Free);
         }
 
         if (!result.IsValid)
         {
-            return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, null, result.Message);
+            return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, null, result.Message,
+                LicenseEntitlements.Free);
         }
 
         LicenseClaims? claims = VerifyToken(result.Token, key, fingerprint);
@@ -145,7 +196,8 @@ public sealed class LicenseService
         {
             // Valid-looking response but the token failed cryptographic verification: reject.
             return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, null,
-                "The license token could not be verified. Please contact support.");
+                "The license token could not be verified. Please contact support.",
+                LicenseEntitlements.Free);
         }
 
         LicenseRecord record = await LoadOrInitializeAsync(cancellationToken).ConfigureAwait(false);
@@ -207,6 +259,17 @@ public sealed class LicenseService
         return BuildSnapshot(record);
     }
 
+    /// <summary>
+    /// Resolves the ready-to-apply caps from verified license claims. A signed value &lt;= 0 means
+    /// "no client-imposed cap" (full speed); a positive value is the enforced limit.
+    /// </summary>
+    private static LicenseEntitlements EntitlementsFromClaims(LicenseClaims claims)
+    {
+        int? conn = claims.MaxConnections > 0 ? claims.MaxConnections : null;
+        int? parallel = claims.MaxParallel > 0 ? claims.MaxParallel : null;
+        return new LicenseEntitlements(conn, parallel, claims.Features ?? Array.Empty<string>());
+    }
+
     private LicenseClaims? VerifyToken(string? token, string expectedKey, string expectedFingerprint)
     {
         if (string.IsNullOrWhiteSpace(token) || _verifier is null)
@@ -238,7 +301,12 @@ public sealed class LicenseService
         record.ExpiresUtc = claims.ExpiresAt;
         record.Owner = claims.Owner;
         record.Features = claims.Features;
-        record.LastValidatedUtc = _clock();
+        DateTimeOffset now = _clock();
+        record.LastValidatedUtc = now;
+        if (record.MaxSeenUtc is null || now > record.MaxSeenUtc.Value)
+        {
+            record.MaxSeenUtc = now;
+        }
     }
 
     private static void ClearLicense(LicenseRecord record)
@@ -267,7 +335,7 @@ public sealed class LicenseService
 
     private LicenseSnapshot BuildSnapshot(LicenseRecord record)
     {
-        DateTimeOffset now = _clock();
+        DateTimeOffset now = EffectiveNow(record);
 
         if (!string.IsNullOrWhiteSpace(record.SignedToken))
         {
@@ -281,11 +349,13 @@ public sealed class LicenseService
 
         if (now < trialEnd)
         {
-            return new LicenseSnapshot(LicenseStatus.Trial, trialEnd - now, null, null);
+            // Trial is deliberately full-featured to showcase the product; it is time-limited by the
+            // server-signed anchor rather than by throttling.
+            return new LicenseSnapshot(LicenseStatus.Trial, trialEnd - now, null, null, LicenseEntitlements.Full);
         }
 
         return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, null,
-            "Your free trial has ended. Please activate a license to continue.");
+            "Your free trial has ended. Please activate a license to continue.", LicenseEntitlements.Free);
     }
 
     /// <summary>
@@ -318,19 +388,21 @@ public sealed class LicenseService
         if (claims is null)
         {
             return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, record.Owner,
-                "The stored license token is invalid. Please re-activate.");
+                "The stored license token is invalid. Please re-activate.", LicenseEntitlements.Free);
         }
 
         string currentFp = _fingerprintProvider();
         if (!string.Equals(claims.Fingerprint, currentFp, StringComparison.OrdinalIgnoreCase))
         {
             return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, record.Owner,
-                "This license is bound to a different machine.");
+                "This license is bound to a different machine.", LicenseEntitlements.Free);
         }
+
+        LicenseEntitlements entitlements = EntitlementsFromClaims(claims);
 
         if (now < claims.ExpiresAt)
         {
-            return new LicenseSnapshot(LicenseStatus.Activated, claims.ExpiresAt - now, claims.Owner, null);
+            return new LicenseSnapshot(LicenseStatus.Activated, claims.ExpiresAt - now, claims.Owner, null, entitlements);
         }
 
         // Token has expired: the client must re-validate online. Allow a grace window offline.
@@ -338,11 +410,11 @@ public sealed class LicenseService
         if (sinceExpiry < GracePeriod)
         {
             return new LicenseSnapshot(LicenseStatus.Grace, GracePeriod - sinceExpiry, claims.Owner,
-                "Your license needs to re-validate online. Connect to the internet to continue.");
+                "Your license needs to re-validate online. Connect to the internet to continue.", entitlements);
         }
 
         return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, claims.Owner,
-            "Your license could not be re-validated. Please connect and re-activate.");
+            "Your license could not be re-validated. Please connect and re-activate.", LicenseEntitlements.Free);
     }
 
     private static bool ContainsRevocation(string message)

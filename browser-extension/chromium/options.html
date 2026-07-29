@@ -44,6 +44,15 @@
         </span>
         <input type="checkbox" id="interceptAllTypes" />
       </label>
+
+      <label class="opt">
+        <span>
+          <span class="opt-title">Send documents &amp; images to PDM</span>
+          <span class="opt-desc">Off by default — small files like PDFs, Office documents and images
+            download directly in the browser. Turn on to send these to PDM as well.</span>
+        </span>
+        <input type="checkbox" id="sendDocsAndImages" />
+      </label>
     </section>
 
     <section class="group">
@@ -57,14 +66,32 @@
       </label>
     </section>
 
+    <section class="group">
+      <h2>Appearance</h2>
+      <div class="opt" style="cursor:default">
+        <span>
+          <span class="opt-title">Theme</span>
+          <span class="opt-desc">Follow the system theme, or force light or dark.</span>
+        </span>
+        <div class="seg" id="theme-seg" role="group" aria-label="Theme">
+          <button type="button" class="seg-btn" data-theme-value="system">System</button>
+          <button type="button" class="seg-btn" data-theme-value="light">Light</button>
+          <button type="button" class="seg-btn" data-theme-value="dark">Dark</button>
+        </div>
+      </div>
+    </section>
+
     <p id="saved" class="saved hidden">Saved ✓</p>
 
     <footer class="ftr">
       Perfect Download Manager must be installed and run at least once.
-      <a href="https://github.com/vpbgkt/Perfect-Download-Manager" target="_blank" rel="noopener">Learn more</a>
+      <a href="https://perfectdownloadmanager.com/" target="_blank" rel="noopener">Website</a> ·
+      <a href="https://perfectdownloadmanager.com/support" target="_blank" rel="noopener">Support</a> ·
+      <a href="https://perfectdownloadmanager.com/privacy" target="_blank" rel="noopener">Privacy</a>
     </footer>
   </main>
 
+  <script src="theme.js"></script>
   <script src="options.js"></script>
 </body>
 

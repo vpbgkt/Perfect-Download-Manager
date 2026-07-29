@@ -76,8 +76,11 @@ public sealed class HttpClientProvider : IDisposable
     /// Creates the platform-appropriate HTTP message handler. On Windows this is the WinHTTP-backed
     /// handler whose TLS fingerprint CDNs accept (see class remarks); elsewhere it is the managed
     /// SocketsHttpHandler so the library remains cross-platform for tests and development.
+    ///
+    /// <para>Exposed so the cross-platform <c>PDM.Platform.IHttpHandlerFactory</c> seam can delegate
+    /// to this single source of truth instead of duplicating the handler configuration.</para>
     /// </summary>
-    private static HttpMessageHandler CreateHandler(IWebProxy? proxy)
+    public static HttpMessageHandler CreateHandler(IWebProxy? proxy = null)
     {
         if (OperatingSystem.IsWindows())
         {

@@ -1,0 +1,92 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        PDM design tokens (docs/MIGRATION-AVALONIA-NATIVEAOT.md UI polish pass).
+
+        A single source of truth for the app's visual language: soft corner radii, the semantic
+        light/dark colour palette, and the accent brushes. Everything is referenced with
+        DynamicResource so switching the theme variant or the accent recolours the whole UI live,
+        with no restart. Merged into Application.Resources by App.axaml.
+    -->
+
+    <!-- Global control rounding: premium soft corners on every Fluent control at once. -->
+    <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="OverlayCornerRadius">12</CornerRadius>
+
+    <!-- Design constants (theme-independent). -->
+    <CornerRadius x:Key="CardCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="PillCornerRadius">999</CornerRadius>
+    <x:Double x:Key="FontSizeCaption">12</x:Double>
+    <x:Double x:Key="FontSizeBody">13</x:Double>
+    <x:Double x:Key="FontSizeSubtitle">15</x:Double>
+    <x:Double x:Key="FontSizeTitle">20</x:Double>
+
+    <!-- Default accent (blue). ThemeApplier.ApplyAccent overrides these at runtime so the picker
+         updates every accent-driven surface live via DynamicResource. -->
+    <Color x:Key="AppAccentColor">#3B82F6</Color>
+    <SolidColorBrush x:Key="AppAccentBrush" Color="#3B82F6" />
+    <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#2F72E0" />
+    <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#2A66C9" />
+    <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#3B82F6" Opacity="0.14" />
+    <SolidColorBrush x:Key="AppOnAccentBrush" Color="#FFFFFF" />
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ============================= Light ============================= -->
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="AppWindowBackgroundBrush" Color="#F4F5F7" />
+            <SolidColorBrush x:Key="AppCardBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppCardBorderBrush" Color="#E6E8EC" />
+            <SolidColorBrush x:Key="AppSidebarBackgroundBrush" Color="#FBFBFC" />
+            <SolidColorBrush x:Key="AppToolbarBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="#101828" />
+            <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#667085" />
+            <SolidColorBrush x:Key="AppHoverBrush" Color="#F2F3F5" />
+            <SolidColorBrush x:Key="AppRowHoverBrush" Color="#F5F7FA" />
+            <SolidColorBrush x:Key="AppSelectionBrush" Color="#ECF1FF" />
+            <SolidColorBrush x:Key="AppDividerBrush" Color="#ECEDF0" />
+            <SolidColorBrush x:Key="AppTrackBrush" Color="#E9EBEF" />
+
+            <!-- Status palette (badges + progress). -->
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="#16A34A" />
+            <SolidColorBrush x:Key="StatusSuccessSubtleBrush" Color="#16A34A" Opacity="0.14" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#DC2626" />
+            <SolidColorBrush x:Key="StatusErrorSubtleBrush" Color="#DC2626" Opacity="0.14" />
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="#D97706" />
+            <SolidColorBrush x:Key="StatusWarningSubtleBrush" Color="#D97706" Opacity="0.16" />
+            <SolidColorBrush x:Key="StatusInfoBrush" Color="#2563EB" />
+            <SolidColorBrush x:Key="StatusInfoSubtleBrush" Color="#2563EB" Opacity="0.14" />
+            <SolidColorBrush x:Key="StatusNeutralBrush" Color="#667085" />
+            <SolidColorBrush x:Key="StatusNeutralSubtleBrush" Color="#667085" Opacity="0.12" />
+        </ResourceDictionary>
+
+        <!-- ============================= Dark ============================= -->
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="AppWindowBackgroundBrush" Color="#151619" />
+            <SolidColorBrush x:Key="AppCardBackgroundBrush" Color="#1E2024" />
+            <SolidColorBrush x:Key="AppCardBorderBrush" Color="#2C2F35" />
+            <SolidColorBrush x:Key="AppSidebarBackgroundBrush" Color="#191A1E" />
+            <SolidColorBrush x:Key="AppToolbarBackgroundBrush" Color="#1E2024" />
+            <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="#F2F4F7" />
+            <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#98A2B3" />
+            <SolidColorBrush x:Key="AppHoverBrush" Color="#26282D" />
+            <SolidColorBrush x:Key="AppRowHoverBrush" Color="#232529" />
+            <SolidColorBrush x:Key="AppSelectionBrush" Color="#2A2F3A" />
+            <SolidColorBrush x:Key="AppDividerBrush" Color="#2A2C31" />
+            <SolidColorBrush x:Key="AppTrackBrush" Color="#2C2F35" />
+
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="#22C55E" />
+            <SolidColorBrush x:Key="StatusSuccessSubtleBrush" Color="#22C55E" Opacity="0.18" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#F87171" />
+            <SolidColorBrush x:Key="StatusErrorSubtleBrush" Color="#F87171" Opacity="0.18" />
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="#FBBF24" />
+            <SolidColorBrush x:Key="StatusWarningSubtleBrush" Color="#FBBF24" Opacity="0.18" />
+            <SolidColorBrush x:Key="StatusInfoBrush" Color="#60A5FA" />
+            <SolidColorBrush x:Key="StatusInfoSubtleBrush" Color="#60A5FA" Opacity="0.18" />
+            <SolidColorBrush x:Key="StatusNeutralBrush" Color="#98A2B3" />
+            <SolidColorBrush x:Key="StatusNeutralSubtleBrush" Color="#98A2B3" Opacity="0.16" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

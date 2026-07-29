@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PDM.App.Avalonia.Views.ChangeUrlDialog"
+        Title="Change download link"
+        Width="560" SizeToContent="Height"
+        CanResize="False" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="20" Spacing="8">
+        <TextBlock Text="File" FontSize="12" Opacity="0.7" />
+        <TextBlock x:Name="FileNameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+
+        <TextBlock Text="New link (URL)" Margin="0,6,0,0" />
+        <TextBox x:Name="UrlBox" />
+
+        <TextBlock Text="Referrer (optional)" Margin="0,6,0,0" />
+        <TextBox x:Name="ReferrerBox" Watermark="https://page-the-download-came-from" />
+
+        <Border x:Name="StatusBar" IsVisible="False" Padding="10" CornerRadius="4" Margin="0,6,0,0"
+                Background="{DynamicResource SystemChromeLowColor}">
+            <StackPanel Spacing="2">
+                <TextBlock x:Name="StatusTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock x:Name="StatusMessage" TextWrapping="Wrap" Opacity="0.85" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+            <Button Content="Cancel" MinWidth="90" Click="OnCancel" IsCancel="True" />
+            <Button x:Name="OkButton" Content="Check &amp; Apply" MinWidth="150" Click="OnOk"
+                    IsDefault="True" Classes="brand" />
+        </StackPanel>
+    </StackPanel>
+</Window>

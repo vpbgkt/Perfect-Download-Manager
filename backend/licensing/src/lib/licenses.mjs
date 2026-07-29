@@ -6,6 +6,8 @@
 //   plan            S   e.g. "standard"
 //   owner           S   account/email label (optional)
 //   features        L   list of feature strings
+//   maxConn         N   signed per-download connection cap embedded in tokens (0 = uncapped)
+//   maxParallel     N   signed simultaneous-download cap embedded in tokens (0 = uncapped)
 //   maxActivations  N   how many distinct machines may activate
 //   expiresAt       S   ISO subscription expiry, or absent for perpetual
 //   activations     M   { fingerprintHash: { activatedAt, lastSeenAt } }

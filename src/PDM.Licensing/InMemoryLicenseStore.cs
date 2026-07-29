@@ -35,6 +35,7 @@ public sealed class InMemoryLicenseStore : ILicenseStore
         return new LicenseRecord
         {
             FirstLaunchUtc = source.FirstLaunchUtc,
+            MaxSeenUtc = source.MaxSeenUtc,
             LicenseKey = source.LicenseKey,
             BoundFingerprint = source.BoundFingerprint,
             LastValidatedUtc = source.LastValidatedUtc,

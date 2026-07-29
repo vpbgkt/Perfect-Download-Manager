@@ -1,5 +1,6 @@
 using System.Windows.Threading;
 using PDM.Core.Abstractions;
+using PDM.Platform;
 using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
 
@@ -10,8 +11,14 @@ namespace PDM.App.Services;
 /// <see cref="Forms.NotifyIcon"/> so we do not depend on app-identity/AUMID registration
 /// (which is a packaging concern deferred to the installer stage). Marshals to the
 /// captured dispatcher so callers can raise notifications from any thread.
+///
+/// <para>This is the Windows implementation of the <see cref="INotifier"/> seam. It intentionally
+/// stays in the app head (not PDM.Platform.Windows) for now because it is coupled to WPF's
+/// <see cref="Dispatcher"/> and WinForms' <see cref="Forms.NotifyIcon"/>; it is slated for a rewrite
+/// onto Avalonia's tray/notification APIs in Phase 2, at which point it moves behind the seam
+/// cleanly.</para>
 /// </summary>
-public sealed class BalloonNotificationService : INotificationService, IDisposable
+public sealed class BalloonNotificationService : INotifier, IDisposable
 {
     private readonly Dispatcher _dispatcher;
     private readonly Forms.NotifyIcon _icon;

@@ -1,0 +1,181 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PDM.App.ViewModels"
+        xmlns:conv="using:PDM.App.Avalonia.Converters"
+        x:Class="PDM.App.Avalonia.Views.DownloadPopupWindow"
+        x:DataType="vm:DownloadPopupViewModel"
+        Title="{Binding FileNameDisplay}"
+        Width="620" Height="460"
+        MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppWindowBackgroundBrush}">
+
+    <!-- Root grid: main content + a full-cover shutdown-countdown overlay layered on top. -->
+    <Grid>
+
+        <Border Classes="card" Margin="16">
+            <DockPanel>
+
+                <!-- ===== Identity: real file icon + name + status pill (always visible) ===== -->
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*">
+                    <Border Grid.Column="0" Width="56" Height="56" CornerRadius="14"
+                            Background="{DynamicResource AppAccentSubtleBrush}">
+                        <Panel>
+                            <!-- Generic fallback glyph sits under the real icon; the icon covers it
+                                 when the shell resolves one for this file/extension. -->
+                            <TextBlock Classes="glyph" Text="&#xE896;" FontSize="24"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppAccentBrush}" />
+                            <Image Width="32" Height="32"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Source="{Binding DestinationPath, Converter={x:Static conv:FileIconConverter.Instance}, ConverterParameter=large}" />
+                        </Panel>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0" Spacing="8">
+                        <TextBlock Text="{Binding FileNameDisplay}" Classes="h2"
+                                   TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
+                        <Border Classes="badge" Background="{DynamicResource AppAccentSubtleBrush}"
+                                HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding StatusLabel}" FontSize="11.5"
+                                       Foreground="{DynamicResource AppAccentBrush}" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ===== Tabs: Download (essential info) / Options (secondary settings) ===== -->
+                <TabControl Margin="0,14,0,0">
+
+                    <!-- Main / Download tab -->
+                    <TabItem Header="Download">
+                        <DockPanel Margin="0,10,0,0">
+
+                            <!-- Controls pinned to the bottom of the tab. -->
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                                        HorizontalAlignment="Right" Margin="0,16,0,0">
+                                <Button Content="Show in folder" Command="{Binding OpenFolderCommand}"
+                                        IsVisible="{Binding CanOpenFolder}" />
+
+                                <!-- Cancel while running; replaced by Close once terminal. -->
+                                <Button Content="Cancel" Command="{Binding CancelCommand}"
+                                        IsVisible="{Binding CanCancel}" />
+                                <Button Content="Close" Click="OnCloseClick"
+                                        IsVisible="{Binding IsTerminal}" />
+
+                                <!-- Paused: keep the download for later. Closes the popup without
+                                     cancelling, so it stays paused and resumable from the main list. -->
+                                <Button Content="Download later" Click="OnCloseClick"
+                                        IsVisible="{Binding IsPaused}"
+                                        ToolTip.Tip="Close this window and keep the download paused so you can resume it later" />
+
+                                <!-- Single Pause/Resume slot: only the valid action shows. -->
+                                <Button Content="Pause" Command="{Binding PauseCommand}"
+                                        IsVisible="{Binding CanPause}" Classes="brand" />
+                                <Button Content="Resume" Command="{Binding ResumeCommand}"
+                                        IsVisible="{Binding CanResume}" Classes="brand" />
+
+                                <Button Content="Open" Command="{Binding OpenFileCommand}"
+                                        IsVisible="{Binding CanOpenFile}" Classes="brand" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="16">
+
+                                <!-- Progress (smoothly animated) -->
+                                <StackPanel Spacing="8">
+                                    <ProgressBar x:Name="ProgressIndicator" Minimum="0" Maximum="100"
+                                                 Value="{Binding ProgressPercent}"
+                                                 IsIndeterminate="{Binding IsIndeterminate}"
+                                                 MinHeight="10" CornerRadius="5">
+                                        <!-- Interpolate value changes so the bar glides instead of
+                                             jumping between snapshots. Purely visual. -->
+                                        <ProgressBar.Transitions>
+                                            <Transitions>
+                                                <DoubleTransition Property="Value" Duration="0:0:0.45"
+                                                                  Easing="CubicEaseOut" />
+                                            </Transitions>
+                                        </ProgressBar.Transitions>
+                                    </ProgressBar>
+                                    <TextBlock Text="{Binding ProgressPercent, StringFormat='{}{0:0}%'}"
+                                               Classes="secondary" FontSize="12" HorizontalAlignment="Right" />
+                                </StackPanel>
+
+                                <!-- Intelligent status message (explains stalls/slowdowns). -->
+                                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" />
+
+                                <!-- Live metrics (hidden once terminal). -->
+                                <Grid ColumnDefinitions="*,*,*,*" IsVisible="{Binding ShowLiveMetrics}">
+                                    <StackPanel Grid.Column="0" Spacing="3">
+                                        <TextBlock Classes="section" Text="TRANSFERRED" />
+                                        <TextBlock Text="{Binding DownloadedText}" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="3">
+                                        <TextBlock Classes="section" Text="SPEED" />
+                                        <TextBlock Text="{Binding SpeedText}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="3">
+                                        <TextBlock Classes="section" Text="TIME LEFT" />
+                                        <TextBlock Text="{Binding EtaText}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="3">
+                                        <TextBlock Classes="section" Text="LINKS" />
+                                        <TextBlock Text="{Binding ConnectionsText}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Free/limited-plan speed notice (only while unlicensed). -->
+                                <Border IsVisible="{Binding IsLimitedPlan}"
+                                        Background="{DynamicResource StatusWarningSubtleBrush}"
+                                        CornerRadius="8" Padding="10,7">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="glyph" Text="&#xE7BA;" FontSize="14"
+                                                   Foreground="{DynamicResource StatusWarningBrush}" />
+                                        <TextBlock Text="{Binding LimitedPlanNotice}" TextWrapping="Wrap"
+                                                   FontSize="11.5" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
+                    </TabItem>
+
+                    <!-- Options tab -->
+                    <TabItem Header="Options">
+                        <StackPanel Margin="0,14,0,0" Spacing="14">
+                            <TextBlock Text="When the download finishes" Classes="section" />
+                            <CheckBox IsChecked="{Binding AutoOpenOnComplete}"
+                                      Content="Open the file automatically" />
+                            <CheckBox IsChecked="{Binding ShutdownWhenDone}"
+                                      Content="Shut down the PC (with a 10-second cancel window)" />
+                            <TextBlock Text="More options will appear here in future updates."
+                                       Classes="caption" Margin="0,6,0,0" />
+                        </StackPanel>
+                    </TabItem>
+                </TabControl>
+            </DockPanel>
+        </Border>
+
+        <!-- ===== Shutdown countdown overlay (shown by code-behind after completion) ===== -->
+        <Border x:Name="ShutdownOverlay" IsVisible="False"
+                Background="#B0000000">
+            <Border Classes="card" MaxWidth="360" Margin="24"
+                    VerticalAlignment="Center" HorizontalAlignment="Center" Padding="28,24">
+                <StackPanel Spacing="14" HorizontalAlignment="Center">
+                    <Border Width="60" Height="60" CornerRadius="16"
+                            Background="{DynamicResource AppAccentSubtleBrush}"
+                            HorizontalAlignment="Center">
+                        <TextBlock Classes="glyph" Text="&#xE7E8;" FontSize="28"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AppAccentBrush}" />
+                    </Border>
+                    <TextBlock Text="Shutting down" Classes="h2" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="ShutdownCountdownText" Classes="secondary"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                    <Button Content="Cancel shutdown" Classes="brand" Click="OnCancelShutdown"
+                            HorizontalAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>

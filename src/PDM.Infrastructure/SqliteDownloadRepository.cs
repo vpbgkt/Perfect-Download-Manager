@@ -1,9 +1,9 @@
 using System.Data;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using PDM.Core.Abstractions;
 using PDM.Core.Models;
+using PDM.Core.Serialization;
 
 namespace PDM.Infrastructure;
 
@@ -15,12 +15,6 @@ namespace PDM.Infrastructure;
 /// </summary>
 public sealed class SqliteDownloadRepository : IDownloadRepository
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     private readonly string _connectionString;
 
     public SqliteDownloadRepository(string databasePath)
@@ -210,7 +204,8 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         cmd.Parameters.AddWithValue("$created", state.CreatedUtc.ToString("O"));
         cmd.Parameters.AddWithValue("$completed", state.CompletedUtc?.ToString("O") ?? (object)DBNull.Value);
         cmd.Parameters.AddWithValue("$bytes", state.BytesDownloaded);
-        cmd.Parameters.AddWithValue("$segments", JsonSerializer.Serialize(state.Segments, JsonOptions));
+        cmd.Parameters.AddWithValue("$segments",
+            JsonSerializer.Serialize(state.Segments, PdmCoreJsonContext.Default.ListDownloadSegment));
     }
 
     private static async Task<IReadOnlyList<DownloadState>> ReadAllAsync(
@@ -260,8 +255,9 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
                 : DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("CompletedUtc")),
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.RoundtripKind),
-            Segments = JsonSerializer.Deserialize<List<DownloadSegment>>(
-                reader.GetString(reader.GetOrdinal("Segments")), JsonOptions) ?? new List<DownloadSegment>()
+            Segments = JsonSerializer.Deserialize(
+                reader.GetString(reader.GetOrdinal("Segments")),
+                PdmCoreJsonContext.Default.ListDownloadSegment) ?? new List<DownloadSegment>()
         };
     }
 }

@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
-using System.Text.Json.Serialization;
 
 namespace PDM.Updater;
 
@@ -60,7 +59,8 @@ public sealed class UpdateService
         Uri manifestUrl,
         ReleaseChannel channel,
         Version currentVersion,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Version? rollbackFloor = null)
     {
         ArgumentNullException.ThrowIfNull(manifestUrl);
         ArgumentNullException.ThrowIfNull(currentVersion);
@@ -68,8 +68,8 @@ public sealed class UpdateService
         UpdateManifest? manifest;
         try
         {
-            manifest = await _client.GetFromJsonAsync<UpdateManifest>(
-                manifestUrl, JsonOptions, cancellationToken).ConfigureAwait(false);
+            manifest = await _client.GetFromJsonAsync(
+                manifestUrl, PdmUpdaterJsonContext.Default.UpdateManifest, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
@@ -113,6 +113,20 @@ public sealed class UpdateService
             {
                 Availability = UpdateAvailability.CheckFailed,
                 Message = $"Manifest version '{manifest.Version}' is not a valid version."
+            };
+        }
+
+        // Anti-rollback / freeze defence (M4): a validly-signed manifest whose version is below the
+        // highest we have ever seen indicates a replay of a stale release (e.g. a MITM suppressing a
+        // security update). The signature alone cannot catch this because old manifests were signed
+        // by the same key — only a monotonic floor does. Treat it as a failed (suspicious) check.
+        if (rollbackFloor is not null && remote < rollbackFloor)
+        {
+            return new UpdateCheckResult
+            {
+                Availability = UpdateAvailability.CheckFailed,
+                Message = $"Manifest version {remote} is older than a previously seen release " +
+                          $"({rollbackFloor}); rejecting as a possible rollback."
             };
         }
 
@@ -195,10 +209,4 @@ public sealed class UpdateService
         byte[] hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
-
-    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
 }

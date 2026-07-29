@@ -25,7 +25,7 @@ $out = Join-Path $distDir "pdm-extension-$Version.zip"
 
 # Sanity checks that catch the two most common Chrome Web Store rejections:
 # missing icons, and manifest.json not at archive root.
-foreach ($required in @("manifest.json", "background.js",
+foreach ($required in @("manifest.json", "background.js", "theme.js",
                         "popup.html", "popup.css", "popup.js",
                         "options.html", "options.css", "options.js",
                         "icons/icon16.png", "icons/icon32.png",

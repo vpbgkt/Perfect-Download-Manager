@@ -45,6 +45,12 @@
     <ProjectReference Include="..\PDM.Infrastructure\PDM.Infrastructure.csproj" />
     <ProjectReference Include="..\PDM.Licensing\PDM.Licensing.csproj" />
     <ProjectReference Include="..\PDM.Updater\PDM.Updater.csproj" />
+    <!-- Cross-platform seams + their Windows implementations (migration Phase 0). The WPF head is
+         the Windows composition root that wires these concrete implementations. -->
+    <ProjectReference Include="..\PDM.Platform\PDM.Platform.csproj" />
+    <ProjectReference Include="..\PDM.Platform.Windows\PDM.Platform.Windows.csproj" />
+    <!-- Shared UI-agnostic ViewModels + app services (migration Phase 0, Task 2). -->
+    <ProjectReference Include="..\PDM.App.Core\PDM.App.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

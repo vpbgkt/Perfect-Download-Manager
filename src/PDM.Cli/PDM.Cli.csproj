@@ -8,6 +8,22 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>pdm</AssemblyName>
     <RootNamespace>PDM.Cli</RootNamespace>
+
+    <!--
+      NativeAOT harness (docs/MIGRATION-AVALONIA-NATIVEAOT.md §5, §11 Phase 1). This console app
+      drives a real download end-to-end through the reused core (HttpClientProvider/WinHTTP,
+      RemoteFileInspector, JsonSidecarStateStore, DownloadEngine), so publishing it with NativeAOT
+      proves the engine is AOT/trim-clean before any UI work. The AOT + trim + single-file analyzers
+      (IsAotCompatible) surface reflection/dynamic-codegen issues at build time; §14-locked publish
+      flags (InvariantGlobalization on, symbols stripped) match the desktop head's future settings.
+      Native compilation runs only on `dotnet publish -r <rid>`; ordinary builds stay managed.
+    -->
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StripSymbols>true</StripSymbols>
+    <!-- Treat trim/AOT analyzer findings as errors so the harness is a real gate, not advisory. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

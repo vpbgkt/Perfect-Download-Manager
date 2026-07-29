@@ -48,6 +48,44 @@ public sealed class DownloadManager : IAsyncDisposable
     /// <summary>How often the scheduler wakes up to re-check the quiet-hours window.</summary>
     public TimeSpan ScheduleTick { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Optional upper bound on the parallel connections a single download may use, layered on top of
+    /// <see cref="AppSettings.MaxConnectionsPerDownload"/>. Null means no cap (the setting is used as-is).
+    /// The composition root sets this to a small value for unlicensed/expired installs so accelerated
+    /// multi-connection downloading is a licensed feature, while downloads still work at reduced speed.
+    /// Applies to downloads planned after it changes (new downloads and re-planned resumes).
+    /// </summary>
+    public int? MaxConnectionsPerDownloadCap { get; set; }
+
+    /// <summary>
+    /// Optional upper bound on how many downloads may transfer at the same time, layered on top of
+    /// <see cref="AppSettings.MaxSimultaneousDownloads"/>. Null means no cap. The composition root sets
+    /// this for unlicensed/expired installs so simultaneous downloading is a licensed feature; extra
+    /// downloads simply queue and start as slots free up.
+    /// </summary>
+    public int? MaxSimultaneousDownloadsCap { get; set; }
+
+    /// <summary>Number of downloads currently transferring (used by the UI to explain queueing).</summary>
+    public int RunningCount => _running.Count;
+
+    /// <summary>
+    /// Effective simultaneous-download limit: the user's setting, clamped down to
+    /// <see cref="MaxSimultaneousDownloadsCap"/> when one is set.
+    /// </summary>
+    public int EffectiveMaxSimultaneousDownloads
+    {
+        get
+        {
+            int max = _settings.MaxSimultaneousDownloads;
+            if (MaxSimultaneousDownloadsCap is int cap)
+            {
+                max = Math.Clamp(max, 1, Math.Max(1, cap));
+            }
+
+            return max;
+        }
+    }
+
     /// <summary>Raised when a download is added.</summary>
     public event EventHandler<DownloadEventArgs>? DownloadAdded;
 
@@ -896,9 +934,16 @@ public sealed class DownloadManager : IAsyncDisposable
 
     private DownloadOptions BuildOptions()
     {
+        // Honour the user's configured connection count, but never exceed the (optional) license cap.
+        int maxConnections = _settings.MaxConnectionsPerDownload;
+        if (MaxConnectionsPerDownloadCap is int cap)
+        {
+            maxConnections = Math.Clamp(maxConnections, 1, Math.Max(1, cap));
+        }
+
         return new DownloadOptions
         {
-            MaxConnections = _settings.MaxConnectionsPerDownload,
+            MaxConnections = maxConnections,
             MaxBytesPerSecond = _settings.GlobalMaxBytesPerSecond > 0 && _settings.MaxSimultaneousDownloads > 0
                 ? _settings.GlobalMaxBytesPerSecond / Math.Max(1, _settings.MaxSimultaneousDownloads)
                 : 0,
@@ -957,7 +1002,7 @@ public sealed class DownloadManager : IAsyncDisposable
             return;
         }
 
-        int slots = Math.Max(0, _settings.MaxSimultaneousDownloads - _running.Count);
+        int slots = Math.Max(0, EffectiveMaxSimultaneousDownloads - _running.Count);
         if (slots == 0)
         {
             return;

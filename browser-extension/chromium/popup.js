@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
 const statusText = $("status-text");
 const interceptBox = $("intercept");
+const sendDocsBox = $("sendDocsAndImages");
 const sendPageBtn = $("send-page");
 const scanBtn = $("scan");
 const scanResults = $("scan-results");
@@ -30,7 +31,7 @@ async function activeTab() {
 }
 
 function setStatus(kind, text) {
-  statusEl.className = "status status--" + kind;
+  statusEl.className = "status-pill status-pill--" + kind;
   statusText.textContent = text;
 }
 
@@ -47,40 +48,79 @@ function fileNameFromUrl(url) {
 // ---- Status ping ------------------------------------------------------------
 
 async function refreshStatus() {
-  setStatus("checking", "Checking connection…");
+  setStatus("checking", "Checking…");
+  statusEl.title = "Checking connection to Perfect Download Manager…";
   const res = await send({ type: "getStatus" });
   if (res && res.hostOk) {
-    setStatus("ok", "Connected to Perfect Download Manager");
+    setStatus("ok", "Connected");
+    statusEl.title = "Connected to Perfect Download Manager";
   } else {
-    setStatus("err", "PDM not detected — open PDM → Browser Setup");
+    setStatus("err", "Not detected");
+    statusEl.title = "PDM not detected — open PDM → Browser Setup";
   }
 }
 
-// ---- Toggle -----------------------------------------------------------------
+// ---- Toggles (saved instantly to chrome.storage) ----------------------------
 
-chrome.storage.local.get({ intercept: true }).then(({ intercept }) => {
-  interceptBox.checked = intercept;
-});
+chrome.storage.local.get({ intercept: true, sendDocsAndImages: false })
+  .then(({ intercept, sendDocsAndImages }) => {
+    interceptBox.checked = intercept;
+    sendDocsBox.checked = sendDocsAndImages;
+  });
+
 interceptBox.addEventListener("change", () => {
   chrome.storage.local.set({ intercept: interceptBox.checked });
 });
+sendDocsBox.addEventListener("change", () => {
+  chrome.storage.local.set({ sendDocsAndImages: sendDocsBox.checked });
+});
+
+// ---- Theme segmented control (System / Light / Dark) ------------------------
+
+const themeSeg = $("theme-seg");
+
+function markTheme(value) {
+  themeSeg.querySelectorAll("[data-theme-value]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.themeValue === value);
+  });
+}
+
+chrome.storage.local.get({ theme: "system" }).then(({ theme }) => markTheme(theme));
+
+themeSeg.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-theme-value]");
+  if (!btn) return;
+  const value = btn.dataset.themeValue;
+  window.PDMTheme.set(value); // theme.js applies data-theme + persists
+  markTheme(value);
+});
+
+// ---- Version (from manifest) ------------------------------------------------
+
+try {
+  const versionEl = $("version");
+  if (versionEl) versionEl.textContent = chrome.runtime.getManifest().version;
+} catch { /* ignore */ }
 
 // ---- Send this page ---------------------------------------------------------
 
 sendPageBtn.addEventListener("click", async () => {
   const tab = await activeTab();
   if (!tab || !tab.url || !/^https?:\/\//i.test(tab.url)) {
-    setStatus("err", "This page has no downloadable URL.");
+    setStatus("err", "No URL");
+    statusEl.title = "This page has no downloadable URL.";
     return;
   }
   sendPageBtn.disabled = true;
   const res = await send({ type: "sendUrl", url: tab.url, referrer: "", filename: "" });
   sendPageBtn.disabled = false;
   if (res && res.ok) {
-    setStatus("ok", "Sent to PDM ✓");
+    setStatus("ok", "Sent ✓");
+    statusEl.title = "Sent to Perfect Download Manager";
     setTimeout(() => window.close(), 700);
   } else {
-    setStatus("err", "PDM could not accept it" + (res && res.error ? ": " + res.error : ""));
+    setStatus("err", "Failed");
+    statusEl.title = "PDM could not accept it" + (res && res.error ? ": " + res.error : "");
   }
 });
 
@@ -160,7 +200,8 @@ function renderScan(items) {
 scanBtn.addEventListener("click", async () => {
   const tab = await activeTab();
   if (!tab || !tab.id || !/^https?:\/\//i.test(tab.url || "")) {
-    setStatus("err", "Can't scan this page.");
+    setStatus("err", "Can't scan");
+    statusEl.title = "This page can't be scanned.";
     return;
   }
   scanBtn.disabled = true;
@@ -179,7 +220,8 @@ scanBtn.addEventListener("click", async () => {
     }
     renderScan(merged.slice(0, 100));
   } catch (e) {
-    setStatus("err", "Scan failed: " + (e && e.message ? e.message : e));
+    setStatus("err", "Scan failed");
+    statusEl.title = "Scan failed: " + (e && e.message ? e.message : e);
   } finally {
     scanBtn.disabled = false;
   }

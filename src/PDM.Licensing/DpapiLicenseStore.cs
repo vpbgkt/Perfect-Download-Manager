@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using PDM.Licensing.Serialization;
 
 namespace PDM.Licensing;
 
@@ -16,11 +16,6 @@ namespace PDM.Licensing;
 [SupportedOSPlatform("windows")]
 public sealed class DpapiLicenseStore : ILicenseStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     // Static entropy tied to the app; forces attackers to know both the DPAPI user
     // secret AND this constant to decrypt the file.
     private static readonly byte[] Entropy = new byte[]
@@ -63,7 +58,7 @@ public sealed class DpapiLicenseStore : ILicenseStore
 
             try
             {
-                return JsonSerializer.Deserialize<LicenseRecord>(plain, JsonOptions);
+                return JsonSerializer.Deserialize(plain, PdmLicensingJsonContext.Default.LicenseRecord);
             }
             catch (JsonException)
             {
@@ -84,7 +79,7 @@ public sealed class DpapiLicenseStore : ILicenseStore
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            byte[] plain = JsonSerializer.SerializeToUtf8Bytes(record, JsonOptions);
+            byte[] plain = JsonSerializer.SerializeToUtf8Bytes(record, PdmLicensingJsonContext.Default.LicenseRecord);
             byte[] blob = ProtectedData.Protect(plain, Entropy, DataProtectionScope.CurrentUser);
 
             string tempPath = _path + ".tmp";

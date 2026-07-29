@@ -26,6 +26,19 @@ public sealed class LicenseClaims
     [JsonPropertyName("features")]
     public string[] Features { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Signed per-download connection cap. A value &lt;= 0 means "no client-imposed cap" (full
+    /// speed) for this licensed install. The client derives its actual connection limit from this
+    /// number rather than from a local boolean, so the premium throughput value exists only inside
+    /// a token this server signed — patching a flag cannot conjure it.
+    /// </summary>
+    [JsonPropertyName("maxConn")]
+    public int MaxConnections { get; init; }
+
+    /// <summary>Signed simultaneous-download cap. A value &lt;= 0 means "no client-imposed cap".</summary>
+    [JsonPropertyName("maxParallel")]
+    public int MaxParallel { get; init; }
+
     [JsonPropertyName("issuedAt")]
     public DateTimeOffset IssuedAt { get; init; }
 

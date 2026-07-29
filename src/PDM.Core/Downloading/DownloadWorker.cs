@@ -30,6 +30,11 @@ public sealed class DownloadWorker
     private readonly long[] _liveBytes;
     private readonly long _flushThreshold;
 
+    // Live diagnostic hint reported on progress snapshots so the UI can explain a stall/slowdown.
+    // Written from segment workers (last-writer-wins) and read by the progress loop; hence volatile.
+    private volatile int _issueCode;      // (int)DownloadIssue
+    private volatile int _retryAttempt;   // current attempt of the affected connection
+
     public DownloadWorker(
         DownloadState state,
         DownloadOptions options,
@@ -141,6 +146,7 @@ public sealed class DownloadWorker
                 if (segment.BytesDownloaded > before)
                 {
                     attempt = 0;
+                    ClearIssue();
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -161,6 +167,10 @@ public sealed class DownloadWorker
                     throw new DownloadException(
                         $"Segment {segment.Index} failed after {_options.MaxRetriesPerSegment} retries.", ex);
                 }
+
+                // Record the most likely cause so the progress loop can surface a clear status while
+                // this connection backs off and retries.
+                SetIssue(ClassifyIssue(ex), attempt);
 
                 await Task.Delay(BackoffDelay(attempt), cancellationToken).ConfigureAwait(false);
             }
@@ -202,79 +212,127 @@ public sealed class DownloadWorker
 
         EnsureAcceptableStatus(response);
 
+        // The server responded and we're about to stream bytes: the connection is healthy again.
+        ClearIssue();
+
         await using Stream network = await response.Content
             .ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var file = new FileStream(
-            PartPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite,
-            _options.ReadBufferSize, useAsync: true);
-        file.Seek(writeOffset, SeekOrigin.Begin);
-
-        byte[] buffer = new byte[_options.ReadBufferSize];
-        long sinceFlush = 0;
-        long written = segment.BytesDownloaded;
-
-        while (true)
+        FileStream file;
+        try
         {
-            // For known-size segments, stop once the assigned range is satisfied.
-            if (!openEnded && written >= segment.Length)
-            {
-                break;
-            }
+            file = new FileStream(
+                PartPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite,
+                _options.ReadBufferSize, useAsync: true);
+            file.Seek(writeOffset, SeekOrigin.Begin);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw DiskWriteFailure(ex);
+        }
 
-            int toRead = buffer.Length;
-            if (!openEnded)
+        try
+        {
+            byte[] buffer = new byte[_options.ReadBufferSize];
+            long sinceFlush = 0;
+            long written = segment.BytesDownloaded;
+
+            while (true)
             {
-                long remaining = segment.Length - written;
-                if (remaining < toRead)
+                // For known-size segments, stop once the assigned range is satisfied.
+                if (!openEnded && written >= segment.Length)
                 {
-                    toRead = (int)remaining;
+                    break;
+                }
+
+                int toRead = buffer.Length;
+                if (!openEnded)
+                {
+                    long remaining = segment.Length - written;
+                    if (remaining < toRead)
+                    {
+                        toRead = (int)remaining;
+                    }
+                }
+
+                int read = await network.ReadAsync(buffer.AsMemory(0, toRead), cancellationToken)
+                    .ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break; // End of stream.
+                }
+
+                // Writing/flushing to disk is separated from the network read so a storage failure
+                // (out of space, permissions) is reported as a disk error, not a transient retry.
+                try
+                {
+                    await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw DiskWriteFailure(ex);
+                }
+
+                written += read;
+                sinceFlush += read;
+                Interlocked.Exchange(ref _liveBytes[segment.Index], written);
+
+                await _limiter.ThrottleAsync(read, cancellationToken).ConfigureAwait(false);
+
+                if (sinceFlush >= _flushThreshold)
+                {
+                    FlushToDisk(file);
+                    segment.BytesDownloaded = written; // Advance durable offset only after flush.
+                    sinceFlush = 0;
                 }
             }
 
-            int read = await network.ReadAsync(buffer.AsMemory(0, toRead), cancellationToken)
-                .ConfigureAwait(false);
-            if (read == 0)
+            FlushToDisk(file);
+            segment.BytesDownloaded = written;
+
+            if (openEnded)
             {
-                break; // End of stream.
+                // Finalize the discovered size for a single unknown-length stream.
+                segment.End = segment.Start + written - 1;
+                _state.TotalBytes = written;
+                return;
             }
 
-            await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-
-            written += read;
-            sinceFlush += read;
-            Interlocked.Exchange(ref _liveBytes[segment.Index], written);
-
-            await _limiter.ThrottleAsync(read, cancellationToken).ConfigureAwait(false);
-
-            if (sinceFlush >= _flushThreshold)
+            // A known-size segment that ended before its range was satisfied indicates the
+            // connection dropped. Surface it as transient so the caller resumes from the
+            // (now persisted) offset.
+            if (written < segment.Length)
             {
-                file.Flush(flushToDisk: true);
-                segment.BytesDownloaded = written; // Advance durable offset only after flush.
-                sinceFlush = 0;
+                throw new IOException(
+                    $"Segment {segment.Index} ended early: {written} of {segment.Length} bytes received.");
             }
         }
-
-        file.Flush(flushToDisk: true);
-        segment.BytesDownloaded = written;
-
-        if (openEnded)
+        finally
         {
-            // Finalize the discovered size for a single unknown-length stream.
-            segment.End = segment.Start + written - 1;
-            _state.TotalBytes = written;
-            return;
-        }
-
-        // A known-size segment that ended before its range was satisfied indicates the
-        // connection dropped. Surface it as transient so the caller resumes from the
-        // (now persisted) offset.
-        if (written < segment.Length)
-        {
-            throw new IOException(
-                $"Segment {segment.Index} ended early: {written} of {segment.Length} bytes received.");
+            await file.DisposeAsync().ConfigureAwait(false);
         }
     }
+
+    /// <summary>Flushes buffered bytes to disk, translating storage failures into a disk-error.</summary>
+    private static void FlushToDisk(FileStream file)
+    {
+        try
+        {
+            file.Flush(flushToDisk: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw DiskWriteFailure(ex);
+        }
+    }
+
+    /// <summary>
+    /// Builds a fatal, non-transient disk-write failure with a friendly message. Non-transient so the
+    /// worker fails fast (the storage problem will not fix itself by retrying) and the UI can show
+    /// "Unable to write data to disk...".
+    /// </summary>
+    private static DownloadException DiskWriteFailure(Exception inner) =>
+        new("Unable to write data to disk. Please check available storage and permissions.", inner);
 
     private async Task FinalizeAsync(Stopwatch stopwatch, CancellationToken cancellationToken)
     {
@@ -401,8 +459,53 @@ public sealed class DownloadWorker
             AverageBytesPerSecond = average,
             ActiveConnections = active,
             TotalConnections = _state.Segments.Count,
-            Status = _state.Status
+            Status = _state.Status,
+            Issue = (DownloadIssue)_issueCode,
+            RetryAttempt = _retryAttempt,
+            MaxRetries = _options.MaxRetriesPerSegment
         });
+    }
+
+    /// <summary>Records the current stall/slowdown cause for the next progress snapshot.</summary>
+    private void SetIssue(DownloadIssue issue, int attempt)
+    {
+        _issueCode = (int)issue;
+        _retryAttempt = attempt;
+    }
+
+    /// <summary>Clears the diagnostic hint once a connection is healthy / making progress.</summary>
+    private void ClearIssue()
+    {
+        _issueCode = (int)DownloadIssue.None;
+        _retryAttempt = 0;
+    }
+
+    /// <summary>
+    /// Maps a transient failure to the most likely user-facing cause. Checks overall connectivity
+    /// first (a dropped link explains everything), then the exception shape.
+    /// </summary>
+    private static DownloadIssue ClassifyIssue(Exception ex)
+    {
+        try
+        {
+            if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+            {
+                return DownloadIssue.NoInternet;
+            }
+        }
+        catch
+        {
+            // Availability probing is best-effort; fall through to shape-based classification.
+        }
+
+        return ex switch
+        {
+            TimeoutException => DownloadIssue.ConnectionTimedOut,
+            OperationCanceledException => DownloadIssue.ConnectionTimedOut, // request timeout
+            HttpRequestException => DownloadIssue.ServerNotResponding,
+            IOException => DownloadIssue.NetworkUnstable,
+            _ => DownloadIssue.Retrying
+        };
     }
 
     private long SumLive()

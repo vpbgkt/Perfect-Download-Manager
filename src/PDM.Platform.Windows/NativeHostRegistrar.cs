@@ -1,0 +1,195 @@
+using System.Runtime.Versioning;
+using System.Text.Json;
+using Microsoft.Win32;
+using PDM.Core.Util;
+
+namespace PDM.Platform.Windows;
+
+/// <summary>
+/// Writes the Chrome Native Messaging host manifest and the per-user registry entries so that
+/// Chromium browsers can invoke <c>pdm-native-host.exe</c>. Doing this in-app means users get a
+/// one-click "Register with PDM" experience instead of running a PowerShell script.
+///
+/// Relocated unchanged from <c>PDM.App.Services</c>. Kept as a static helper (its callers use it
+/// statically); the <see cref="WindowsNativeHostInstaller"/> wrapper exposes it through the
+/// <see cref="INativeHostInstaller"/> seam for DI-based callers.
+/// </summary>
+[SupportedOSPlatform("windows")]
+public static class NativeHostRegistrar
+{
+    public const string HostName = "com.pdm.host";
+
+    /// <summary>
+    /// The permanent Chrome Web Store ID assigned to the published "Perfect Download Manager
+    /// Integration" extension. Everyone who installs from the store gets this same ID, so the
+    /// app can pre-authorise it in the native-host manifest and users never have to sideload
+    /// or paste anything.
+    /// </summary>
+    public const string WebStoreExtensionId = "phbbcmofdbbojilmcpaghnafpamnocom";
+
+    /// <summary>Public listing URL for the published extension.</summary>
+    public static string WebStoreListingUrl =>
+        $"https://chromewebstore.google.com/detail/{WebStoreExtensionId}";
+
+    /// <summary>Registers the native host for the given Chromium extension IDs.</summary>
+    public static void RegisterChromium(string hostExePath, IReadOnlyList<string> extensionIds,
+        IReadOnlyList<SupportedBrowser>? browsers = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostExePath);
+        if (!File.Exists(hostExePath))
+        {
+            throw new FileNotFoundException("Native host executable not found.", hostExePath);
+        }
+        if (extensionIds is null || extensionIds.Count == 0)
+        {
+            throw new ArgumentException("At least one extension ID is required.", nameof(extensionIds));
+        }
+
+        string manifestPath = WriteChromiumManifest(hostExePath, extensionIds);
+
+        var targets = browsers ?? new[] { SupportedBrowser.Chrome, SupportedBrowser.Edge, SupportedBrowser.Brave };
+        foreach (SupportedBrowser browser in targets)
+        {
+            string? subKey = ChromiumRegistryPathFor(browser);
+            if (subKey is null)
+            {
+                continue;
+            }
+
+            using RegistryKey key = Registry.CurrentUser.CreateSubKey($@"{subKey}\{HostName}", writable: true);
+            key.SetValue(null, manifestPath, RegistryValueKind.String);
+        }
+    }
+
+    /// <summary>
+    /// Returns the extension IDs currently registered in the native-host manifest, or an empty
+    /// list if the host has not been registered yet. Lets the UI reflect existing configuration
+    /// after an app restart instead of always showing "Not configured".
+    /// </summary>
+    public static IReadOnlyList<string> GetRegisteredExtensionIds()
+    {
+        string manifestPath = ManifestPath();
+        if (!File.Exists(manifestPath))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            using FileStream fs = File.OpenRead(manifestPath);
+            using JsonDocument doc = JsonDocument.Parse(fs);
+            if (!doc.RootElement.TryGetProperty("allowed_origins", out JsonElement origins) ||
+                origins.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<string>();
+            }
+
+            const string prefix = "chrome-extension://";
+            var ids = new List<string>();
+            foreach (JsonElement origin in origins.EnumerateArray())
+            {
+                string? value = origin.GetString();
+                if (string.IsNullOrEmpty(value) ||
+                    !value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string id = value[prefix.Length..].TrimEnd('/');
+                if (id.Length > 0)
+                {
+                    ids.Add(id);
+                }
+            }
+
+            return ids;
+        }
+        catch (Exception)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>True when the native host manifest is present and lists at least one extension ID.</summary>
+    public static bool IsRegistered() => GetRegisteredExtensionIds().Count > 0;
+
+    /// <summary>
+    /// Ensures the published Chrome Web Store extension ID is authorised in the native-host
+    /// manifest (and the per-browser registry keys) without discarding any additional IDs the
+    /// user may have registered manually (e.g. a sideloaded dev build). Safe and cheap to call
+    /// on every app startup: it re-writes the small manifest and three registry values so a
+    /// newly installed browser is picked up automatically. Never throws.
+    /// </summary>
+    public static void EnsureStoreExtensionRegistered(string hostExePath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(hostExePath) || !File.Exists(hostExePath))
+            {
+                return;
+            }
+
+            var ids = new List<string>(GetRegisteredExtensionIds());
+            if (!ids.Any(id => string.Equals(id, WebStoreExtensionId, StringComparison.OrdinalIgnoreCase)))
+            {
+                ids.Add(WebStoreExtensionId);
+            }
+
+            RegisterChromium(hostExePath, ids);
+        }
+        catch (Exception)
+        {
+            // Best-effort: a locked registry hive or missing browser must never block startup.
+        }
+    }
+
+    /// <summary>Removes the native host manifest + all registry entries for Chromium browsers.</summary>
+    public static void UnregisterChromium()
+    {
+        foreach (SupportedBrowser browser in new[]
+                 { SupportedBrowser.Chrome, SupportedBrowser.Edge, SupportedBrowser.Brave })
+        {
+            string? subKey = ChromiumRegistryPathFor(browser);
+            if (subKey is null) continue;
+            try { Registry.CurrentUser.DeleteSubKeyTree($@"{subKey}\{HostName}", throwOnMissingSubKey: false); }
+            catch (Exception) { /* nothing to remove */ }
+        }
+
+        string manifest = ManifestPath();
+        if (File.Exists(manifest))
+        {
+            try { File.Delete(manifest); } catch (IOException) { /* best effort */ }
+        }
+    }
+
+    private static string WriteChromiumManifest(string hostExePath, IReadOnlyList<string> extensionIds)
+    {
+        string manifestDir = Path.Combine(AppPaths.Root, "native-host");
+        Directory.CreateDirectory(manifestDir);
+        string manifestPath = Path.Combine(manifestDir, $"{HostName}.json");
+
+        var manifest = new ChromiumNativeHostManifest
+        {
+            Name = HostName,
+            Description = "Perfect Download Manager native messaging host",
+            Path = hostExePath,
+            Type = "stdio",
+            AllowedOrigins = extensionIds.Select(id => $"chrome-extension://{id}/").ToArray()
+        };
+
+        string json = JsonSerializer.Serialize(manifest, NativeHostJsonContext.Default.ChromiumNativeHostManifest);
+        File.WriteAllText(manifestPath, json);
+        return manifestPath;
+    }
+
+    private static string ManifestPath() =>
+        Path.Combine(AppPaths.Root, "native-host", $"{HostName}.json");
+
+    private static string? ChromiumRegistryPathFor(SupportedBrowser browser) => browser switch
+    {
+        SupportedBrowser.Chrome => @"Software\Google\Chrome\NativeMessagingHosts",
+        SupportedBrowser.Edge => @"Software\Microsoft\Edge\NativeMessagingHosts",
+        SupportedBrowser.Brave => @"Software\BraveSoftware\Brave-Browser\NativeMessagingHosts",
+        _ => null
+    };
+}

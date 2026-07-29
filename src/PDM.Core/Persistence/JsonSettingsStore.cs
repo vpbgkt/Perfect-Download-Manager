@@ -1,6 +1,7 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using PDM.Core.Models;
+using PDM.Core.Serialization;
 
 namespace PDM.Core.Persistence;
 
@@ -11,13 +12,18 @@ namespace PDM.Core.Persistence;
 /// </summary>
 public sealed class JsonSettingsStore
 {
-    private static readonly JsonSerializerOptions Options = new()
+    // Source-generated metadata (AOT/trim-safe) with settings-specific formatting layered on: the
+    // file stays pretty-printed and is read case-insensitively. Null-omitting + string enums come
+    // from the context. A JsonTypeInfo bound to these options is used at the call sites so the
+    // AOT/trim-safe (JsonTypeInfo) serializer overloads are taken — never the reflection-based ones.
+    private static readonly JsonSerializerOptions Options = new(PdmCoreJsonContext.Default.Options)
     {
         WriteIndented = true,
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter() }
+        PropertyNameCaseInsensitive = true
     };
+
+    private static readonly JsonTypeInfo<AppSettings> AppSettingsTypeInfo =
+        (JsonTypeInfo<AppSettings>)Options.GetTypeInfo(typeof(AppSettings));
 
     private readonly string _path;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -44,7 +50,7 @@ public sealed class JsonSettingsStore
                 _path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
             try
             {
-                return await JsonSerializer.DeserializeAsync<AppSettings>(stream, Options, cancellationToken)
+                return await JsonSerializer.DeserializeAsync(stream, AppSettingsTypeInfo, cancellationToken)
                        .ConfigureAwait(false) ?? new AppSettings();
             }
             catch (JsonException)
@@ -71,7 +77,7 @@ public sealed class JsonSettingsStore
             await using (var stream = new FileStream(
                 tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true))
             {
-                await JsonSerializer.SerializeAsync(stream, settings, Options, cancellationToken)
+                await JsonSerializer.SerializeAsync(stream, settings, AppSettingsTypeInfo, cancellationToken)
                     .ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             }

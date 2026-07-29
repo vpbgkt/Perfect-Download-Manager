@@ -42,6 +42,9 @@ public sealed class AppSettings
     /// <summary>Theme preference: "system", "light", or "dark".</summary>
     public string Theme { get; set; } = "system";
 
+    /// <summary>Accent colour id: "blue", "purple", "green", "orange", "pink", "red", or "teal".</summary>
+    public string AccentColor { get; set; } = "blue";
+
     /// <summary>Show desktop notifications on completion/failure.</summary>
     public bool ShowNotifications { get; set; } = true;
 
@@ -60,6 +63,14 @@ public sealed class AppSettings
     /// <summary>Base64 SPKI of the ECDSA P-256 public key used to verify update signatures.</summary>
     public string? UpdatePublicKeyBase64 { get; set; }
 
+    /// <summary>
+    /// Highest update version this install has ever been offered by a valid signed manifest
+    /// (anti-rollback / freeze defence, M4). A later fetch of a validly-signed but <i>older</i>
+    /// manifest — e.g. a MITM replaying a stale release to suppress a security update — is rejected
+    /// when its version is below this floor. Stored as a version string; empty until the first check.
+    /// </summary>
+    public string? UpdateVersionFloor { get; set; }
+
     /// <summary>How to handle name collisions when the destination file already exists.</summary>
     public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
 
@@ -76,6 +87,19 @@ public sealed class AppSettings
     /// checksum verification, custom processing. Null disables the hook.
     /// </summary>
     public string? PostDownloadCommand { get; set; }
+
+    /// <summary>
+    /// Full path to the browser executable the user last chose via the toolbar "Open browser" button.
+    /// Remembered so future clicks reuse it. Null means no preference yet (use the first detected
+    /// browser).
+    /// </summary>
+    public string? PreferredBrowserPath { get; set; }
+
+    /// <summary>
+    /// How many days before a time-limited license expires the main window begins showing the
+    /// expiration warning bar. Default 7; set to 0 to only warn on the final day.
+    /// </summary>
+    public int LicenseExpiryWarningDays { get; set; } = 7;
 
     /// <summary>Resolves the destination directory for the given category.</summary>
     public string ResolveCategoryFolder(DownloadCategory category)

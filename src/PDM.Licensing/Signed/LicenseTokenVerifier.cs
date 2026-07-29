@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using PDM.Licensing.Serialization;
 
 namespace PDM.Licensing.Signed;
 
@@ -50,7 +51,7 @@ public sealed class LicenseTokenVerifier
 
         try
         {
-            return JsonSerializer.Deserialize<LicenseClaims>(payload);
+            return JsonSerializer.Deserialize(payload, PdmLicensingJsonContext.Default.LicenseClaims);
         }
         catch (JsonException)
         {
@@ -113,7 +114,7 @@ public sealed class LicenseTokenVerifier
 
         try
         {
-            return JsonSerializer.Deserialize<TrialClaims>(payload);
+            return JsonSerializer.Deserialize(payload, PdmLicensingJsonContext.Default.TrialClaims);
         }
         catch (JsonException)
         {

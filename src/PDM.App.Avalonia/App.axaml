@@ -1,0 +1,23 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="PDM.App.Avalonia.App"
+             RequestedThemeVariant="Default">
+
+    <!-- Design tokens (semantic light/dark palette, accent brushes, radii). Merged first so the
+         Fluent theme + our styles can resolve them via DynamicResource. -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://PDM/Theme/Tokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <!-- Fluent theme + the DataGrid's Fluent styles (the downloads list uses Avalonia's DataGrid),
+         then the PDM premium style layer on top. -->
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+        <StyleInclude Source="avares://PDM/Theme/Styles.axaml" />
+    </Application.Styles>
+</Application>

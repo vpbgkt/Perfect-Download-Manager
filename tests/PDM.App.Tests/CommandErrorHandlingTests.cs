@@ -209,7 +209,7 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
         var vm = new DownloadPopupViewModel(
             managed,
             manager: _downloadManager,
-            confirmCancel: _ => false,
+            confirmCancel: _ => Task.FromResult(false),
             showError: msg => capturedError = msg);
 
         // Act

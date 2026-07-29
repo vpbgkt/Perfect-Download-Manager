@@ -26,6 +26,18 @@ public readonly record struct DownloadProgress
     /// <summary>Current lifecycle status.</summary>
     public DownloadStatus Status { get; init; }
 
+    /// <summary>
+    /// The most likely cause of a stall/slowdown while running, or <see cref="DownloadIssue.None"/>
+    /// when healthy. Lets the UI explain <em>why</em> a download paused or slowed.
+    /// </summary>
+    public DownloadIssue Issue { get; init; }
+
+    /// <summary>Current retry attempt for the affected connection (0 when not retrying).</summary>
+    public int RetryAttempt { get; init; }
+
+    /// <summary>Maximum retry attempts before a connection is considered failed.</summary>
+    public int MaxRetries { get; init; }
+
     /// <summary>Completion fraction in the range [0, 1], or <c>null</c> when size is unknown.</summary>
     public double? Fraction =>
         TotalBytes is > 0 ? Math.Clamp((double)BytesDownloaded / TotalBytes.Value, 0d, 1d) : null;

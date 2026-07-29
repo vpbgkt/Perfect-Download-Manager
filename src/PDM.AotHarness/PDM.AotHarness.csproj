@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Comprehensive NativeAOT gate (docs/MIGRATION-AVALONIA-NATIVEAOT.md §5, §11 Phase 1).
+
+    Unlike PDM.Cli (which references only PDM.Core), this harness references every reused core
+    library — Core, Infrastructure (SQLite via SQLitePCLRaw bundle_e_sqlite3), Licensing (ECDSA +
+    DPAPI + signed-token JSON), and Updater (signed manifest) — and runs a self-test that touches
+    each AOT-sensitive path. Publishing it with NativeAOT therefore proves the Phase 1 exit
+    criterion: the whole non-UI stack compiles and RUNS under AOT with zero trim/AOT warnings.
+
+    Trim/AOT/single-file analyzers are on and treated as errors, so a regression fails the build.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>pdm-aot-harness</AssemblyName>
+    <RootNamespace>PDM.AotHarness</RootNamespace>
+
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StripSymbols>true</StripSymbols>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PDM.Core\PDM.Core.csproj" />
+    <ProjectReference Include="..\PDM.Infrastructure\PDM.Infrastructure.csproj" />
+    <ProjectReference Include="..\PDM.Licensing\PDM.Licensing.csproj" />
+    <ProjectReference Include="..\PDM.Updater\PDM.Updater.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace PDM.Updater;
 
@@ -17,17 +17,19 @@ public sealed class ManifestSignatureVerifier
     /// <summary>The hash algorithm used with ECDSA to sign the manifest.</summary>
     public static readonly HashAlgorithmName HashAlgorithm = HashAlgorithmName.SHA256;
 
-    private static readonly JsonSerializerOptions CanonicalOptions = new()
+    // Source-generated metadata (AOT/trim-safe) plus the relaxed encoder layered on. The encoder
+    // cannot be set via [JsonSourceGenerationOptions], so it is applied to a copy of the context
+    // options here. It matches Node's JSON.stringify byte-for-byte: STJ's default HTML-safe encoder
+    // escapes characters like ' + < > & as \uXXXX while Node leaves them alone, which would make an
+    // apostrophe in release notes diverge and break signature verification. Null-omitting + string
+    // enums come from the context.
+    private static readonly JsonSerializerOptions CanonicalOptions = new(PdmUpdaterJsonContext.Default.Options)
     {
-        WriteIndented = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        // Match Node's JSON.stringify byte-for-byte. STJ's default HTML-safe encoder escapes
-        // characters like ' + < > & as \uXXXX; Node leaves them alone. When the server signs
-        // Node output and the client verifies with STJ default, an apostrophe in release notes
-        // causes the two canonical forms to diverge and the signature check to fail.
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        Converters = { new JsonStringEnumConverter() }
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
+
+    private static readonly JsonTypeInfo<UpdateManifest> CanonicalManifestTypeInfo =
+        (JsonTypeInfo<UpdateManifest>)CanonicalOptions.GetTypeInfo(typeof(UpdateManifest));
 
     private readonly byte[] _publicKeySpki;
 
@@ -98,7 +100,7 @@ public sealed class ManifestSignatureVerifier
         try
         {
             manifest.Signature = null;
-            string json = JsonSerializer.Serialize(manifest, CanonicalOptions);
+            string json = JsonSerializer.Serialize(manifest, CanonicalManifestTypeInfo);
             return Encoding.UTF8.GetBytes(json);
         }
         finally
