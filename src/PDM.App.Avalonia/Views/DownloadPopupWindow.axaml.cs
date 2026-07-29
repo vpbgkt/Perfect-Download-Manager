@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using PDM.App.Avalonia.Services;
 using PDM.App.Services;
 using PDM.App.ViewModels;
 using PDM.Core.Models;
@@ -92,6 +93,16 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     /// completed file or the transfer. OnClosed then notifies the manager so it can be reopened later.
     /// </summary>
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    /// <summary>Extracts the completed archive headlessly, then opens the extracted folder.</summary>
+    private async void OnExtractAndOpen(object? sender, RoutedEventArgs e)
+    {
+        if (App.Host is { } host)
+        {
+            await ArchiveExtractionRunner.RunAsync(this, host.ArchiveExtractor, _viewModel.DestinationPath)
+                .ConfigureAwait(true);
+        }
+    }
 
     // ---- Post-download "when done" actions -------------------------------------------------------
 

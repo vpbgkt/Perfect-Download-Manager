@@ -46,4 +46,7 @@ public interface IAppHost
 
     /// <summary>Coordinates "refresh this download's link from the browser".</summary>
     RefreshCoordinator RefreshCoordinator { get; }
+
+    /// <summary>Extracts downloaded archives (ZIP/RAR/7z/…) via the bundled 7-Zip engine.</summary>
+    IArchiveExtractor ArchiveExtractor { get; }
 }

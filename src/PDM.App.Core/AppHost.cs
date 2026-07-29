@@ -29,7 +29,8 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
         INotifier notifications,
         LicenseService licenseService,
         LicenseSnapshot licenseSnapshot,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IArchiveExtractor archiveExtractor)
     {
         Settings = settings;
         SettingsStore = settingsStore;
@@ -40,7 +41,11 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
         LicenseService = licenseService;
         License = licenseSnapshot; // setter applies the connection policy (DownloadManager set above)
         LoggerFactory = loggerFactory;
+        ArchiveExtractor = archiveExtractor;
     }
+
+    /// <summary>Extracts downloaded archives via the bundled 7-Zip engine (see <see cref="IArchiveExtractor"/>).</summary>
+    public IArchiveExtractor ArchiveExtractor { get; }
 
     /// <summary>
     /// Parallel-connection ceiling for installs without a functional license (Expired/Invalid).
@@ -137,10 +142,12 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     public static async Task<AppHost> CreateAsync(
         INotifier notifications,
         ILicenseStore licenseStore,
+        IArchiveExtractor? archiveExtractor = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(notifications);
         ArgumentNullException.ThrowIfNull(licenseStore);
+        archiveExtractor ??= NullArchiveExtractor.Instance;
 
         ILoggerFactory loggerFactory = Logging.Configure();
         ILogger startupLogger = loggerFactory.CreateLogger("PDM.Startup");
@@ -236,7 +243,7 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
         startupLogger.LogInformation("Startup complete. License status: {Status}", license.Status);
 
         return new AppHost(settings, settingsStore, httpProvider, repo, manager,
-            notifications, licenseService, license, loggerFactory);
+            notifications, licenseService, license, loggerFactory, archiveExtractor);
     }
 
     /// <summary>

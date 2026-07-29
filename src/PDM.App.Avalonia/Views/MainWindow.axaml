@@ -264,6 +264,8 @@
                             <Separator IsVisible="{Binding SelectedItem.CanRefreshLink}" />
                             <MenuItem Header="Open" Command="{Binding OpenFileCommand}"
                                       CommandParameter="{Binding SelectedItem}" />
+                            <MenuItem Header="Extract and open" Click="OnExtractAndOpen"
+                                      IsVisible="{Binding SelectedItem.CanExtract}" />
                             <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"
                                       CommandParameter="{Binding SelectedItem}" />
                             <MenuItem Header="Show popup" Command="{Binding ShowPopupCommand}"

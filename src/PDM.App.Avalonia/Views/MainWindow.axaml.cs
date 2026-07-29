@@ -444,6 +444,16 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Extracts the selected completed archive headlessly, then opens the extracted folder.</summary>
+    private async void OnExtractAndOpen(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedItem is { } item && App.Host is { } host)
+        {
+            await ArchiveExtractionRunner.RunAsync(this, host.ArchiveExtractor, item.DestinationPath)
+                .ConfigureAwait(true);
+        }
+    }
+
     /// <summary>Opens the bulk-add dialog and queues every valid URL the user pasted.</summary>
     private async void OnBulkAdd(object? sender, RoutedEventArgs e)
     {

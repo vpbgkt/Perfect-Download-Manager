@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PDM.Core.Models;
 using PDM.Infrastructure;
+using PDM.Platform;
 
 namespace PDM.App.ViewModels;
 
@@ -332,6 +333,15 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// </summary>
     public bool IsPaused => EffectiveStatus == DownloadStatus.Paused;
 
+    /// <summary>True when the destination file is an archive type PDM can extract.</summary>
+    public bool IsArchive => ArchiveFormats.IsSupported(DestinationPath);
+
+    /// <summary>
+    /// True when the download has completed and is an extractable archive; drives the popup's
+    /// "Extract and open" action.
+    /// </summary>
+    public bool CanExtract => IsCompleted && IsArchive;
+
     /// <summary>
     /// Failure detail shown while the download is Failed: the recorded error message when one exists,
     /// otherwise a non-empty generic message (Requirements 8.2, 8.3). <c>null</c> when not failed.
@@ -386,6 +396,8 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFailed));
         OnPropertyChanged(nameof(IsCanceled));
         OnPropertyChanged(nameof(IsPaused));
+        OnPropertyChanged(nameof(IsArchive));
+        OnPropertyChanged(nameof(CanExtract));
         OnPropertyChanged(nameof(FailureMessage));
         OnPropertyChanged(nameof(CanOpenFile));
         OnPropertyChanged(nameof(CanOpenFolder));

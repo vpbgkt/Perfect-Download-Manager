@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using PDM.App.Services;
 using PDM.Core.Models;
 using PDM.Infrastructure;
+using PDM.Platform;
 
 namespace PDM.App.ViewModels;
 
@@ -100,6 +101,15 @@ public sealed partial class DownloadItemViewModel : ObservableObject
     /// </summary>
     public bool CanRefreshLink => Status != DownloadStatus.Completed;
 
+    /// <summary>True when the destination file is an archive type PDM can extract.</summary>
+    public bool IsArchive => ArchiveFormats.IsSupported(DestinationPath);
+
+    /// <summary>
+    /// True when the download has completed and is an extractable archive; drives the
+    /// "Extract and open" action's visibility.
+    /// </summary>
+    public bool CanExtract => Status == DownloadStatus.Completed && IsArchive;
+
     /// <summary>Marshals a full-refresh notification to the UI thread.</summary>
     public void NotifyAll()
     {
@@ -121,6 +131,7 @@ public sealed partial class DownloadItemViewModel : ObservableObject
             // Re-resolve the row icon: once the file exists on disk it may carry its own embedded
             // icon (e.g. an installer .exe) rather than the generic per-extension icon.
             OnPropertyChanged(nameof(DestinationPath));
+            OnPropertyChanged(nameof(CanExtract));
         }
 
         _dispatcher.Post(Raise);

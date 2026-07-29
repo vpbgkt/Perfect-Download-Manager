@@ -74,6 +74,10 @@
                                 <Button Content="Resume" Command="{Binding ResumeCommand}"
                                         IsVisible="{Binding CanResume}" Classes="brand" />
 
+                                <!-- Archive downloads: extract headlessly, then open the folder. -->
+                                <Button Content="Extract and open" Click="OnExtractAndOpen"
+                                        IsVisible="{Binding CanExtract}" Classes="brand" />
+
                                 <Button Content="Open" Command="{Binding OpenFileCommand}"
                                         IsVisible="{Binding CanOpenFile}" Classes="brand" />
                             </StackPanel>

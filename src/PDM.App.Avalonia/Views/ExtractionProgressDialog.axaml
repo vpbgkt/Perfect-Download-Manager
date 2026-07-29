@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PDM.App.Avalonia.Views.ExtractionProgressDialog"
+        Title="Extracting"
+        Width="480" SizeToContent="Height"
+        CanResize="False" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppWindowBackgroundBrush}">
+
+    <StackPanel Margin="24" Spacing="18">
+
+        <StackPanel Orientation="Horizontal" Spacing="14">
+            <Border Width="44" Height="44" CornerRadius="12"
+                    Background="{DynamicResource AppAccentSubtleBrush}">
+                <TextBlock Classes="glyph" Text="&#xE8B7;" FontSize="20"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource AppAccentBrush}" />
+            </Border>
+            <StackPanel VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="h2" Text="Extracting archive" />
+                <TextBlock x:Name="ArchiveNameText" Classes="caption" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+            <ProgressBar x:Name="Progress" Minimum="0" Maximum="100" MinHeight="8" CornerRadius="4"
+                         IsIndeterminate="True" />
+            <TextBlock x:Name="StatusText" Classes="caption" Text="Preparing…" />
+        </StackPanel>
+
+        <!-- Error message (shown only on failure). -->
+        <TextBlock x:Name="ErrorText" IsVisible="False" TextWrapping="Wrap"
+                   Foreground="{DynamicResource StatusErrorBrush}" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button x:Name="ActionButton" Content="Cancel" MinWidth="96" Click="OnCancelOrClose" />
+        </StackPanel>
+    </StackPanel>
+</Window>

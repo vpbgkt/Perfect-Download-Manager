@@ -99,3 +99,8 @@ installer/runtime-payload.generated.wxs
 
 # Kiro / agent scratch reads
 temp_read.txt
+
+# Bundled 7-Zip engine (fetched by build/fetch-7zip.ps1; not committed — keep the README)
+third-party/7-zip/7z.exe
+third-party/7-zip/7z.dll
+third-party/7-zip/License.txt

@@ -56,7 +56,8 @@ public partial class App : Application
             // The composition root does only local work on startup (no network) and uses
             // ConfigureAwait(false) throughout, so blocking here does not deadlock the UI thread.
             var licenseStore = new DpapiLicenseStore(AppPaths.LicenseFile);
-            Host = AppHost.CreateAsync(notifier, licenseStore).GetAwaiter().GetResult();
+            Host = AppHost.CreateAsync(notifier, licenseStore, new SevenZipArchiveExtractor())
+                .GetAwaiter().GetResult();
 
             // Apply the saved appearance preferences at startup (theme variant + accent colour).
             ThemeApplier.ApplyAccent(Host.Settings.AccentColor);
