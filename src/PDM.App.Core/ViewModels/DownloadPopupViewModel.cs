@@ -114,6 +114,21 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     private bool _shutdownWhenDone;
 
     /// <summary>
+    /// When true, the head automatically extracts the archive and opens the folder once the download
+    /// completes. Armed while the download is still running via the popup's "Auto extract and open"
+    /// action; the head captures any password up front (see <see cref="PendingExtractionPassword"/>).
+    /// </summary>
+    [ObservableProperty]
+    private bool _autoExtractWhenDone;
+
+    /// <summary>
+    /// Password captured up front for the auto-extract-on-complete flow (null/empty when the archive
+    /// isn't protected). Set by the head when the user arms auto-extract; used at completion. If it's
+    /// wrong, the head shows a "wrong password" error and re-prompts.
+    /// </summary>
+    public string? PendingExtractionPassword { get; set; }
+
+    /// <summary>
     /// True when the app is on a free/limited plan (no functional license), so the popup shows a
     /// short, professional notice that download speed is reduced. Set once by the factory.
     /// </summary>
@@ -343,6 +358,15 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     public bool CanExtract => IsCompleted && IsArchive;
 
     /// <summary>
+    /// True while the download is still running and the file is an archive that hasn't been armed for
+    /// auto-extraction yet; drives the "Auto extract and open" action.
+    /// </summary>
+    public bool CanArmAutoExtract => !IsTerminal && IsArchive && !AutoExtractWhenDone;
+
+    partial void OnAutoExtractWhenDoneChanged(bool value) =>
+        OnPropertyChanged(nameof(CanArmAutoExtract));
+
+    /// <summary>
     /// Failure detail shown while the download is Failed: the recorded error message when one exists,
     /// otherwise a non-empty generic message (Requirements 8.2, 8.3). <c>null</c> when not failed.
     /// </summary>
@@ -398,6 +422,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(IsPaused));
         OnPropertyChanged(nameof(IsArchive));
         OnPropertyChanged(nameof(CanExtract));
+        OnPropertyChanged(nameof(CanArmAutoExtract));
         OnPropertyChanged(nameof(FailureMessage));
         OnPropertyChanged(nameof(CanOpenFile));
         OnPropertyChanged(nameof(CanOpenFolder));

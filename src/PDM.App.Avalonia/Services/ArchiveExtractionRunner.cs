@@ -19,7 +19,8 @@ public static class ArchiveExtractionRunner
     /// <paramref name="owner"/>. Safe to call for any completed download; it validates the file and
     /// archive type first and reports issues through dialogs.
     /// </summary>
-    public static async Task RunAsync(Window owner, IArchiveExtractor extractor, string archivePath)
+    public static async Task RunAsync(
+        Window owner, IArchiveExtractor extractor, string archivePath, string? initialPassword = null)
     {
         if (extractor is null || !extractor.IsAvailable)
         {
@@ -62,18 +63,24 @@ public static class ArchiveExtractionRunner
         }
 
         string destination = ComputeDestination(archivePath);
-        string? password = null;
+        string? password = initialPassword;
         bool needsPassword = inspection.IsEncrypted;
+        string? retryMessage = null;
 
         while (true)
         {
-            if (needsPassword)
+            // Prompt when a password is required and we don't yet have one (or the last one was wrong).
+            if (needsPassword && (password is null || retryMessage is not null))
             {
-                password = await PasswordDialog.ShowAsync(owner, Path.GetFileName(archivePath)).ConfigureAwait(true);
+                password = await PasswordDialog
+                    .ShowAsync(owner, Path.GetFileName(archivePath), retryMessage)
+                    .ConfigureAwait(true);
                 if (password is null)
                 {
                     return; // user cancelled the password prompt
                 }
+
+                retryMessage = null;
             }
 
             var dialog = new ExtractionProgressDialog(extractor, archivePath, destination, password);
@@ -86,9 +93,10 @@ public static class ArchiveExtractionRunner
                     return;
 
                 case ExtractionStatus.WrongPassword:
-                    // Loop back and prompt again (the progress dialog closed without a message).
+                    // Show a clear "wrong password" message on the next prompt, then retry.
                     needsPassword = true;
                     password = null;
+                    retryMessage = "The password was incorrect. Please try again.";
                     continue;
 
                 default:

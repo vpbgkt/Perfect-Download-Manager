@@ -48,9 +48,29 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         DataContext = _viewModel;
         InitializeComponent();
 
-        // Run the "when done" options once the download finishes (auto-open and/or shutdown).
+        // Run the "when done" options once the download finishes (auto-open/extract and/or shutdown).
         _viewModel.Completed += OnDownloadCompleted;
+
+        // Surface the popup above other windows when it appears (so a captured link / completion is
+        // never missed), and chime. It drops out of always-on-top as soon as the user clicks away.
+        Opened += OnPopupOpened;
+        Deactivated += OnPopupDeactivated;
     }
+
+    private void OnPopupOpened(object? sender, EventArgs e)
+    {
+        Topmost = true;
+        Activate();
+
+        // "Download link received" chime — only for a live download, not when reopening a finished one.
+        if (!_viewModel.IsTerminal)
+        {
+            NotificationSound.Play();
+        }
+    }
+
+    // Once the user clicks another window (this popup loses focus), stop forcing it on top.
+    private void OnPopupDeactivated(object? sender, EventArgs e) => Topmost = false;
 
     /// <inheritdoc />
     public Guid Id => _viewModel.Id;
@@ -94,14 +114,60 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     /// </summary>
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 
-    /// <summary>Extracts the completed archive headlessly, then opens the extracted folder.</summary>
+    /// <summary>Opens the completed file, then closes the popup.</summary>
+    private void OnOpenAndClose(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel.OpenFileCommand.CanExecute(null))
+        {
+            _viewModel.OpenFileCommand.Execute(null);
+        }
+
+        Close();
+    }
+
+    /// <summary>Reveals the completed file in its folder, then closes the popup.</summary>
+    private void OnShowFolderAndClose(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel.OpenFolderCommand.CanExecute(null))
+        {
+            _viewModel.OpenFolderCommand.Execute(null);
+        }
+
+        Close();
+    }
+
+    /// <summary>Extracts the completed archive headlessly and opens the folder, then closes the popup.</summary>
     private async void OnExtractAndOpen(object? sender, RoutedEventArgs e)
     {
         if (App.Host is { } host)
         {
-            await ArchiveExtractionRunner.RunAsync(this, host.ArchiveExtractor, _viewModel.DestinationPath)
+            await ArchiveExtractionRunner
+                .RunAsync(this, host.ArchiveExtractor, _viewModel.DestinationPath, _viewModel.PendingExtractionPassword)
                 .ConfigureAwait(true);
         }
+
+        Close();
+    }
+
+    /// <summary>
+    /// Arms "auto extract and open when done" while the download is still running, capturing any
+    /// archive password up front (optional — leave blank if the archive isn't protected). If the
+    /// password turns out to be wrong, the completion flow shows an error and re-prompts.
+    /// </summary>
+    private async void OnArmAutoExtract(object? sender, RoutedEventArgs e)
+    {
+        string? password = await PasswordDialog
+            .ShowAsync(this, System.IO.Path.GetFileName(_viewModel.DestinationPath),
+                errorMessage: null, passwordOptional: true)
+            .ConfigureAwait(true);
+
+        if (password is null)
+        {
+            return; // user cancelled — leave auto-extract off
+        }
+
+        _viewModel.PendingExtractionPassword = string.IsNullOrEmpty(password) ? null : password;
+        _viewModel.AutoExtractWhenDone = true;
     }
 
     // ---- Post-download "when done" actions -------------------------------------------------------
@@ -110,9 +176,21 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     /// Fires once when the download completes: opens the file if requested, then (if requested) starts
     /// a cancellable shutdown countdown. Runs on the UI thread (the VM raises Completed there).
     /// </summary>
-    private void OnDownloadCompleted()
+    private async void OnDownloadCompleted()
     {
-        if (_viewModel.AutoOpenOnComplete && _viewModel.OpenFileCommand.CanExecute(null))
+        // Completion chime, and resurface the popup so the finished download isn't missed.
+        NotificationSound.Play();
+        Topmost = true;
+        Activate();
+
+        // Auto-extract takes precedence over auto-open for archives; both are user-armed intents.
+        if (_viewModel.AutoExtractWhenDone && _viewModel.IsArchive && App.Host is { } host)
+        {
+            await ArchiveExtractionRunner
+                .RunAsync(this, host.ArchiveExtractor, _viewModel.DestinationPath, _viewModel.PendingExtractionPassword)
+                .ConfigureAwait(true);
+        }
+        else if (_viewModel.AutoOpenOnComplete && _viewModel.OpenFileCommand.CanExecute(null))
         {
             _viewModel.OpenFileCommand.Execute(null);
         }

@@ -185,7 +185,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Click="OnDeleteSelected" IsEnabled="{Binding HasSelection}"
+                    <Button Click="OnDeleteSelected" IsVisible="{Binding HasSelection}"
                             ToolTip.Tip="Delete the selected downloads">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Classes="glyph" Text="&#xE74D;" />
