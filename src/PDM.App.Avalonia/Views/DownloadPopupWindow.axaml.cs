@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using PDM.App.Avalonia.Services;
@@ -52,15 +53,24 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         _viewModel.Completed += OnDownloadCompleted;
 
         // Surface the popup above other windows when it appears (so a captured link / completion is
-        // never missed), and chime. It drops out of always-on-top as soon as the user clicks away.
+        // never missed), and chime. It stays on top until the user actually clicks into it — dropping
+        // on the first Deactivated is unreliable because a background popup opens unfocused and would
+        // drop immediately, which is exactly the "appears behind other windows" bug.
         Opened += OnPopupOpened;
-        Deactivated += OnPopupDeactivated;
+        AddHandler(InputElement.PointerPressedEvent, OnPopupPointerPressed,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
+    }
+
+    /// <summary>Forces the popup to the top of the z-order and tries to focus it.</summary>
+    private void SurfaceOnTop()
+    {
+        Topmost = true;
+        Activate();
     }
 
     private void OnPopupOpened(object? sender, EventArgs e)
     {
-        Topmost = true;
-        Activate();
+        SurfaceOnTop();
 
         // "Download link received" chime — only for a live download, not when reopening a finished one.
         if (!_viewModel.IsTerminal)
@@ -69,8 +79,8 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         }
     }
 
-    // Once the user clicks another window (this popup loses focus), stop forcing it on top.
-    private void OnPopupDeactivated(object? sender, EventArgs e) => Topmost = false;
+    // The user clicked into the popup: they've seen it, so stop forcing it above everything.
+    private void OnPopupPointerPressed(object? sender, PointerPressedEventArgs e) => Topmost = false;
 
     /// <inheritdoc />
     public Guid Id => _viewModel.Id;
@@ -180,15 +190,22 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     {
         // Completion chime, and resurface the popup so the finished download isn't missed.
         NotificationSound.Play();
-        Topmost = true;
-        Activate();
+        SurfaceOnTop();
 
         // Auto-extract takes precedence over auto-open for archives; both are user-armed intents.
         if (_viewModel.AutoExtractWhenDone && _viewModel.IsArchive && App.Host is { } host)
         {
-            await ArchiveExtractionRunner
+            bool extracted = await ArchiveExtractionRunner
                 .RunAsync(this, host.ArchiveExtractor, _viewModel.DestinationPath, _viewModel.PendingExtractionPassword)
                 .ConfigureAwait(true);
+
+            // After a successful auto-extract + folder open, close the popup (unless a shutdown
+            // countdown is pending, which needs the window to host its overlay).
+            if (extracted && !_viewModel.ShutdownWhenDone)
+            {
+                Close();
+                return;
+            }
         }
         else if (_viewModel.AutoOpenOnComplete && _viewModel.OpenFileCommand.CanExecute(null))
         {

@@ -235,7 +235,9 @@
         </Border>
 
         <!-- ================= Downloads list + empty state ================= -->
-        <Grid Margin="16">
+        <!-- Transparent background makes the empty area hit-testable so clicking off the rows
+             (card padding, below the last row) clears the focused selection. -->
+        <Grid Margin="16" Background="Transparent" PointerPressed="OnDownloadsAreaPointerPressed">
             <Border Classes="card" Padding="6" IsVisible="{Binding !IsListEmpty}">
                 <!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
                      MainViewModel's FilterItem predicate + FilterChanged signal drive filtering.

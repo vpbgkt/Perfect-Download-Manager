@@ -17,9 +17,10 @@ public static class ArchiveExtractionRunner
     /// <summary>
     /// Runs the full extract-and-open flow for <paramref name="archivePath"/>, owned by
     /// <paramref name="owner"/>. Safe to call for any completed download; it validates the file and
-    /// archive type first and reports issues through dialogs.
+    /// archive type first and reports issues through dialogs. Returns <c>true</c> only when the
+    /// archive was extracted and the folder opened (so callers can close the popup on success).
     /// </summary>
-    public static async Task RunAsync(
+    public static async Task<bool> RunAsync(
         Window owner, IArchiveExtractor extractor, string archivePath, string? initialPassword = null)
     {
         if (extractor is null || !extractor.IsAvailable)
@@ -27,20 +28,20 @@ public static class ArchiveExtractionRunner
             await MessageDialog.ShowAsync(owner, "Extract",
                 "The extraction engine (7-Zip) was not found, so this archive can't be extracted.")
                 .ConfigureAwait(true);
-            return;
+            return false;
         }
 
         if (!File.Exists(archivePath))
         {
             await MessageDialog.ShowAsync(owner, "Extract", "The file no longer exists.").ConfigureAwait(true);
-            return;
+            return false;
         }
 
         if (!extractor.IsSupportedArchive(archivePath))
         {
             await MessageDialog.ShowAsync(owner, "Extract", "This file is not a supported archive.")
                 .ConfigureAwait(true);
-            return;
+            return false;
         }
 
         ArchiveInspection inspection;
@@ -52,14 +53,14 @@ public static class ArchiveExtractionRunner
         {
             await MessageDialog.ShowAsync(owner, "Extract", $"Could not read the archive: {ex.Message}")
                 .ConfigureAwait(true);
-            return;
+            return false;
         }
 
         if (!inspection.CanRead)
         {
             await MessageDialog.ShowAsync(owner, "Extract",
                 inspection.Error ?? "The archive could not be read.").ConfigureAwait(true);
-            return;
+            return false;
         }
 
         string destination = ComputeDestination(archivePath);
@@ -77,7 +78,7 @@ public static class ArchiveExtractionRunner
                     .ConfigureAwait(true);
                 if (password is null)
                 {
-                    return; // user cancelled the password prompt
+                    return false; // user cancelled the password prompt
                 }
 
                 retryMessage = null;
@@ -90,7 +91,7 @@ public static class ArchiveExtractionRunner
             {
                 case ExtractionStatus.Success:
                     OpenFolder(destination);
-                    return;
+                    return true;
 
                 case ExtractionStatus.WrongPassword:
                     // Show a clear "wrong password" message on the next prompt, then retry.
@@ -101,7 +102,7 @@ public static class ArchiveExtractionRunner
 
                 default:
                     // Canceled, Failed, ToolMissing: the progress dialog already showed any detail.
-                    return;
+                    return false;
             }
         }
     }

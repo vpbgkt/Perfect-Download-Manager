@@ -454,6 +454,21 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Clicking an empty area of the downloads pane (card padding, below the last row) clears the
+    /// focused row selection, so the selection-dependent actions (e.g. Delete) hide when nothing is
+    /// meaningfully selected. Clicks that land on a row keep it selected.
+    /// </summary>
+    private void OnDownloadsAreaPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source is Visual source && source.FindAncestorOfType<DataGridRow>() is not null)
+        {
+            return; // clicked on a row — keep it selected
+        }
+
+        _viewModel.SelectedItem = null;
+    }
+
     /// <summary>Opens the bulk-add dialog and queues every valid URL the user pasted.</summary>
     private async void OnBulkAdd(object? sender, RoutedEventArgs e)
     {
