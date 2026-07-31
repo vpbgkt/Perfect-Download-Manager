@@ -25,19 +25,18 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* Design tokens — clean light theme. The orange accent matches the
-   "downloading" progress-bar colour used in the app so the brand stays
-   consistent across the site and product. */
+/* Design tokens — clean light theme with a blue accent for a calm, trustworthy
+   look on a white background. */
 :root {
     color-scheme: light;
     --bg: #ffffff;
-    --bg-alt: #f5f7fa;
+    --bg-alt: #f4f7fb;
     --card: #ffffff;
-    --border: #e4e8ee;
+    --border: #e2e8f2;
     --fg: #1b2130;
-    --fg-muted: #5b6675;
-    --accent: #e07c00;
-    --accent-strong: #b45f00;
+    --fg-muted: #55617a;
+    --accent: #2563eb;
+    --accent-strong: #1d4ed8;
     --success: #1a9c3e;
     --paused: #8a8a8a;
     --danger: #d33a3a;
@@ -220,12 +219,12 @@ code {
 .btn-primary {
     background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
     color: #ffffff;
-    box-shadow: 0 6px 18px rgba(227, 139, 0, 0.30);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.30);
 }
 
 .btn-primary:hover {
     color: #ffffff;
-    box-shadow: 0 10px 24px rgba(227, 139, 0, 0.40);
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.40);
 }
 
 .btn-ghost {
@@ -249,7 +248,7 @@ code {
 .hero {
     padding: 72px 0 32px;
     background: radial-gradient(1200px 500px at 50% -100px,
-                rgba(227, 139, 0, 0.14) 0%, transparent 60%);
+                rgba(37, 99, 235, 0.14) 0%, transparent 60%);
 }
 
 .hero-inner {
@@ -262,9 +261,9 @@ code {
 .eyebrow {
     display: inline-block;
     padding: 6px 12px;
-    background: rgba(227, 139, 0, 0.12);
+    background: rgba(37, 99, 235, 0.12);
     color: var(--accent-strong);
-    border: 1px solid rgba(227, 139, 0, 0.35);
+    border: 1px solid rgba(37, 99, 235, 0.35);
     border-radius: 999px;
     font-size: 0.82rem;
     font-weight: 600;
@@ -465,7 +464,7 @@ code {
 
 .feature:hover {
     transform: translateY(-2px);
-    border-color: rgba(227, 139, 0, 0.4);
+    border-color: rgba(37, 99, 235, 0.4);
 }
 
 .feature-icon {
@@ -506,17 +505,17 @@ code {
 }
 
 .download-card-primary {
-    border-color: rgba(227, 139, 0, 0.5);
-    box-shadow: 0 8px 30px rgba(227, 139, 0, 0.14);
+    border-color: rgba(37, 99, 235, 0.5);
+    box-shadow: 0 8px 30px rgba(37, 99, 235, 0.14);
 }
 
 .download-badge {
     position: absolute;
     top: 14px;
     right: 14px;
-    background: rgba(227, 139, 0, 0.15);
+    background: rgba(37, 99, 235, 0.15);
     color: var(--accent-strong);
-    border: 1px solid rgba(227, 139, 0, 0.4);
+    border: 1px solid rgba(37, 99, 235, 0.4);
     padding: 3px 10px;
     border-radius: 999px;
     font-size: 0.75rem;
@@ -645,7 +644,7 @@ code {
 }
 
 .menu-item-highlight {
-    background: rgba(227, 139, 0, 0.14);
+    background: rgba(37, 99, 235, 0.14);
     color: var(--fg);
     font-weight: 600;
 }
@@ -673,7 +672,7 @@ code {
 }
 
 .faq[open] {
-    border-color: rgba(227, 139, 0, 0.4);
+    border-color: rgba(37, 99, 235, 0.4);
 }
 
 .faq summary {
@@ -885,7 +884,7 @@ code {
 
 .blog-card:hover {
     transform: translateY(-2px);
-    border-color: rgba(227, 139, 0, 0.4);
+    border-color: rgba(37, 99, 235, 0.4);
 }
 
 .blog-card h3 { margin: 0; }
