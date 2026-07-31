@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
@@ -68,6 +69,12 @@ public partial class MainWindow : Window
         // Done in code-behind because a column header is outside compiled-binding scope.
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         SyncSelectAllCheckBox();
+
+        // Clear the focused selection when the user clicks off the rows. Registered as a tunneling
+        // handler with handledEventsToo because the DataGrid marks pointer presses handled, which
+        // would otherwise stop a normal bubbling handler from ever firing.
+        DownloadsArea.AddHandler(InputElement.PointerPressedEvent, OnDownloadsAreaPointerPressed,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
 
         InitializeBrowserMenu();
     }
@@ -461,9 +468,12 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnDownloadsAreaPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.Source is Visual source && source.FindAncestorOfType<DataGridRow>() is not null)
+        if (e.Source is Visual source &&
+            (source.FindAncestorOfType<DataGridRow>() is not null ||
+             source.FindAncestorOfType<ScrollBar>() is not null))
         {
-            return; // clicked on a row — keep it selected
+            // Clicked a row (keep it selected) or the scrollbar (don't disturb selection while scrolling).
+            return;
         }
 
         _viewModel.SelectedItem = null;

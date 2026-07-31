@@ -236,8 +236,9 @@
 
         <!-- ================= Downloads list + empty state ================= -->
         <!-- Transparent background makes the empty area hit-testable so clicking off the rows
-             (card padding, below the last row) clears the focused selection. -->
-        <Grid Margin="16" Background="Transparent" PointerPressed="OnDownloadsAreaPointerPressed">
+             (card padding, below the last row) clears the focused selection. A tunneling handler is
+             wired in code-behind because the DataGrid marks pointer presses handled. -->
+        <Grid x:Name="DownloadsArea" Margin="16" Background="Transparent">
             <Border Classes="card" Padding="6" IsVisible="{Binding !IsListEmpty}">
                 <!-- ItemsSource is assigned in code-behind to a DataGridCollectionView so the shared
                      MainViewModel's FilterItem predicate + FilterChanged signal drive filtering.

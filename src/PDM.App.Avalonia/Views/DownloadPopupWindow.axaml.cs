@@ -52,25 +52,14 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         // Run the "when done" options once the download finishes (auto-open/extract and/or shutdown).
         _viewModel.Completed += OnDownloadCompleted;
 
-        // Surface the popup above other windows when it appears (so a captured link / completion is
-        // never missed), and chime. It stays on top until the user actually clicks into it — dropping
-        // on the first Deactivated is unreliable because a background popup opens unfocused and would
-        // drop immediately, which is exactly the "appears behind other windows" bug.
+        // Surface the popup above other windows *once* when the link is received (so it isn't missed),
+        // then let it behave like a normal window — clicking another window brings that forward.
         Opened += OnPopupOpened;
-        AddHandler(InputElement.PointerPressedEvent, OnPopupPointerPressed,
-            RoutingStrategies.Tunnel, handledEventsToo: true);
-    }
-
-    /// <summary>Forces the popup to the top of the z-order and tries to focus it.</summary>
-    private void SurfaceOnTop()
-    {
-        Topmost = true;
-        Activate();
     }
 
     private void OnPopupOpened(object? sender, EventArgs e)
     {
-        SurfaceOnTop();
+        WindowForeground.BringToFrontOnce(this);
 
         // "Download link received" chime — only for a live download, not when reopening a finished one.
         if (!_viewModel.IsTerminal)
@@ -78,9 +67,6 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
             NotificationSound.Play();
         }
     }
-
-    // The user clicked into the popup: they've seen it, so stop forcing it above everything.
-    private void OnPopupPointerPressed(object? sender, PointerPressedEventArgs e) => Topmost = false;
 
     /// <inheritdoc />
     public Guid Id => _viewModel.Id;
@@ -188,9 +174,10 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     /// </summary>
     private async void OnDownloadCompleted()
     {
-        // Completion chime, and resurface the popup so the finished download isn't missed.
+        // Completion chime, and surface the popup once so the finished download isn't missed (it
+        // does not stay pinned on top afterwards).
         NotificationSound.Play();
-        SurfaceOnTop();
+        WindowForeground.BringToFrontOnce(this);
 
         // Auto-extract takes precedence over auto-open for archives; both are user-armed intents.
         if (_viewModel.AutoExtractWhenDone && _viewModel.IsArchive && App.Host is { } host)
