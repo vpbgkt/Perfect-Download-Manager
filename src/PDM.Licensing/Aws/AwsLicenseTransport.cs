@@ -17,6 +17,7 @@ public sealed class AwsLicenseTransport : ILicenseTransport
     private readonly Uri _activateUri;
     private readonly Uri _validateUri;
     private readonly Uri _trialUri;
+    private readonly Uri _deactivateUri;
 
     public AwsLicenseTransport(HttpClient client, string apiBaseUrl)
     {
@@ -27,6 +28,7 @@ public sealed class AwsLicenseTransport : ILicenseTransport
         _activateUri = new Uri($"{baseUrl}/activate");
         _validateUri = new Uri($"{baseUrl}/validate");
         _trialUri = new Uri($"{baseUrl}/trial");
+        _deactivateUri = new Uri($"{baseUrl}/deactivate");
     }
 
     public Task<LicenseValidationResult> ActivateAsync(
@@ -36,6 +38,32 @@ public sealed class AwsLicenseTransport : ILicenseTransport
     public Task<LicenseValidationResult> ValidateAsync(
         string licenseKey, string fingerprint, CancellationToken cancellationToken = default)
         => CallAsync(_validateUri, licenseKey, fingerprint, cancellationToken);
+
+    public async Task<bool> DeactivateAsync(
+        string licenseKey, string fingerprint, string? token, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var request = new DeactivateRequest
+            {
+                LicenseKey = licenseKey,
+                Fingerprint = fingerprint,
+                Token = token ?? string.Empty
+            };
+            using HttpResponseMessage response = await _client
+                .PostAsJsonAsync(_deactivateUri, request, PdmLicensingJsonContext.Default.DeactivateRequest,
+                    cancellationToken).ConfigureAwait(false);
+            // The endpoint is idempotent and returns 2xx once the seat is released (or there was
+            // nothing to release). Treat any success status as "released"; parsing the body is
+            // unnecessary. Non-success (incl. 401 when the token is missing/invalid, or 429) is
+            // reported as not-released so the caller can hint the user.
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return false;
+        }
+    }
 
     public async Task<string?> GetTrialAnchorAsync(string fingerprint, CancellationToken cancellationToken = default)
     {
@@ -116,6 +144,22 @@ internal sealed class TrialRequest
 {
     [JsonPropertyName("fingerprint")]
     public string Fingerprint { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Request body sent to the deactivate endpoint. Carries the current signed token so the server can
+/// authorize the seat release (the token proves the caller is the legitimate holder on this machine).
+/// </summary>
+internal sealed class DeactivateRequest
+{
+    [JsonPropertyName("licenseKey")]
+    public string LicenseKey { get; init; } = string.Empty;
+
+    [JsonPropertyName("fingerprint")]
+    public string Fingerprint { get; init; } = string.Empty;
+
+    [JsonPropertyName("token")]
+    public string Token { get; init; } = string.Empty;
 }
 
 /// <summary>Response body returned by the activate/validate/trial endpoints.</summary>

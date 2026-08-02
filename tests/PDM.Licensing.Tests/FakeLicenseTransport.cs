@@ -61,4 +61,28 @@ public sealed class FakeLicenseTransport : ILicenseTransport
 
         return Task.FromResult(TrialToken);
     }
+
+    public int DeactivateCallCount { get; private set; }
+    public string? LastDeactivatedKey { get; private set; }
+    public string? LastDeactivatedFingerprint { get; private set; }
+    public string? LastDeactivatedToken { get; private set; }
+
+    /// <summary>Value returned by <see cref="DeactivateAsync"/> when it does not throw.</summary>
+    public bool DeactivateResult { get; set; } = true;
+
+    public Task<bool> DeactivateAsync(
+        string licenseKey, string fingerprint, string? token, CancellationToken cancellationToken = default)
+    {
+        DeactivateCallCount++;
+        LastDeactivatedKey = licenseKey;
+        LastDeactivatedFingerprint = fingerprint;
+        LastDeactivatedToken = token;
+        LastFingerprintSeen = fingerprint;
+        if (ThrowOnCall is not null)
+        {
+            throw ThrowOnCall;
+        }
+
+        return Task.FromResult(DeactivateResult);
+    }
 }

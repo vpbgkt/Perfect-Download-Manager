@@ -267,5 +267,64 @@ public sealed class LicenseServiceTests : IDisposable
         Assert.Equal(now, (await store.LoadAsync())!.FirstLaunchUtc);
     }
 
+    [Fact]
+    public async Task Deactivate_ReleasesSeatOnServer_UsingBoundFingerprint()
+    {
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14));
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, now.AddDays(14)) }
+        };
+
+        var svc = CreateService(store, transport, now: now);
+        await svc.ActivateAsync("K");
+
+        var snap = await svc.DeactivateAsync();
+
+        // The seat must be released server-side (so the admin panel frees it and the license can
+        // move to another PC), using the fingerprint the license was bound to.
+        Assert.Equal(1, transport.DeactivateCallCount);
+        Assert.Equal("K", transport.LastDeactivatedKey);
+        Assert.Equal(Fingerprint, transport.LastDeactivatedFingerprint);
+        // The signed token must be forwarded so the server can authorize the release (token-gate).
+        Assert.Equal(token, transport.LastDeactivatedToken);
+
+        // Local state is cleared and no failure hint is shown when the release succeeded.
+        LicenseRecord? persisted = await store.LoadAsync();
+        Assert.Null(persisted!.LicenseKey);
+        Assert.Null(persisted.SignedToken);
+        Assert.Equal(LicenseStatus.Trial, snap.Status);
+        Assert.True(string.IsNullOrEmpty(snap.Message));
+    }
+
+    [Fact]
+    public async Task Deactivate_ServerUnreachable_StillClearsLocalAndHints()
+    {
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14));
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, now.AddDays(14)) }
+        };
+
+        var svc = CreateService(store, transport, now: now);
+        await svc.ActivateAsync("K");
+
+        // Simulate the licensing server being unreachable during deactivation.
+        transport.ThrowOnCall = new HttpRequestException("offline");
+
+        var snap = await svc.DeactivateAsync();
+
+        // Local deactivation must still succeed even when the release call fails...
+        LicenseRecord? persisted = await store.LoadAsync();
+        Assert.Null(persisted!.LicenseKey);
+        Assert.Equal(LicenseStatus.Trial, snap.Status);
+        // ...and the user is told the seat may not have been released.
+        Assert.False(string.IsNullOrEmpty(snap.Message));
+    }
+
     public void Dispose() => _issuer.Dispose();
 }

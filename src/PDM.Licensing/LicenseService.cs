@@ -250,13 +250,61 @@ public sealed class LicenseService
         return BuildSnapshot(record);
     }
 
-    /// <summary>Clears the local license, returning the app to trial/grace state.</summary>
+    /// <summary>
+    /// Deactivates the license on this PC. Releases the machine's activation seat on the server
+    /// (best-effort) so the license can be re-activated on another computer, then clears the local
+    /// record regardless. Clearing only local state — the previous behaviour — left the seat bound
+    /// server-side, so the admin panel still showed the machine and the activation slot stayed
+    /// consumed, blocking the user from moving the license.
+    /// </summary>
     public async Task<LicenseSnapshot> DeactivateAsync(CancellationToken cancellationToken = default)
     {
         LicenseRecord record = await LoadOrInitializeAsync(cancellationToken).ConfigureAwait(false);
+
+        string? key = record.LicenseKey;
+        // Release the seat that was actually bound at activation; fall back to the current machine
+        // fingerprint for older records that predate storing BoundFingerprint.
+        string fingerprint = !string.IsNullOrWhiteSpace(record.BoundFingerprint)
+            ? record.BoundFingerprint!
+            : _fingerprintProvider();
+
+        // The server authorizes the release by verifying this signed token against the key +
+        // fingerprint, so a third party who only knows the key/fingerprint cannot release the seat.
+        string? token = record.SignedToken;
+
+        bool releasedRemotely = false;
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            try
+            {
+                releasedRemotely = await _transport.DeactivateAsync(key!, fingerprint, token, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Offline or server error: still deactivate locally; surface a hint below.
+                releasedRemotely = false;
+            }
+        }
+
         ClearLicense(record);
         await _store.SaveAsync(record, cancellationToken).ConfigureAwait(false);
-        return BuildSnapshot(record);
+
+        LicenseSnapshot snapshot = BuildSnapshot(record);
+
+        // If we had a license but could not confirm the server-side release, tell the user so they
+        // know a subsequent activation on another PC might need a retry (or support) if it was the
+        // last free seat.
+        if (!releasedRemotely && !string.IsNullOrWhiteSpace(key))
+        {
+            snapshot = snapshot with
+            {
+                Message = "Deactivated on this PC. If you can't activate on another computer, reconnect " +
+                          "to the internet and deactivate again, or contact support to release the seat."
+            };
+        }
+
+        return snapshot;
     }
 
     /// <summary>

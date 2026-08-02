@@ -72,3 +72,53 @@ export function signClaims(claims, privateKeyPem) {
   const json = JSON.stringify(claims);
   return { token: signToken(json, privateKeyPem), payload: claims };
 }
+
+/** base64url-decode to a Buffer. */
+function b64urlDecode(s) {
+  let t = s.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = t.length % 4;
+  if (pad === 2) t += "==";
+  else if (pad === 3) t += "=";
+  else if (pad === 1) throw new Error("invalid base64url length");
+  return Buffer.from(t, "base64");
+}
+
+/**
+ * Verifies a compact token (base64url(payload).base64url(sig)) against the PUBLIC key (SPKI base64)
+ * using ECDSA P-256 / SHA-256 / DER — the mirror of signToken and of the .NET client's verifier.
+ * Returns the parsed claims object on success, or null on any malformation / signature failure.
+ *
+ * Verification uses only the public key, so any handler that calls this needs no access to the
+ * private signing key (no SSM/KMS permission required).
+ */
+export function verifyToken(token, publicKeySpkiBase64) {
+  if (typeof token !== "string" || token.length === 0 || !publicKeySpkiBase64) {
+    return null;
+  }
+  const dot = token.indexOf(".");
+  if (dot <= 0 || dot === token.length - 1 || token.indexOf(".", dot + 1) >= 0) {
+    return null; // must have exactly one separator
+  }
+  let payloadBytes;
+  let signature;
+  try {
+    payloadBytes = b64urlDecode(token.slice(0, dot));
+    signature = b64urlDecode(token.slice(dot + 1));
+  } catch {
+    return null;
+  }
+  try {
+    const key = crypto.createPublicKey({
+      key: Buffer.from(publicKeySpkiBase64, "base64"),
+      format: "der",
+      type: "spki"
+    });
+    const ok = crypto.verify("sha256", payloadBytes, { key, dsaEncoding: "der" }, signature);
+    if (!ok) {
+      return null;
+    }
+    return JSON.parse(payloadBytes.toString("utf8"));
+  } catch {
+    return null;
+  }
+}

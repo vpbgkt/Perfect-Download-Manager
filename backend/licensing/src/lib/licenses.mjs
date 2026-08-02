@@ -54,6 +54,20 @@ export async function recordActivation(license, fingerprint, nowIso) {
   return { ok: true };
 }
 
+/**
+ * Releases an activation (frees a seat) for a fingerprint. Idempotent: removing an absent
+ * fingerprint is a no-op, so a client that deactivates twice (or was never recorded) still
+ * succeeds. Frees a slot against the activation cap so the license can move to another machine.
+ */
+export async function removeActivation(licenseKey, fingerprint) {
+  await docClient.send(new UpdateCommand({
+    TableName: TABLE_NAME,
+    Key: { licenseKey },
+    UpdateExpression: "REMOVE activations.#fp",
+    ExpressionAttributeNames: { "#fp": fingerprint }
+  }));
+}
+
 /** Updates lastSeenAt for an existing activation (heartbeat). */
 export async function touchActivation(licenseKey, fingerprint, nowIso) {
   await docClient.send(new UpdateCommand({

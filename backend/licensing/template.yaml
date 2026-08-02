@@ -22,6 +22,13 @@ Parameters:
     Type: Number
     Default: 14
     Description: Signed token lifetime; client must re-validate online within this window.
+  PublicKeyBase64:
+    Type: String
+    Default: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPGc8VP8HPWYtXZx8TCprOaFse9iQTSypZp8pjltwA7cYRSWnNr+sNOKa92/deMvNb5NdIVB3SX1oPexTUKQS2w=="
+    Description: >
+      ECDSA P-256 public key (SPKI base64) matching the SSM private signing key. Used by the
+      deactivate handler to verify the caller's signed token (public-key only; no private key access).
+      Must be regenerated together with the signing key on rotation.
 
 Resources:
 
@@ -135,6 +142,48 @@ Resources:
           PRIVATE_KEY_PARAM: !Ref PrivateKeyParam
           TRIAL_DAYS: "14"
 
+  # Minimal least-privilege role for /deactivate: DynamoDB read/write only. It verifies tokens with
+  # the PUBLIC key (from env), so unlike the signing functions it needs NO SSM/KMS access.
+  DeactivateExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: pdm-deactivate-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt LicensesTable.Arn
+
+  DeactivateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: pdm-license-deactivate
+      Runtime: nodejs20.x
+      Handler: deactivate.handler
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt DeactivateExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          LICENSE_TABLE: !Ref TableName
+          PUBLIC_KEY_B64: !Ref PublicKeyBase64
+
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -186,6 +235,21 @@ Resources:
       RouteKey: "POST /trial"
       Target: !Sub "integrations/${TrialIntegration}"
 
+  DeactivateIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt DeactivateFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  DeactivateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /deactivate"
+      Target: !Sub "integrations/${DeactivateIntegration}"
+
   ApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
@@ -220,6 +284,14 @@ Resources:
       FunctionName: !Ref TrialFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*/trial"
+
+  DeactivatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DeactivateFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*/deactivate"
 
 Outputs:
   ApiBaseUrl:

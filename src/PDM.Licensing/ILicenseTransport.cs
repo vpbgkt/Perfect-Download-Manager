@@ -66,6 +66,19 @@ public interface ILicenseTransport
     /// null on failure (offline: the client falls back to a local trial start).
     /// </summary>
     Task<string?> GetTrialAnchorAsync(string fingerprint, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Releases this machine's activation seat on the server so the license can be moved to another
+    /// PC. Must present the current server-signed <paramref name="token"/>: the server authorizes
+    /// the release only when the token's signature is valid and its claims match this key + machine,
+    /// which prevents a third party who merely knows a key + fingerprint from griefing the seat.
+    /// Best-effort and idempotent: returns <see langword="true"/> when the server confirmed the
+    /// release (or there was nothing to release), and <see langword="false"/> when it could not be
+    /// reached or refused. Must not throw for ordinary network failures so local deactivation can
+    /// still proceed.
+    /// </summary>
+    Task<bool> DeactivateAsync(
+        string licenseKey, string fingerprint, string? token, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -94,5 +107,12 @@ public sealed class NullLicenseTransport : ILicenseTransport
     public Task<string?> GetTrialAnchorAsync(string fingerprint, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<string?>(null);
+    }
+
+    public Task<bool> DeactivateAsync(
+        string licenseKey, string fingerprint, string? token, CancellationToken cancellationToken = default)
+    {
+        // No server configured: nothing to release remotely. Local deactivation still clears state.
+        return Task.FromResult(false);
     }
 }

@@ -19,6 +19,7 @@ namespace PDM.Licensing.Serialization;
 [JsonSerializable(typeof(TrialClaims))]
 [JsonSerializable(typeof(LicenseRequest))]
 [JsonSerializable(typeof(TrialRequest))]
+[JsonSerializable(typeof(DeactivateRequest))]
 [JsonSerializable(typeof(LicenseResponse))]
 internal sealed partial class PdmLicensingJsonContext : JsonSerializerContext
 {
