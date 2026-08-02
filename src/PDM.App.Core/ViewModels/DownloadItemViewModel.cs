@@ -110,30 +110,44 @@ public sealed partial class DownloadItemViewModel : ObservableObject
     /// </summary>
     public bool CanExtract => Status == DownloadStatus.Completed && IsArchive;
 
-    /// <summary>Marshals a full-refresh notification to the UI thread.</summary>
-    public void NotifyAll()
-    {
-        void Raise()
-        {
-            OnPropertyChanged(nameof(Status));
-            OnPropertyChanged(nameof(StatusLabel));
-            OnPropertyChanged(nameof(SizeText));
-            OnPropertyChanged(nameof(DownloadedText));
-            OnPropertyChanged(nameof(SpeedText));
-            OnPropertyChanged(nameof(EtaText));
-            OnPropertyChanged(nameof(ProgressPercent));
-            OnPropertyChanged(nameof(ConnectionsText));
-            OnPropertyChanged(nameof(CanPause));
-            OnPropertyChanged(nameof(CanResume));
-            OnPropertyChanged(nameof(CanRefreshLink));
-            OnPropertyChanged(nameof(FileName));
-            OnPropertyChanged(nameof(SourceUrl));
-            // Re-resolve the row icon: once the file exists on disk it may carry its own embedded
-            // icon (e.g. an installer .exe) rather than the generic per-extension icon.
-            OnPropertyChanged(nameof(DestinationPath));
-            OnPropertyChanged(nameof(CanExtract));
-        }
+    /// <summary>
+    /// Marshals a lightweight refresh of the fields that move during a live transfer (speed, ETA,
+    /// bytes, percentage, connections, and the issue-aware status label) onto the UI thread. Called
+    /// on every progress snapshot - several times a second per active download - so it deliberately
+    /// leaves the status/capability/metadata properties (which only change on lifecycle transitions)
+    /// untouched to keep per-tick UI churn to a minimum.
+    /// </summary>
+    public void NotifyProgress() => _dispatcher.Post(RaiseProgress);
 
-        _dispatcher.Post(Raise);
+    /// <summary>
+    /// Marshals a full refresh onto the UI thread: the live-transfer fields plus the status,
+    /// capability, and metadata properties. Called on lifecycle transitions (added, status change,
+    /// URL change) where any property may have changed.
+    /// </summary>
+    public void NotifyAll() => _dispatcher.Post(() =>
+    {
+        RaiseProgress();
+        OnPropertyChanged(nameof(Status));
+        OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(CanResume));
+        OnPropertyChanged(nameof(CanRefreshLink));
+        OnPropertyChanged(nameof(CanExtract));
+        OnPropertyChanged(nameof(FileName));
+        OnPropertyChanged(nameof(SourceUrl));
+        // Re-resolve the row icon: once the file exists on disk it may carry its own embedded
+        // icon (e.g. an installer .exe) rather than the generic per-extension icon.
+        OnPropertyChanged(nameof(DestinationPath));
+    });
+
+    /// <summary>Raises the properties that change as bytes flow. Must run on the UI thread.</summary>
+    private void RaiseProgress()
+    {
+        OnPropertyChanged(nameof(StatusLabel));
+        OnPropertyChanged(nameof(SizeText));
+        OnPropertyChanged(nameof(DownloadedText));
+        OnPropertyChanged(nameof(SpeedText));
+        OnPropertyChanged(nameof(EtaText));
+        OnPropertyChanged(nameof(ProgressPercent));
+        OnPropertyChanged(nameof(ConnectionsText));
     }
 }

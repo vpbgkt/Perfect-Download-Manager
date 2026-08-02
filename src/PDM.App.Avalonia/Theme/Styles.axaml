@@ -58,7 +58,7 @@
          Segoe MDL2 Assets on Win10 - both ship with Windows. -->
     <Style Selector="TextBlock.glyph">
         <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
@@ -68,15 +68,15 @@
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
-        <Setter Property="Padding" Value="16" />
+        <Setter Property="Padding" Value="14" />
         <Setter Property="BoxShadow" Value="0 4 16 0 #14000000" />
     </Style>
 
     <!-- ================= Buttons ================= -->
     <!-- Smooth press micro-interaction shared by all buttons. -->
     <Style Selector="Button">
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="Padding" Value="10,6" />
         <Setter Property="RenderTransform" Value="none" />
         <Setter Property="Transitions">
             <Transitions>
@@ -149,17 +149,17 @@
 
     <!-- ================= Inputs ================= -->
     <Style Selector="TextBox">
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="MinHeight" Value="36" />
-        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="MinHeight" Value="31" />
+        <Setter Property="Padding" Value="9,6" />
     </Style>
     <Style Selector="ComboBox">
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="MinHeight" Value="31" />
     </Style>
     <Style Selector="NumericUpDown">
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="MinHeight" Value="31" />
     </Style>
 
     <!-- ================= Progress ================= -->
@@ -176,7 +176,7 @@
     <!-- ================= Status badge (pill) ================= -->
     <Style Selector="Border.badge">
         <Setter Property="CornerRadius" Value="{StaticResource PillCornerRadius}" />
-        <Setter Property="Padding" Value="9,3" />
+        <Setter Property="Padding" Value="8,3" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
@@ -197,8 +197,8 @@
         <Setter Property="FontSize" Value="{StaticResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="SeparatorBrush" Value="Transparent" />
-        <Setter Property="Padding" Value="12,10" />
-        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="MinHeight" Value="34" />
     </Style>
     <Style Selector="DataGridRow">
         <Setter Property="Background" Value="Transparent" />
@@ -223,14 +223,21 @@
     <Style Selector="DataGridCell:focus /template/ Rectangle#FocusVisual">
         <Setter Property="IsVisible" Value="False" />
     </Style>
+    <!-- Hide the single-cell "current cell" indicator too. Selecting a row otherwise draws a
+         contrasting outline (light on the dark theme, dark on the light theme) around just the
+         clicked cell, which reads as a stray border. The full-row selection highlight
+         (DataGridRow:selected) already communicates the selection, so the per-cell box is noise. -->
+    <Style Selector="DataGridCell:current /template/ Rectangle#CurrencyVisual">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
 
     <!-- ================= Category sidebar list ================= -->
     <Style Selector="ListBox.categories">
         <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="ListBox.categories ListBoxItem">
-        <Setter Property="Padding" Value="12,9" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="CornerRadius" Value="7" />
         <Setter Property="Margin" Value="0,1" />
         <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}" />
         <Setter Property="Transitions">
@@ -252,8 +259,8 @@
 
     <!-- ================= Tooltips ================= -->
     <Style Selector="ToolTip">
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="Padding" Value="9,5" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeCaption}" />
     </Style>
 

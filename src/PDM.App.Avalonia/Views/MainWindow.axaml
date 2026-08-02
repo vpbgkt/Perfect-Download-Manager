@@ -6,8 +6,8 @@
         x:Class="PDM.App.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding AppTitle}"
-        Width="1120" Height="700"
-        MinWidth="820" MinHeight="500"
+        Width="1000" Height="620"
+        MinWidth="720" MinHeight="440"
         Background="{DynamicResource AppWindowBackgroundBrush}">
 
     <DockPanel>
@@ -17,7 +17,7 @@
              animated by a DoubleTransition, and the labels/brand text hide when collapsed so only
              the icons remain. Label visibility binds to the toggle by name (ElementName), which works
              inside the compiled item template regardless of its x:DataType. -->
-        <Border x:Name="Sidebar" DockPanel.Dock="Left" Width="232"
+        <Border x:Name="Sidebar" DockPanel.Dock="Left" Width="202"
                 Background="{DynamicResource AppSidebarBackgroundBrush}"
                 BorderThickness="0,0,1,0" BorderBrush="{DynamicResource AppDividerBrush}">
             <Border.Transitions>
@@ -36,10 +36,10 @@
                             VerticalAlignment="Center" Margin="4,0,4,12">
                     <ToggleButton x:Name="SidebarToggle" Classes="ghost"
                                   Click="OnToggleSidebar" VerticalAlignment="Center"
-                                  Padding="8" ToolTip.Tip="Collapse or expand the sidebar">
-                        <TextBlock Classes="glyph" Text="&#xE700;" FontSize="16" />
+                                  Padding="7" ToolTip.Tip="Collapse or expand the sidebar">
+                        <TextBlock Classes="glyph" Text="&#xE700;" FontSize="14" />
                     </ToggleButton>
-                    <TextBlock Text="LIBRARY" FontWeight="Bold" FontSize="15"
+                    <TextBlock Text="LIBRARY" FontWeight="Bold" FontSize="13"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"
                                IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
@@ -48,11 +48,29 @@
                 <!-- Plan badge: always visible above the brand. Premium shows an accent badge;
                      free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
                      leaving just the status glyph. -->
+                <!-- Brand pinned to the very bottom; text hides when collapsed, leaving the logo only.
+                     Declared first among the bottom-docked items so it takes the lowest edge, with the
+                     plan tag and update notice stacking above it. -->
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10"
+                            Margin="6,12,6,2" VerticalAlignment="Center">
+                    <Image Width="22" Height="22" VerticalAlignment="Center"
+                           Source="{x:Static views:MainWindow.AppIcon}" />
+                    <StackPanel VerticalAlignment="Center"
+                                IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                        <TextBlock Text="Perfect" FontWeight="Bold" FontSize="12.5"
+                                   Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                        <TextBlock Text="Download Manager" Classes="caption" Margin="0,-2,0,0" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Plan tag: sits directly above the brand. Premium shows an accent badge;
+                     free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
+                     leaving just the status glyph. -->
                 <Border DockPanel.Dock="Bottom" Margin="4,0,4,10" CornerRadius="10" Padding="10,8"
                         Background="{DynamicResource AppAccentSubtleBrush}"
                         IsVisible="{Binding LicenseBanner.IsPremiumPlan}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="glyph" Text="&#xE735;" FontSize="16"
+                        <TextBlock Classes="glyph" Text="&#xE735;" FontSize="14"
                                    Foreground="{DynamicResource AppAccentBrush}" />
                         <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
                                    VerticalAlignment="Center"
@@ -64,7 +82,7 @@
                         Background="{DynamicResource StatusWarningSubtleBrush}"
                         IsVisible="{Binding !LicenseBanner.IsPremiumPlan}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="glyph" Text="&#xE7BA;" FontSize="16"
+                        <TextBlock Classes="glyph" Text="&#xE7BA;" FontSize="14"
                                    Foreground="{DynamicResource StatusWarningBrush}" />
                         <StackPanel VerticalAlignment="Center"
                                     IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
@@ -75,26 +93,41 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Brand pinned to the bottom; text hides when collapsed, leaving the logo only. -->
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10"
-                            Margin="6,12,6,2" VerticalAlignment="Center">
-                    <Image Width="26" Height="26" VerticalAlignment="Center"
-                           Source="{x:Static views:MainWindow.AppIcon}" />
-                    <StackPanel VerticalAlignment="Center"
+                <!-- Update-available notice: a gentle, non-blocking prompt shown only after a silent
+                     background check finds a newer version. It informs (never forces); "Update now"
+                     opens the update window. Sits above the plan tag so it reads as a distinct, opt-in
+                     call to action. Collapsed sidebar shows just the glyph. -->
+                <Border DockPanel.Dock="Bottom" Margin="4,0,4,10" CornerRadius="10" Padding="10,9"
+                        Background="{DynamicResource AppAccentSubtleBrush}"
+                        IsVisible="{Binding UpdateBanner.IsUpdateAvailable}"
+                        ToolTip.Tip="A new version of PDM is available">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="glyph" Text="&#xE896;" FontSize="14"
+                                       Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center" />
+                            <StackPanel VerticalAlignment="Center"
+                                        IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                                <TextBlock Text="{Binding UpdateBanner.Headline}" FontWeight="SemiBold" FontSize="12.5"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                                <TextBlock Text="{Binding UpdateBanner.VersionText}" Classes="caption"
+                                           Margin="0,-1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                        <Button Classes="brand" Click="OnOpenUpdate"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                 IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
-                        <TextBlock Text="Perfect" FontWeight="Bold" FontSize="14"
-                                   Foreground="{DynamicResource AppTextPrimaryBrush}" />
-                        <TextBlock Text="Download Manager" Classes="caption" Margin="0,-2,0,0" />
+                            <TextBlock Text="Update now" VerticalAlignment="Center" />
+                        </Button>
                     </StackPanel>
-                </StackPanel>
+                </Border>
 
                 <ListBox DockPanel.Dock="Top" Classes="categories" ItemsSource="{Binding Categories}"
                          SelectedItem="{Binding SelectedCategory}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:CategoryFilterItem">
                             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <TextBlock Classes="glyph" Text="{Binding Glyph}" FontSize="16"
-                                           Width="18" TextAlignment="Center" VerticalAlignment="Center" />
+                                <TextBlock Classes="glyph" Text="{Binding Glyph}" FontSize="14"
+                                           Width="16" TextAlignment="Center" VerticalAlignment="Center" />
                                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
                                            IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
                             </StackPanel>
@@ -113,8 +146,8 @@
                             Padding="12,9"
                             ToolTip.Tip="Open the PDM downloads folder">
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <TextBlock Classes="glyph" Text="&#xE838;" FontSize="16"
-                                       Width="18" TextAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Classes="glyph" Text="&#xE838;" FontSize="14"
+                                       Width="16" TextAlignment="Center" VerticalAlignment="Center" />
                             <TextBlock Text="Downloads folder" VerticalAlignment="Center"
                                        IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
                         </StackPanel>
@@ -131,8 +164,8 @@
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource AppDividerBrush}"
                 Padding="16,10">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Column="0" Classes="glyph" Text="&#xE7BA;" FontSize="16"
-                           VerticalAlignment="Center" Margin="0,0,10,0"
+                <TextBlock Grid.Column="0" Classes="glyph" Text="&#xE7BA;" FontSize="14"
+                           VerticalAlignment="Center" Margin="0,0,9,0"
                            Foreground="{DynamicResource StatusWarningBrush}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                     <TextBlock Text="{Binding LicenseBanner.StatusText}" FontWeight="SemiBold"
@@ -149,7 +182,7 @@
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource AppToolbarBackgroundBrush}"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource AppDividerBrush}"
-                Padding="16,12">
+                Padding="14,10">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
 
                 <!-- Primary, frequently used actions -->
@@ -171,14 +204,14 @@
 
                     <!-- Resume and Pause are mutually exclusive per the selected download's state. -->
                     <Button Command="{Binding ResumeCommand}" CommandParameter="{Binding SelectedItem}"
-                            IsVisible="{Binding SelectedItem.CanResume}" ToolTip.Tip="Resume">
+                            IsVisible="{Binding CanResumeSelected}" ToolTip.Tip="Resume">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Classes="glyph" Text="&#xE768;" />
                             <TextBlock Text="Resume" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button Command="{Binding PauseCommand}" CommandParameter="{Binding SelectedItem}"
-                            IsVisible="{Binding SelectedItem.CanPause}" ToolTip.Tip="Pause">
+                            IsVisible="{Binding CanPauseSelected}" ToolTip.Tip="Pause">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Classes="glyph" Text="&#xE769;" />
                             <TextBlock Text="Pause" VerticalAlignment="Center" />
@@ -206,7 +239,7 @@
                 </StackPanel>
 
                 <!-- Search -->
-                <Border Grid.Column="2" Width="260" VerticalAlignment="Center" Margin="0,0,8,0">
+                <Border Grid.Column="2" Width="226" VerticalAlignment="Center" Margin="0,0,8,0">
                     <Grid>
                         <TextBlock Classes="glyph" Text="&#xE721;" FontSize="14"
                                    Margin="10,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -246,7 +279,7 @@
                 <DataGrid x:Name="DownloadsGrid"
                           SelectedItem="{Binding SelectedItem}"
                           IsReadOnly="True"
-                          RowHeight="44"
+                          RowHeight="38"
                           CanUserReorderColumns="True"
                           CanUserResizeColumns="True"
                           HeadersVisibility="Column"
@@ -258,10 +291,10 @@
                                  browser only while the download is not yet complete. -->
                             <MenuItem Header="Resume" Command="{Binding ResumeCommand}"
                                       CommandParameter="{Binding SelectedItem}"
-                                      IsVisible="{Binding SelectedItem.CanResume}" />
+                                      IsVisible="{Binding CanResumeSelected}" />
                             <MenuItem Header="Pause" Command="{Binding PauseCommand}"
                                       CommandParameter="{Binding SelectedItem}"
-                                      IsVisible="{Binding SelectedItem.CanPause}" />
+                                      IsVisible="{Binding CanPauseSelected}" />
                             <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser"
                                       IsVisible="{Binding SelectedItem.CanRefreshLink}" />
                             <Separator IsVisible="{Binding SelectedItem.CanRefreshLink}" />
@@ -313,9 +346,9 @@
                                                 VerticalAlignment="Center" Margin="4,0,0,0">
                                         <!-- The file's real shell icon (per extension, or the file's
                                              own embedded icon once it exists). -->
-                                        <Image Width="18" Height="18" VerticalAlignment="Center"
+                                        <Image Width="16" Height="16" VerticalAlignment="Center"
                                                Source="{Binding DestinationPath, Converter={x:Static conv:FileIconConverter.Instance}}" />
-                                        <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" FontSize="12.5"
+                                        <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" FontSize="11.5"
                                                    VerticalAlignment="Center"
                                                    Foreground="{DynamicResource AppTextPrimaryBrush}"
                                                    TextTrimming="CharacterEllipsis" />
@@ -373,12 +406,12 @@
             <!-- Beautiful empty state -->
             <Border Classes="card" IsVisible="{Binding IsListEmpty}"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Padding="48,40" MaxWidth="440">
-                <StackPanel HorizontalAlignment="Center" Spacing="14">
-                    <Border Width="88" Height="88" CornerRadius="24"
+                    Padding="42,34" MaxWidth="440">
+                <StackPanel HorizontalAlignment="Center" Spacing="12">
+                    <Border Width="76" Height="76" CornerRadius="20"
                             Background="{DynamicResource AppAccentSubtleBrush}"
                             HorizontalAlignment="Center">
-                        <Image Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        <Image Width="42" Height="42" HorizontalAlignment="Center" VerticalAlignment="Center"
                                Source="{x:Static views:MainWindow.AppIcon}" />
                     </Border>
                     <TextBlock Text="{Binding EmptyStateTitle}" Classes="h1"

@@ -169,13 +169,13 @@
                         <ui:Button Margin="8,0,0,0"
                                    Content="Resume"
                                    Icon="{ui:SymbolIcon Play24}"
-                                   Visibility="{Binding SelectedItem.CanResume, Converter={StaticResource BoolToVis}}"
+                                   Visibility="{Binding CanResumeSelected, Converter={StaticResource BoolToVis}}"
                                    Command="{Binding ResumeCommand}"
                                    CommandParameter="{Binding SelectedItem}" />
                         <ui:Button Margin="8,0,0,0"
                                    Content="Pause"
                                    Icon="{ui:SymbolIcon Pause24}"
-                                   Visibility="{Binding SelectedItem.CanPause, Converter={StaticResource BoolToVis}}"
+                                   Visibility="{Binding CanPauseSelected, Converter={StaticResource BoolToVis}}"
                                    Command="{Binding PauseCommand}"
                                    CommandParameter="{Binding SelectedItem}" />
                         <!--

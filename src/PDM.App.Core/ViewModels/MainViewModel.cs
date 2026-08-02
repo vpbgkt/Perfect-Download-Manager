@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -20,7 +21,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IAppHost _host;
     private readonly IUiDispatcher _dispatcher;
-    private readonly Dictionary<Guid, DownloadItemViewModel> _byId = new();
+    // Read on the engine's progress thread (OnProgressUpdated) while added/removed on the UI thread,
+    // so it must be a concurrent map: a plain Dictionary can corrupt or throw on a concurrent
+    // read-during-write. The observable _all collection stays UI-thread-only.
+    private readonly ConcurrentDictionary<Guid, DownloadItemViewModel> _byId = new();
     private readonly ObservableCollection<DownloadItemViewModel> _all = new();
 
     /// <summary>
@@ -61,9 +65,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// True when a delete action would affect something: any row's selection checkbox is ticked, or a
-    /// row is focused. Drives the "Delete selected" button's enabled state.
+    /// row is focused. Drives the Delete toolbar button's visibility.
     /// </summary>
     [ObservableProperty] private bool _hasSelection;
+
+    /// <summary>
+    /// Toolbar visibility for the Pause action: true only when a download is focused (selected) and
+    /// its current state supports pausing. Exposed as a single view-model property rather than a
+    /// nested <c>SelectedItem.CanPause</c> path binding so the button reliably collapses to a real
+    /// <c>false</c> when nothing is selected (a null path binding would otherwise fall back to the
+    /// control's default visibility) and the toolbar has one source of truth for its state.
+    /// </summary>
+    public bool CanPauseSelected => SelectedItem?.CanPause ?? false;
+
+    /// <summary>
+    /// Toolbar visibility for the Resume action: true only when a download is focused (selected) and
+    /// its current state supports resuming. See <see cref="CanPauseSelected"/> for the rationale.
+    /// </summary>
+    public bool CanResumeSelected => SelectedItem?.CanResume ?? false;
 
     /// <summary>True when the filtered list is empty; drives the empty-state overlay.</summary>
     [ObservableProperty] private bool _isListEmpty;
@@ -90,6 +109,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public LicenseBannerViewModel LicenseBanner { get; }
 
     /// <summary>
+    /// Backs the sidebar "update available" notice. The head kicks off <see cref="UpdateBannerViewModel.CheckAsync"/>
+    /// in the background at startup; the notice stays hidden unless a newer version is found.
+    /// </summary>
+    public UpdateBannerViewModel UpdateBanner { get; }
+
+    /// <summary>
     /// Reopens (or foregrounds) the per-download popup window for a selected download. Set during
     /// app startup (see <c>App.OnStartup</c>) once the manager has been constructed; left null in
     /// contexts where popups are not wired up, in which case the "Show popup" command is a no-op.
@@ -102,6 +127,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
 
         LicenseBanner = new LicenseBannerViewModel(host, dispatcher);
+        UpdateBanner = new UpdateBannerViewModel(host, dispatcher);
 
         // Default to the "All Downloads" view.
         _selectedCategory = Categories[0];
@@ -213,7 +239,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (e.PropertyName == nameof(DownloadItemViewModel.IsSelected))
         {
             UpdateHasSelection();
+            return;
         }
+
+        // When the focused download's transfer state changes (e.g. Downloading -> Paused), refresh
+        // the toolbar's Pause/Resume visibility so it tracks the live state. Scoped to the selected
+        // row so frequent background progress updates on other rows never trigger toolbar work.
+        if (ReferenceEquals(sender, SelectedItem) &&
+            e.PropertyName is nameof(DownloadItemViewModel.CanPause)
+                           or nameof(DownloadItemViewModel.CanResume))
+        {
+            RaiseToolbarState();
+        }
+    }
+
+    /// <summary>Re-raises the selection-driven toolbar visibility properties as a group.</summary>
+    private void RaiseToolbarState()
+    {
+        OnPropertyChanged(nameof(CanPauseSelected));
+        OnPropertyChanged(nameof(CanResumeSelected));
     }
 
     private void UpdateHasSelection()
@@ -274,7 +318,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     partial void OnSelectedItemChanged(DownloadItemViewModel? oldValue, DownloadItemViewModel? newValue)
-        => UpdateHasSelection();
+    {
+        UpdateHasSelection();
+        RaiseToolbarState();
+        ShowPopupCommand.NotifyCanExecuteChanged();
+    }
 
     private void OnDownloadAdded(object? sender, DownloadEventArgs e)
     {
@@ -301,7 +349,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         RunOnUi(() =>
         {
-            if (_byId.Remove(e.Download.Id, out DownloadItemViewModel? vm))
+            if (_byId.TryRemove(e.Download.Id, out DownloadItemViewModel? vm))
             {
                 vm.PropertyChanged -= OnItemPropertyChanged;
                 _all.Remove(vm);
@@ -313,11 +361,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnProgressUpdated(object? sender, DownloadProgressEventArgs e)
     {
-        // Progress fires up to a few times per second per download. NotifyAll on the vm
-        // triggers only lightweight refreshes of formatted strings.
+        // Fires on the engine's progress thread up to a few times per second per download. The
+        // concurrent map makes the lookup safe from this thread; NotifyProgress marshals only the
+        // live-transfer fields to the UI thread (not the full property set) to minimise churn.
         if (_byId.TryGetValue(e.Download.Id, out DownloadItemViewModel? vm))
         {
-            vm.NotifyAll();
+            vm.NotifyProgress();
         }
     }
 
@@ -343,11 +392,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>The toolbar button is enabled only when a download row is selected.</summary>
     private bool CanShowPopup(DownloadItemViewModel? item) => (item ?? SelectedItem) is not null;
-
-    partial void OnSelectedItemChanged(DownloadItemViewModel? value)
-    {
-        ShowPopupCommand.NotifyCanExecuteChanged();
-    }
 
     [RelayCommand]
     private async Task PauseAsync(DownloadItemViewModel? item)

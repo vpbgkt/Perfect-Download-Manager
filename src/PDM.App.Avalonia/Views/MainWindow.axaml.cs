@@ -59,6 +59,13 @@ public partial class MainWindow : Window
         // property path) keeps this NativeAOT-safe.
         _downloadsView.SortDescriptions.Add(
             DataGridSortDescription.FromComparer(new RecencyComparer()));
+
+        // A DataGridCollectionView makes its first row the "current" item, and the DataGrid mirrors
+        // that currency into SelectedItem through the two-way binding. Left as-is the window would
+        // open with the newest download silently selected, which is what surfaced the Delete button
+        // before the user had picked anything. Clearing the current item keeps the selection-driven
+        // toolbar empty until the user actually selects a row.
+        _downloadsView.MoveCurrentToPosition(-1);
         DownloadsGrid.ItemsSource = _downloadsView;
         _viewModel.FilterChanged += OnFilterChanged;
 
@@ -70,13 +77,52 @@ public partial class MainWindow : Window
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         SyncSelectAllCheckBox();
 
-        // Clear the focused selection when the user clicks off the rows. Registered as a tunneling
-        // handler with handledEventsToo because the DataGrid marks pointer presses handled, which
-        // would otherwise stop a normal bubbling handler from ever firing.
-        DownloadsArea.AddHandler(InputElement.PointerPressedEvent, OnDownloadsAreaPointerPressed,
+        // Clear the focused selection when the user clicks off the rows - anywhere in the window's
+        // neutral chrome (sidebar, header bar, empty toolbar space, card padding), not just inside
+        // the downloads pane. Registered on the window root as a tunneling handler with
+        // handledEventsToo because the DataGrid marks pointer presses handled, which would otherwise
+        // stop a normal bubbling handler from ever firing.
+        AddHandler(InputElement.PointerPressedEvent, OnGlobalPointerPressed,
             RoutingStrategies.Tunnel, handledEventsToo: true);
 
         InitializeBrowserMenu();
+
+        // Silently check for updates shortly after launch so the sidebar can surface a gentle,
+        // non-blocking notice when a newer version exists. Fire-and-forget with a small delay so it
+        // never competes with window startup work; failures stay silent (the manual "Check for
+        // updates" action still reports problems).
+        _ = CheckForUpdatesInBackgroundAsync();
+    }
+
+    /// <summary>Runs the background update check a few seconds after startup (best-effort, silent).</summary>
+    private async Task CheckForUpdatesInBackgroundAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(true);
+            await _viewModel.UpdateBanner.CheckAsync().ConfigureAwait(true);
+        }
+        catch
+        {
+            // Best-effort background check: never surface startup failures to the user.
+        }
+    }
+
+    /// <summary>
+    /// Opens the update window for the version the background check found. Wired to the sidebar
+    /// "Update now" button; a no-op if the manifest is somehow gone (e.g. superseded).
+    /// </summary>
+    private async void OnOpenUpdate(object? sender, RoutedEventArgs e)
+    {
+        AppHost? host = App.Host;
+        if (host is null || _viewModel.UpdateBanner.AvailableManifest is not { } manifest)
+        {
+            return;
+        }
+
+        var orchestrator = new UpdateOrchestrator(host);
+        var vm = new UpdateAvailableViewModel(orchestrator, manifest);
+        await new UpdateAvailableDialog(vm, orchestrator).ShowDialog<bool>(this).ConfigureAwait(true);
     }
 
     // ---- Select-all header checkbox (code-behind; AOT-safe) --------------------------------------
@@ -261,7 +307,23 @@ public partial class MainWindow : Window
         _ = host.SettingsStore.SaveAsync(host.Settings);
     }
 
-    private void OnFilterChanged() => Dispatcher.UIThread.Post(() => _downloadsView.Refresh());
+    private void OnFilterChanged() => Dispatcher.UIThread.Post(() =>
+    {
+        // Refresh() resets the view's current item to the first row (which the DataGrid mirrors into
+        // SelectedItem). Capture the real selection first, then restore it - or clear it when the
+        // selected row no longer passes the active filter - so filtering never fabricates a
+        // selection the user didn't make.
+        DownloadItemViewModel? previous = _viewModel.SelectedItem;
+        _downloadsView.Refresh();
+        if (previous is not null && _downloadsView.Contains(previous))
+        {
+            _downloadsView.MoveCurrentTo(previous);
+        }
+        else
+        {
+            _downloadsView.MoveCurrentToPosition(-1);
+        }
+    });
 
     /// <summary>
     /// Opens the folder where PDM saves downloads (Settings.DefaultDownloadDirectory, e.g.
@@ -287,8 +349,8 @@ public partial class MainWindow : Window
 
     // Expanded/collapsed widths for the sidebar. Collapsed shows icons only; the Border's
     // DoubleTransition animates between the two, and label visibility follows SidebarToggle.IsChecked.
-    private const double SidebarExpandedWidth = 232;
-    private const double SidebarCollapsedWidth = 60;
+    private const double SidebarExpandedWidth = 202;
+    private const double SidebarCollapsedWidth = 52;
 
     /// <summary>Toggle button: collapse the sidebar to icons only, or expand it back to icons + labels.</summary>
     private void OnToggleSidebar(object? sender, RoutedEventArgs e) =>
@@ -462,20 +524,43 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Clicking an empty area of the downloads pane (card padding, below the last row) clears the
-    /// focused row selection, so the selection-dependent actions (e.g. Delete) hide when nothing is
-    /// meaningfully selected. Clicks that land on a row keep it selected.
+    /// Clicking anywhere in the window's neutral chrome (sidebar, header bar, empty toolbar space,
+    /// card padding, below the last row) clears the focused row selection, so the selection-driven
+    /// actions (Delete/Pause/Resume) hide when nothing is meaningfully selected. Clicks on a row, the
+    /// scrollbar, or any control that acts on the selection (toolbar/command buttons, menus, the row
+    /// checkboxes, text inputs, the category list) are left alone so those interactions keep working.
     /// </summary>
-    private void OnDownloadsAreaPointerPressed(object? sender, PointerPressedEventArgs e)
+    private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.Source is Visual source &&
-            (source.FindAncestorOfType<DataGridRow>() is not null ||
-             source.FindAncestorOfType<ScrollBar>() is not null))
+        // Nothing focused - nothing to clear (also skips all the tree walking on every click).
+        if (_viewModel.SelectedItem is null)
         {
-            // Clicked a row (keep it selected) or the scrollbar (don't disturb selection while scrolling).
             return;
         }
 
+        if (e.Source is not Visual source)
+        {
+            return;
+        }
+
+        if (source.FindAncestorOfType<DataGridRow>() is not null ||
+            source.FindAncestorOfType<ScrollBar>() is not null ||
+            source.FindAncestorOfType<Button>() is not null ||
+            source.FindAncestorOfType<SplitButton>() is not null ||
+            source.FindAncestorOfType<MenuItem>() is not null ||
+            source.FindAncestorOfType<CheckBox>() is not null ||
+            source.FindAncestorOfType<TextBox>() is not null ||
+            source.FindAncestorOfType<ListBox>() is not null)
+        {
+            return;
+        }
+
+        // Clear the collection view's current item, not just the bound SelectedItem. The
+        // DataGridCollectionView still marks the previously clicked row as its "current" item, and
+        // the DataGrid re-syncs selection from that currency - so setting SelectedItem alone would
+        // be immediately undone and the row (plus the selection-driven toolbar) would reappear.
+        // Moving the current item to "none" propagates to the grid and back through the binding.
+        _downloadsView.MoveCurrentToPosition(-1);
         _viewModel.SelectedItem = null;
     }
 
