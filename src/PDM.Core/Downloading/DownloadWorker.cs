@@ -193,10 +193,18 @@ public sealed class DownloadWorker
             request.Headers.Referrer = referrerUri;
         }
 
+        bool rangeRequested = false;
         if (_state.SupportsRanges)
         {
             long? to = openEnded ? null : segment.End;
             request.Headers.Range = new RangeHeaderValue(writeOffset, to);
+            rangeRequested = true;
+
+            // Guard against the remote content changing under us mid-transfer/resume. When the
+            // validator (ETag/Last-Modified) no longer matches, a well-behaved server answers with
+            // 200 (the whole file) instead of 206, which ValidateRangeResponse turns into a restart
+            // instead of silently stitching bytes from two different versions of the file.
+            AddIfRangeHeader(request);
         }
         else if (segment.BytesDownloaded > 0)
         {
@@ -211,6 +219,11 @@ public sealed class DownloadWorker
             .ConfigureAwait(false);
 
         EnsureAcceptableStatus(response);
+
+        // A ranged request MUST come back as 206 with a Content-Range that starts at our write
+        // offset. Anything else (a 200 full body from a server that ignored the range, or a range
+        // that starts somewhere unexpected) would corrupt the file if written at this offset.
+        ValidateRangeResponse(response, segment, rangeRequested, writeOffset);
 
         // The server responded and we're about to stream bytes: the connection is healthy again.
         ClearIssue();
@@ -350,13 +363,10 @@ public sealed class DownloadWorker
 
         _state.Status = DownloadStatus.Assembling;
 
-        // Atomically move the completed part file to its final destination.
-        if (File.Exists(_state.DestinationPath))
-        {
-            File.Delete(_state.DestinationPath);
-        }
-
-        File.Move(PartPath, _state.DestinationPath);
+        // Atomically move the completed part file to its final destination. The overwrite overload
+        // replaces any existing file in a single operation, so a failure can never leave the user
+        // with neither the old file nor the new one (as a delete-then-move sequence could).
+        File.Move(PartPath, _state.DestinationPath, overwrite: true);
 
         _state.Status = DownloadStatus.Completed;
         _state.CompletedUtc = DateTimeOffset.UtcNow;
@@ -557,6 +567,83 @@ public sealed class DownloadWorker
         }
 
         throw new DownloadException(message);
+    }
+
+    /// <summary>
+    /// Adds an <c>If-Range</c> conditional to a resumable request so the server only serves the
+    /// requested byte range while the content is unchanged. Per RFC 7233 an <c>If-Range</c> must not
+    /// carry a weak validator, so a weak/unparseable ETag is skipped in favour of Last-Modified.
+    /// When neither validator is available the header is omitted (no protection possible).
+    /// </summary>
+    private void AddIfRangeHeader(HttpRequestMessage request)
+    {
+        if (!string.IsNullOrEmpty(_state.ETag) &&
+            EntityTagHeaderValue.TryParse(_state.ETag, out EntityTagHeaderValue? etag) &&
+            !etag.IsWeak)
+        {
+            request.Headers.IfRange = new RangeConditionHeaderValue(etag);
+            return;
+        }
+
+        if (_state.LastModified is { } lastModified)
+        {
+            request.Headers.IfRange = new RangeConditionHeaderValue(lastModified);
+        }
+    }
+
+    /// <summary>
+    /// Ensures a ranged request produced a byte stream that actually starts at
+    /// <paramref name="writeOffset"/>. This closes two silent-corruption holes:
+    /// <list type="bullet">
+    ///   <item>a server that ignores the <c>Range</c> header and returns <c>200</c> with the whole
+    ///         file, which would otherwise be written at a non-zero offset; and</item>
+    ///   <item>a resource whose contents changed under our <c>If-Range</c> validator, which also
+    ///         answers <c>200</c> and would splice two different files together.</item>
+    /// </list>
+    /// The only case where a non-206 body is safe to consume is a single-segment download that has
+    /// not written anything yet: it degrades cleanly to a plain single stream from byte 0. Every
+    /// other case throws a fatal <see cref="DownloadException"/> so the transfer is restarted rather
+    /// than corrupted.
+    /// </summary>
+    private void ValidateRangeResponse(
+        HttpResponseMessage response, DownloadSegment segment, bool rangeRequested, long writeOffset)
+    {
+        if (!rangeRequested)
+        {
+            return;
+        }
+
+        if (response.StatusCode == HttpStatusCode.PartialContent)
+        {
+            // Verify the server is sending exactly the range we asked for.
+            ContentRangeHeaderValue? contentRange = response.Content.Headers.ContentRange;
+            if (contentRange is { HasRange: true, From: { } from } && from != writeOffset)
+            {
+                throw new DownloadException(
+                    $"Server returned the wrong byte range (requested from {writeOffset}, received from {from}); " +
+                    "the download cannot be continued safely and must be restarted.");
+            }
+
+            return;
+        }
+
+        // Not a 206. Safe only when this is a single-segment download starting from the very
+        // beginning with nothing written yet — then we fall back to a plain single stream.
+        bool canDegradeToSingleStream =
+            _state.Segments.Count == 1 && segment.Start == 0 && segment.BytesDownloaded == 0;
+
+        if (canDegradeToSingleStream)
+        {
+            // The server ignored ranging (or an If-Range validator did not match on a not-yet-started
+            // download). Continue as a single stream from byte 0 and stop advertising range support so
+            // a later retry of this segment does not re-send a Range/If-Range and loop.
+            _state.SupportsRanges = false;
+            return;
+        }
+
+        throw new DownloadException(
+            "The server no longer supports resuming this download, or its contents have changed, " +
+            "so it must be restarted from the beginning.");
     }
 
     private static bool IsTransient(Exception ex) => ex switch
