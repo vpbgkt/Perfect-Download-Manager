@@ -88,52 +88,77 @@ public sealed class DownloadWorker
         using var progressCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task progressLoop = RunProgressLoopAsync(stopwatch, progressCts.Token);
 
-        // A shared "fault" token so the first segment to fail fatally cancels the others promptly,
-        // instead of every sibling running to completion (or hitting the same failure) before the
-        // error surfaces. Linked to the caller's token so a user pause/cancel still stops everything.
-        using var faultCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Exception? fatal = null;
-        int faultClaimed = 0;
+        // Transfer attempt loop. Normally this runs exactly once. It runs a SECOND time only when the
+        // server turns out not to honour the range requests our multi-connection plan depends on
+        // (e.g. Google Drive and various CDNs answer a ranged request with a full "200 OK" body, or an
+        // If-Range validator no longer matches on a resume). In that case we cannot safely place bytes
+        // at segment offsets, so instead of failing we transparently collapse the plan to a single
+        // stream from byte 0 and download the whole file in one connection — exactly what browsers and
+        // other download managers do. The bool guarantees we only fall back once (no infinite loop).
+        bool collapsedToSingleStream = false;
 
-        async Task RunSegmentGuardedAsync(DownloadSegment segment)
+        while (true)
         {
-            try
+            // A shared "fault" token so the first segment to fail fatally cancels the others promptly,
+            // instead of every sibling running to completion (or hitting the same failure) before the
+            // error surfaces. Linked to the caller's token so a user pause/cancel still stops everything.
+            using var faultCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            Exception? fatal = null;
+            int faultClaimed = 0;
+
+            async Task RunSegmentGuardedAsync(DownloadSegment segment)
             {
-                await DownloadSegmentAsync(segment, faultCts.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (faultCts.IsCancellationRequested)
-            {
-                // Cancelled either by the user or because a sibling already failed. Either way the
-                // outcome is decided after WhenAll from the caller's token / the recorded fatal error.
-            }
-            catch (Exception ex)
-            {
-                // First fatal wins: record it and cancel the rest so they stop immediately.
-                if (Interlocked.Exchange(ref faultClaimed, 1) == 0)
+                try
                 {
-                    fatal = ex;
-                    if (!faultCts.IsCancellationRequested)
+                    await DownloadSegmentAsync(segment, faultCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (faultCts.IsCancellationRequested)
+                {
+                    // Cancelled either by the user or because a sibling already failed. Either way the
+                    // outcome is decided after WhenAll from the caller's token / the recorded fatal error.
+                }
+                catch (Exception ex)
+                {
+                    // First fatal wins: record it and cancel the rest so they stop immediately.
+                    if (Interlocked.Exchange(ref faultClaimed, 1) == 0)
                     {
-                        faultCts.Cancel();
+                        fatal = ex;
+                        if (!faultCts.IsCancellationRequested)
+                        {
+                            faultCts.Cancel();
+                        }
                     }
                 }
             }
-        }
 
-        var segmentTasks = _state.Segments.Select(RunSegmentGuardedAsync).ToArray();
-        await Task.WhenAll(segmentTasks).ConfigureAwait(false);
+            var segmentTasks = _state.Segments.Select(RunSegmentGuardedAsync).ToArray();
+            await Task.WhenAll(segmentTasks).ConfigureAwait(false);
 
-        // A user-initiated pause/cancel takes precedence over any fault the cancellation triggered.
-        if (cancellationToken.IsCancellationRequested)
-        {
-            _state.Status = DownloadStatus.Paused;
-            await SaveStateSafelyAsync().ConfigureAwait(false);
-            await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
-            throw new OperationCanceledException(cancellationToken);
-        }
+            // A user-initiated pause/cancel takes precedence over any fault the cancellation triggered.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                _state.Status = DownloadStatus.Paused;
+                await SaveStateSafelyAsync().ConfigureAwait(false);
+                await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
+                throw new OperationCanceledException(cancellationToken);
+            }
 
-        if (fatal is not null)
-        {
+            // All segments finished cleanly — leave the loop and finalize below.
+            if (fatal is null)
+            {
+                break;
+            }
+
+            // The server refused to honour our range requests (fresh download) or the content changed
+            // under an If-Range validator (resume). Both are recoverable: re-download the whole file as
+            // a single stream from the start. We only do this once; a second failure is a real error.
+            if (fatal is RangeNotHonoredException && !collapsedToSingleStream)
+            {
+                collapsedToSingleStream = true;
+                CollapseToSingleStream();
+                continue; // retry the transfer with the single-stream plan
+            }
+
             _state.Status = DownloadStatus.Failed;
             _state.ErrorMessage = fatal.Message;
             _state.CompletedUtc = DateTimeOffset.UtcNow;
@@ -145,6 +170,37 @@ public sealed class DownloadWorker
         await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
 
         await FinalizeAsync(stopwatch, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Rewrites the plan into a single, whole-file stream starting at byte 0 and marks the download as
+    /// non-resumable-by-range. Used as the automatic fallback when a server will not honour the range
+    /// requests our segmented plan requires (it returned a full <c>200</c> body, a range starting at the
+    /// wrong offset, or the content changed under an <c>If-Range</c> validator). Any partial bytes from
+    /// the failed attempt are discarded because they cannot be trusted; the single stream simply
+    /// overwrites the part file sequentially from the beginning.
+    /// </summary>
+    private void CollapseToSingleStream()
+    {
+        // Stop advertising range support so the retry sends a plain GET (no Range/If-Range header) and
+        // the response is consumed straight from byte 0.
+        _state.SupportsRanges = false;
+
+        // A single segment covering the whole file. When the size is known we bound it; otherwise we
+        // use the open-ended sentinel and let the writer stop at end-of-stream (and discover the size).
+        long end = _state.TotalBytes is > 0 ? _state.TotalBytes.Value - 1 : long.MaxValue;
+        _state.Segments = new List<DownloadSegment>
+        {
+            new() { Index = 0, Start = 0, End = end, BytesDownloaded = 0 }
+        };
+
+        // Reset the live byte counters so progress and the resume offset restart from zero. The array
+        // keeps its original length (the new single segment only ever writes index 0; the rest stay 0,
+        // so SumLive still reports the correct total).
+        for (int i = 0; i < _liveBytes.Length; i++)
+        {
+            Interlocked.Exchange(ref _liveBytes[i], 0);
+        }
     }
 
     /// <summary>
@@ -743,14 +799,20 @@ public sealed class DownloadWorker
     ///   <item>a resource whose contents changed under our <c>If-Range</c> validator, which also
     ///         answers <c>200</c> and would splice two different files together.</item>
     /// </list>
-    /// The only case where a non-206 body is safe to consume is a single-segment download that has
-    /// not written anything yet: it degrades cleanly to a plain single stream from byte 0. Every
-    /// other case throws a fatal <see cref="DownloadException"/> so the transfer is restarted rather
-    /// than corrupted.
+    /// <para>
+    /// When a non-206 (or a 206 with the wrong start offset) is detected, we do NOT fail the download.
+    /// Instead we throw <see cref="RangeNotHonoredException"/>, which <see cref="RunAsync"/> catches to
+    /// transparently re-download the whole file as a single stream from byte 0. That is what makes PDM
+    /// work against servers that don't truly support ranged/segmented downloads — Google Drive, many
+    /// CDNs, dynamic endpoints, etc. — instead of erroring out. The one case where the 200 body is
+    /// already safe to consume in place (so no restart is needed) is a single-segment download that has
+    /// not written anything yet: it simply switches to single-stream mode and keeps going.
+    /// </para>
     /// </summary>
     private void ValidateRangeResponse(
         HttpResponseMessage response, DownloadSegment segment, bool rangeRequested, long writeOffset)
     {
+        // No Range header was sent (single-stream / non-resumable download): any 2xx body is fine.
         if (!rangeRequested)
         {
             return;
@@ -758,44 +820,63 @@ public sealed class DownloadWorker
 
         if (response.StatusCode == HttpStatusCode.PartialContent)
         {
-            // Verify the server is sending exactly the range we asked for.
+            // The server honoured the range. Double-check it starts exactly where we're about to
+            // write; a mismatched offset means a broken/proxying server, so restart as a single
+            // stream rather than risk placing bytes at the wrong position.
             ContentRangeHeaderValue? contentRange = response.Content.Headers.ContentRange;
             if (contentRange is { HasRange: true, From: { } from } && from != writeOffset)
             {
-                throw new DownloadException(
-                    $"Server returned the wrong byte range (requested from {writeOffset}, received from {from}); " +
-                    "the download cannot be continued safely and must be restarted.");
+                throw new RangeNotHonoredException(
+                    $"Server returned the wrong byte range (requested from {writeOffset}, received from {from}).");
             }
 
             return;
         }
 
-        // Not a 206. Safe only when this is a single-segment download starting from the very
-        // beginning with nothing written yet — then we fall back to a plain single stream.
-        bool canDegradeToSingleStream =
+        // Not a 206 — the server sent the whole file (200) despite our Range header, or the content
+        // changed under an If-Range validator. If this is a fresh single-segment download starting at
+        // byte 0, we can consume that full body right here as a single stream (no restart needed).
+        bool canConsumeInPlace =
             _state.Segments.Count == 1 && segment.Start == 0 && segment.BytesDownloaded == 0;
 
-        if (canDegradeToSingleStream)
+        if (canConsumeInPlace)
         {
-            // The server ignored ranging (or an If-Range validator did not match on a not-yet-started
-            // download). Continue as a single stream from byte 0 and stop advertising range support so
-            // a later retry of this segment does not re-send a Range/If-Range and loop.
+            // Stop advertising range support so a later retry of this segment sends a plain GET
+            // (no Range/If-Range) and does not loop back into this path.
             _state.SupportsRanges = false;
             return;
         }
 
-        throw new DownloadException(
-            "The server no longer supports resuming this download, or its contents have changed, " +
-            "so it must be restarted from the beginning.");
+        // Otherwise (multi-segment, or a resume with partial bytes) the current plan can't be used
+        // safely. Signal RunAsync to collapse to a single stream and re-download from the beginning.
+        throw new RangeNotHonoredException(
+            "The server did not honour the range request, so the download will restart as a single stream.");
     }
 
     private static bool IsTransient(Exception ex) => ex switch
     {
         DownloadException => false,
+        // Not transient: this is not retried per-segment. It is handled once at the whole-download
+        // level by collapsing to a single stream (see RunAsync), so we must let it escape the
+        // per-segment retry loop rather than treat it as a connection hiccup.
+        RangeNotHonoredException => false,
         HttpRequestException => true,
         IOException => true,
         TimeoutException => true,
         OperationCanceledException => true, // timeouts surface here when not user-initiated
         _ => false
     };
+
+    /// <summary>
+    /// Internal control-flow signal (not surfaced to callers) meaning "the server would not honour the
+    /// ranged request this segmented plan needs". <see cref="RunAsync"/> catches it and re-downloads the
+    /// whole file as a single stream from byte 0. It is deliberately NOT a <see cref="DownloadException"/>
+    /// and NOT transient, so it bypasses both per-segment retries and the fatal-error path.
+    /// </summary>
+    private sealed class RangeNotHonoredException : Exception
+    {
+        public RangeNotHonoredException(string message) : base(message)
+        {
+        }
+    }
 }
