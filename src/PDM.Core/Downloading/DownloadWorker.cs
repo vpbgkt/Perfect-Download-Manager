@@ -287,22 +287,40 @@ public sealed class DownloadWorker
             request.Headers.Referrer = referrerUri;
         }
 
+        // A single-segment plan has exactly one writer, so it can safely resume via a range request
+        // even if multi-connection range support was previously ruled out (the response's start
+        // offset is validated below before any byte is written).
+        bool isSingleSegment = _state.Segments.Count == 1;
+
         bool rangeRequested = false;
         if (_state.SupportsRanges)
         {
+            // Normal path: ask for this segment's byte range.
             long? to = openEnded ? null : segment.End;
             request.Headers.Range = new RangeHeaderValue(writeOffset, to);
             rangeRequested = true;
 
             // Guard against the remote content changing under us mid-transfer/resume. When the
             // validator (ETag/Last-Modified) no longer matches, a well-behaved server answers with
-            // 200 (the whole file) instead of 206, which ValidateRangeResponse turns into a restart
+            // 200 (the whole file) instead of 206, which ResolveRangeResponse turns into a restart
             // instead of silently stitching bytes from two different versions of the file.
+            AddIfRangeHeader(request);
+        }
+        else if (isSingleSegment && segment.BytesDownloaded > 0)
+        {
+            // Single-stream RESUME. Even though segmented range support was ruled out (e.g. the server
+            // answered an earlier segment request with a full 200), we still try to continue from where
+            // we left off with an open-ended range. If the server honours it we make real progress; if
+            // it sends a full 200 body we fall back to restarting from zero (decided below). This is
+            // the key fix for downloads that otherwise restart from byte 0 on every dropped connection
+            // and therefore crawl at ~0 KB/s on an unstable link (e.g. Google Drive).
+            request.Headers.Range = new RangeHeaderValue(writeOffset, null);
+            rangeRequested = true;
             AddIfRangeHeader(request);
         }
         else if (segment.BytesDownloaded > 0)
         {
-            // Cannot resume a non-range stream; restart from the beginning.
+            // Non-range, multi-segment (should not normally happen): restart this segment from its start.
             segment.BytesDownloaded = 0;
             Interlocked.Exchange(ref _liveBytes[segment.Index], 0);
             writeOffset = segment.Start;
@@ -314,10 +332,15 @@ public sealed class DownloadWorker
 
         EnsureAcceptableStatus(response);
 
-        // A ranged request MUST come back as 206 with a Content-Range that starts at our write
-        // offset. Anything else (a 200 full body from a server that ignored the range, or a range
-        // that starts somewhere unexpected) would corrupt the file if written at this offset.
-        ValidateRangeResponse(response, segment, rangeRequested, writeOffset);
+        // Reconcile the response with what we requested. For a single-segment download a full 200 (or
+        // a range at the wrong offset) is handled by (re)starting from byte 0; for a multi-segment plan
+        // it throws RangeNotHonoredException so RunAsync collapses the whole download to a single stream.
+        if (ResolveRangeResponse(response, segment, rangeRequested, writeOffset) == RangeOutcome.RestartFromZero)
+        {
+            segment.BytesDownloaded = 0;
+            Interlocked.Exchange(ref _liveBytes[segment.Index], 0);
+            writeOffset = 0;
+        }
 
         // The server responded and we're about to stream bytes: the connection is healthy again.
         ClearIssue();
@@ -790,65 +813,80 @@ public sealed class DownloadWorker
         }
     }
 
+    /// <summary>What the caller should do with the response body of a (possibly) ranged request.</summary>
+    private enum RangeOutcome
+    {
+        /// <summary>Write the body at the current write offset (206 verified, or a non-ranged request).</summary>
+        WriteAtOffset,
+
+        /// <summary>Single-segment download: the server sent the whole file, so write it from byte 0.</summary>
+        RestartFromZero
+    }
+
     /// <summary>
-    /// Ensures a ranged request produced a byte stream that actually starts at
-    /// <paramref name="writeOffset"/>. This closes two silent-corruption holes:
+    /// Reconciles a response with the range we requested, protecting against the silent-corruption
+    /// cases while keeping downloads working against servers that don't truly support ranges:
     /// <list type="bullet">
     ///   <item>a server that ignores the <c>Range</c> header and returns <c>200</c> with the whole
-    ///         file, which would otherwise be written at a non-zero offset; and</item>
+    ///         file, which must never be written at a non-zero offset; and</item>
     ///   <item>a resource whose contents changed under our <c>If-Range</c> validator, which also
-    ///         answers <c>200</c> and would splice two different files together.</item>
+    ///         answers <c>200</c> and would otherwise splice two different files together.</item>
     /// </list>
     /// <para>
-    /// When a non-206 (or a 206 with the wrong start offset) is detected, we do NOT fail the download.
-    /// Instead we throw <see cref="RangeNotHonoredException"/>, which <see cref="RunAsync"/> catches to
-    /// transparently re-download the whole file as a single stream from byte 0. That is what makes PDM
-    /// work against servers that don't truly support ranged/segmented downloads — Google Drive, many
-    /// CDNs, dynamic endpoints, etc. — instead of erroring out. The one case where the 200 body is
-    /// already safe to consume in place (so no restart is needed) is a single-segment download that has
-    /// not written anything yet: it simply switches to single-stream mode and keeps going.
+    /// The response to these cases depends on the plan shape:
     /// </para>
+    /// <list type="bullet">
+    ///   <item><b>Single segment</b> (one writer): a full <c>200</c> — or a <c>206</c> starting at an
+    ///         unexpected offset — is handled safely by (re)starting the write from byte 0
+    ///         (<see cref="RangeOutcome.RestartFromZero"/>). No corruption is possible because there is
+    ///         only one writer covering the whole file.</item>
+    ///   <item><b>Multiple segments</b>: the same situation cannot be written safely (bytes would land
+    ///         at the wrong offset), so it throws <see cref="RangeNotHonoredException"/>, which
+    ///         <see cref="RunAsync"/> catches to collapse the whole download to a single stream.</item>
+    /// </list>
     /// </summary>
-    private void ValidateRangeResponse(
+    private RangeOutcome ResolveRangeResponse(
         HttpResponseMessage response, DownloadSegment segment, bool rangeRequested, long writeOffset)
     {
-        // No Range header was sent (single-stream / non-resumable download): any 2xx body is fine.
+        // No Range header was sent (fresh single stream): the 200 body is the whole file from 0.
         if (!rangeRequested)
         {
-            return;
+            return RangeOutcome.WriteAtOffset;
         }
+
+        bool isSingleSegment = _state.Segments.Count == 1;
 
         if (response.StatusCode == HttpStatusCode.PartialContent)
         {
-            // The server honoured the range. Double-check it starts exactly where we're about to
-            // write; a mismatched offset means a broken/proxying server, so restart as a single
-            // stream rather than risk placing bytes at the wrong position.
+            // The server honoured the range. Verify it starts exactly where we're about to write.
             ContentRangeHeaderValue? contentRange = response.Content.Headers.ContentRange;
             if (contentRange is { HasRange: true, From: { } from } && from != writeOffset)
             {
+                // Wrong offset. Safe to recover only for a single writer; otherwise collapse.
+                if (isSingleSegment)
+                {
+                    return RangeOutcome.RestartFromZero;
+                }
+
                 throw new RangeNotHonoredException(
                     $"Server returned the wrong byte range (requested from {writeOffset}, received from {from}).");
             }
 
-            return;
+            return RangeOutcome.WriteAtOffset;
         }
 
-        // Not a 206 — the server sent the whole file (200) despite our Range header, or the content
-        // changed under an If-Range validator. If this is a fresh single-segment download starting at
-        // byte 0, we can consume that full body right here as a single stream (no restart needed).
-        bool canConsumeInPlace =
-            _state.Segments.Count == 1 && segment.Start == 0 && segment.BytesDownloaded == 0;
-
-        if (canConsumeInPlace)
+        // Not a 206 — the server sent a full 200 body despite our Range header (it ignores ranges), or
+        // the content changed under an If-Range validator.
+        if (isSingleSegment)
         {
-            // Stop advertising range support so a later retry of this segment sends a plain GET
-            // (no Range/If-Range) and does not loop back into this path.
+            // One writer: consume the whole body from byte 0. Note that this server won't honour
+            // ranges so a future resume will (correctly) restart from zero if it drops.
             _state.SupportsRanges = false;
-            return;
+            return RangeOutcome.RestartFromZero;
         }
 
-        // Otherwise (multi-segment, or a resume with partial bytes) the current plan can't be used
-        // safely. Signal RunAsync to collapse to a single stream and re-download from the beginning.
+        // Multiple segments: cannot place a full body at a segment offset. Ask RunAsync to collapse
+        // the plan to a single stream and re-download from the beginning.
         throw new RangeNotHonoredException(
             "The server did not honour the range request, so the download will restart as a single stream.");
     }
