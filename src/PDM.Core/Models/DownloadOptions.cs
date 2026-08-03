@@ -36,6 +36,13 @@ public sealed class DownloadOptions
     /// <summary>Timeout for establishing a connection and receiving response headers.</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Maximum time a single segment may wait for the next chunk of data before the connection is
+    /// treated as stalled and retried from its last persisted offset. Guards against a socket that
+    /// stays open but stops delivering bytes, which would otherwise hang the whole download.
+    /// </summary>
+    public TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(60);
+
     /// <summary>Custom User-Agent header; a sensible default is used when null.</summary>
     public string? UserAgent { get; init; }
 
@@ -64,6 +71,12 @@ public sealed class DownloadOptions
         {
             throw new ArgumentOutOfRangeException(nameof(MaxBytesPerSecond), MaxBytesPerSecond,
                 "MaxBytesPerSecond cannot be negative.");
+        }
+
+        if (StallTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(StallTimeout), StallTimeout,
+                "StallTimeout must be greater than zero.");
         }
     }
 }

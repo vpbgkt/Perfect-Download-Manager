@@ -79,29 +79,58 @@ public sealed class DownloadWorker
         using var progressCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task progressLoop = RunProgressLoopAsync(stopwatch, progressCts.Token);
 
-        try
-        {
-            var segmentTasks = _state.Segments
-                .Select(segment => DownloadSegmentAsync(segment, cancellationToken))
-                .ToArray();
+        // A shared "fault" token so the first segment to fail fatally cancels the others promptly,
+        // instead of every sibling running to completion (or hitting the same failure) before the
+        // error surfaces. Linked to the caller's token so a user pause/cancel still stops everything.
+        using var faultCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Exception? fatal = null;
+        int faultClaimed = 0;
 
-            await Task.WhenAll(segmentTasks).ConfigureAwait(false);
+        async Task RunSegmentGuardedAsync(DownloadSegment segment)
+        {
+            try
+            {
+                await DownloadSegmentAsync(segment, faultCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (faultCts.IsCancellationRequested)
+            {
+                // Cancelled either by the user or because a sibling already failed. Either way the
+                // outcome is decided after WhenAll from the caller's token / the recorded fatal error.
+            }
+            catch (Exception ex)
+            {
+                // First fatal wins: record it and cancel the rest so they stop immediately.
+                if (Interlocked.Exchange(ref faultClaimed, 1) == 0)
+                {
+                    fatal = ex;
+                    if (!faultCts.IsCancellationRequested)
+                    {
+                        faultCts.Cancel();
+                    }
+                }
+            }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+
+        var segmentTasks = _state.Segments.Select(RunSegmentGuardedAsync).ToArray();
+        await Task.WhenAll(segmentTasks).ConfigureAwait(false);
+
+        // A user-initiated pause/cancel takes precedence over any fault the cancellation triggered.
+        if (cancellationToken.IsCancellationRequested)
         {
             _state.Status = DownloadStatus.Paused;
             await SaveStateSafelyAsync().ConfigureAwait(false);
             await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
-            throw;
+            throw new OperationCanceledException(cancellationToken);
         }
-        catch (Exception ex)
+
+        if (fatal is not null)
         {
             _state.Status = DownloadStatus.Failed;
-            _state.ErrorMessage = ex.Message;
+            _state.ErrorMessage = fatal.Message;
             _state.CompletedUtc = DateTimeOffset.UtcNow;
             await SaveStateSafelyAsync().ConfigureAwait(false);
             await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
-            throw ex as DownloadException ?? new DownloadException("The download failed.", ex);
+            throw fatal as DownloadException ?? new DownloadException("The download failed.", fatal);
         }
 
         await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
@@ -244,6 +273,11 @@ public sealed class DownloadWorker
             throw DiskWriteFailure(ex);
         }
 
+        // Inactivity watchdog: armed around each network read and disabled while we write/throttle,
+        // so a socket that stays open but stops delivering bytes is abandoned (and retried from the
+        // last persisted offset) instead of hanging the whole download indefinitely.
+        using var stallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
         try
         {
             byte[] buffer = new byte[_options.ReadBufferSize];
@@ -268,8 +302,24 @@ public sealed class DownloadWorker
                     }
                 }
 
-                int read = await network.ReadAsync(buffer.AsMemory(0, toRead), cancellationToken)
-                    .ConfigureAwait(false);
+                int read;
+                stallCts.CancelAfter(_options.StallTimeout); // arm the watchdog for this read
+                try
+                {
+                    read = await network.ReadAsync(buffer.AsMemory(0, toRead), stallCts.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (!cancellationToken.IsCancellationRequested && stallCts.IsCancellationRequested)
+                {
+                    // Only the watchdog fired (not a user pause/cancel). Surface a transient timeout so
+                    // the retry loop resumes this segment from its persisted offset.
+                    throw new TimeoutException(
+                        $"Segment {segment.Index} stalled: no data received for {_options.StallTimeout.TotalSeconds:0}s.");
+                }
+
+                stallCts.CancelAfter(System.Threading.Timeout.InfiniteTimeSpan); // disarm during write/throttle
+
                 if (read == 0)
                 {
                     break; // End of stream.
@@ -533,12 +583,57 @@ public sealed class DownloadWorker
     {
         try
         {
-            await _stateStore.SaveAsync(_state, CancellationToken.None).ConfigureAwait(false);
+            // Serialize a snapshot rather than the live state: segment offsets are advanced by the
+            // transfer threads concurrently with this checkpoint, and serializing the live object
+            // could otherwise capture a torn/inconsistent mix of old and new values.
+            await _stateStore.SaveAsync(SnapshotForCheckpoint(), CancellationToken.None).ConfigureAwait(false);
         }
         catch (IOException)
         {
             // A failed checkpoint save is non-fatal; the next attempt will retry.
         }
+    }
+
+    /// <summary>
+    /// Produces a point-in-time copy of the state for a durable checkpoint. Copies each segment's
+    /// persisted <see cref="DownloadSegment.BytesDownloaded"/> offset (a single atomic long read) into
+    /// a fresh list so the write to disk reflects a consistent snapshot even while segments advance.
+    /// </summary>
+    private DownloadState SnapshotForCheckpoint()
+    {
+        List<DownloadSegment> source = _state.Segments;
+        var segments = new List<DownloadSegment>(source.Count);
+        for (int i = 0; i < source.Count; i++)
+        {
+            DownloadSegment s = source[i];
+            segments.Add(new DownloadSegment
+            {
+                Index = s.Index,
+                Start = s.Start,
+                End = s.End,
+                BytesDownloaded = s.BytesDownloaded
+            });
+        }
+
+        return new DownloadState
+        {
+            Id = _state.Id,
+            SourceUrl = _state.SourceUrl,
+            EffectiveUrl = _state.EffectiveUrl,
+            Referrer = _state.Referrer,
+            DestinationPath = _state.DestinationPath,
+            TotalBytes = _state.TotalBytes,
+            SupportsRanges = _state.SupportsRanges,
+            ETag = _state.ETag,
+            LastModified = _state.LastModified,
+            Status = _state.Status,
+            Category = _state.Category,
+            CustomCategory = _state.CustomCategory,
+            ErrorMessage = _state.ErrorMessage,
+            CompletedUtc = _state.CompletedUtc,
+            CreatedUtc = _state.CreatedUtc,
+            Segments = segments
+        };
     }
 
     private TimeSpan BackoffDelay(int attempt)
