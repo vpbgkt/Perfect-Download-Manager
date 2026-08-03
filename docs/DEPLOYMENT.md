@@ -4,9 +4,12 @@ The single reference for shipping Perfect Download Manager after code changes. I
 **desktop app** (build → installer → signed auto-update), the **marketing website**, the
 **browser extension**, and the **admin/reseller portal**.
 
-> TL;DR for a normal desktop release: bump the version, run `publish.ps1`,
-> `build-installer.ps1`, `sign-release.ps1`, upload the MSI + `downloads.json`, update the
-> website version/links, commit, tag. Full copy‑paste block is in
+> TL;DR for a normal desktop release: run **`./build/release.ps1`**. It prompts for the version
+> tag, patches every website version marker, builds the NativeAOT dist, signs and uploads the
+> update package + MSI + Setup.exe + `downloads.json` to S3, HEAD-verifies every URL is live,
+> commits `src/` + `installer/` + `build/` + `backend/` + the patched website files, tags
+> `vX.Y.Z`, and pushes both the branch and the tag. Full details in
+> [§5 Desktop app release](#5-desktop-app-release-the-main-flow); flags/switches in
 > [§9 Quick reference](#9-quick-reference-typical-desktop-release).
 
 ---
@@ -75,122 +78,69 @@ The single reference for shipping Perfect Download Manager after code changes. I
 
 ## 5. Desktop app release (the main flow)
 
-This is what you run after changing any desktop code (`src/**`, `installer/**`). Example uses
-version `1.0.18` — substitute your new version.
+This is what you run after changing any desktop code (`src/**`, `installer/**`). A release is a
+single command:
 
-### 5.1 Build the app payload
 ```powershell
-# From repo root. Produces dist/PDM/ and dist/PDM-1.0.18.zip
-./build/publish.ps1 -Version 1.0.18
-# Add -SelfContained to bundle the .NET runtime (bigger, no prerequisite on the user's PC).
+./build/release.ps1                           # prompts for version + release notes
+./build/release.ps1 -Version 1.2.3            # non-interactive version
+./build/release.ps1 -Version 1.2.3 -ReleaseNotes "Fixed X.`nImproved Y."
+./build/release.ps1 -Version 1.3.0-rc.1 -Channel Beta
 ```
-- The UpdateLauncher is always published self-contained single-file.
-- The browser extension is **no longer** bundled (it's on the Chrome Web Store).
-- `dist/PDM-1.0.18.zip` is both the **portable** download and the **auto-update package**.
 
-### 5.2 Build the MSI installer
-```powershell
-# Requires 5.1 to have run first. Produces dist/PDM-1.0.18.0.msi
-./build/build-installer.ps1 -Version 1.0.18.0
-```
+Useful switches when retrying a partially-failed release:
+
+- `-SkipBuild`   — reuse whatever is already in `dist/` (fast retry of the upload/commit steps).
+- `-SkipUpload`  — skip the S3 publish (patch website + commit only).
+- `-SkipWebsite` — leave `website/index.html` and `website/changelog.html` untouched.
+- `-SkipCommit`  — do everything except `git commit` / `git tag` / `git push`.
+- `-YesToAll`    — no confirmation prompt before the destructive steps.
+
+What `release.ps1` actually does, in order:
+
+1. **Preflight** — checks `dotnet` / `node` / `aws` / `git` are on PATH, verifies the AWS account
+   is `452359090613`, and refuses to proceed if `vX.Y.Z` already exists locally or on origin.
+2. **Patch website** — regex-updates `<title>`, the JSON-LD `softwareVersion` and `downloadUrl`,
+   every `data-version` span, and the `#dlMsi`/`#dlZip` hrefs in `website/index.html`; prepends a
+   new `<section>` for the version in `website/changelog.html`. Idempotent.
+3. **Build** — one path only, no runtime prerequisite:
+   - `./build/publish-aot-dist.ps1 -Version <v>` — assembles the **NativeAOT** dist at
+     `dist/PDM/`: `PDM.exe` (Avalonia head), `pdm-native-host.exe`, `pdm-update.exe`, plus native
+     deps (SQLite, Skia, ANGLE, HarfBuzz). All self-contained; no .NET runtime install needed.
+   - Then zips `dist/PDM/*` -> `dist/PDM-<v>.zip` (this is the portable + auto-update package).
+   - Then `./build/build-installer.ps1 -Version <v>.0` -> `dist/PDM-<v>.0.msi`.
+   - Then `./build/build-bundle.ps1 -Version <v>.0` -> `dist/PDM-<v>.0-Setup.exe` (single-file
+     wrapper around the MSI; because the payload is already runtime-free, the bootstrapper is a
+     familiar-looking Setup.exe rather than a runtime downloader).
+4. **Publish to S3** — `sign-release.ps1` signs+uploads the zip and manifest;
+   `aws s3 cp` uploads the MSI and Setup.exe; generates + uploads `downloads.json`. Every URL is
+   HEAD-checked (must return 200).
+5. **Git** — stages **only** `src/`, `installer/`, `build/`, `backend/`, and the two patched
+   website files (never `git add .`); a secret-scan on staged files aborts if anything looks like a
+   key; commits, tags `vX.Y.Z`, pushes both branch and tags.
+
 The MSI is **unsigned** (no code-signing cert), so Windows SmartScreen shows a
-"More info → Run anyway" prompt on first install. The *auto-updater* is still safe: every
+"More info -> Run anyway" prompt on first install. The *auto-updater* is still safe: every
 package is ECDSA-signed and SHA-256 verified before it runs.
 
-### 5.2b Build the bootstrapper (the public download)
-```powershell
-# Requires 5.1 (framework-dependent, NO -SelfContained) + 5.2 to have run first.
-# Produces dist/PDM-1.0.18.0-Setup.exe (~41 MB).
-./build/build-bundle.ps1 -Version 1.0.18.0
-```
-This WiX Burn bundle (`installer/Bundle.wxs`) wraps the framework-dependent MSI and, on a machine
-without the runtime, **downloads and silently installs the .NET 10 Desktop Runtime** before
-installing PDM. It downloads the runtime on demand (not embedded), so the setup stays ~41 MB. The
-script pins the runtime to an immutable versioned URL, so rebuild the bundle each release to track
-the current .NET patch. `Setup.exe` is what the website links to; the bare MSI and portable ZIP
-remain available for advanced/enterprise use.
+**Old-flow scripts that no longer exist** (deleted after 1.2.2 to prevent picking the wrong tree):
 
-> The runtime auto-install path must be verified on a **clean VM with no .NET installed** before a
-> public release — a dev box that already has the runtime skips that code path.
+- `build/publish.ps1` — used to publish the framework-dependent WPF head (`src/PDM.App`).
+- `build/publish-avalonia-aot.ps1` — redundant single-project AOT check.
 
-### 5.3 Sign & publish the auto-update (existing users update from here)
-```powershell
-./backend/updates/sign-release.ps1 -Version 1.0.18 -Channel Stable `
-    -ReleaseNotes "What changed in this release."
-```
-This computes the ZIP's size + SHA-256, signs a manifest with the SSM key, and uploads:
-- `s3://pdm-updates-452359090613-aps1/stable/pdm-1.0.18.zip`
-- `s3://pdm-updates-452359090613-aps1/stable/manifest.json` (Version `1.0.18`, signed)
-
-Every client on the **Stable** channel with a version `< 1.0.18` will offer the update on its
-next "Check for Updates". (Use `-Channel Beta` for a beta ring → `beta/manifest.json`.)
-
-### 5.4 Upload the installer(s) for the website
-`sign-release.ps1` publishes the ZIP but not the installer(s), so upload them explicitly. The
-website's primary "Download for Windows" button points at the **bootstrapper Setup.exe**:
-```powershell
-# Bootstrapper (primary public download)
-aws s3 cp dist/PDM-1.0.18.0-Setup.exe `
-    s3://pdm-updates-452359090613-aps1/downloads/PDM-1.0.18-Setup.exe `
-    --content-type "application/octet-stream" --region ap-south-1
-
-# Bare MSI (optional, for advanced/enterprise use)
-aws s3 cp dist/PDM-1.0.18.0.msi `
-    s3://pdm-updates-452359090613-aps1/downloads/PDM-1.0.18.msi `
-    --content-type "application/x-msi" --region ap-south-1
-```
-
-### 5.5 Publish `downloads.json` (drives the website buttons)
-Get the exact byte sizes and write the metadata file:
-```powershell
-$msi = (Get-Item dist/PDM-1.0.18.0.msi).Length
-$zip = (Get-Item dist/PDM-1.0.18.zip).Length
-# NOTE: the website's primary button (#dlMsi) reads `msiUrl`, so point it at the Setup.exe.
-$setup = (Get-Item dist/PDM-1.0.18.0-Setup.exe).Length
-@{
-  version           = "1.0.18"
-  msiUrl            = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-1.0.18-Setup.exe"
-  msiSizeBytes      = $setup
-  portableZipUrl    = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-1.0.18.zip"
-  portableSizeBytes = $zip
-} | ConvertTo-Json | Set-Content dist/downloads.json -NoNewline
-
-aws s3 cp dist/downloads.json `
-    s3://pdm-updates-452359090613-aps1/stable/downloads.json `
-    --content-type "application/json" --cache-control "public, max-age=300" --region ap-south-1
-Remove-Item dist/downloads.json
-```
-
-### 5.6 Point the website at the new version
-Edit `website/index.html`:
-- Both `<span data-version>…</span>` → `1.0.18` (hero eyebrow + download heading).
-- `<title>` version → `1.0.18`.
-- `#dlMsi` `href` → `…/downloads/PDM-1.0.18.msi`
-- `#dlZip` `href` → `…/stable/pdm-1.0.18.zip`
-- SoftwareApplication JSON-LD (`<script type="application/ld+json">` in `<head>`):
-  `softwareVersion` → `1.0.18` and `downloadUrl` → `…/downloads/PDM-1.0.18.msi`.
+If you ever see either name in a doc or CI, retarget to `build/release.ps1` (releases) or
+`build/publish-aot-dist.ps1` (dist assembly only).
 
 `website/assets/js/main.js` still refreshes version/size/links from `downloads.json` at
 runtime, but the static hrefs guarantee the buttons work even before JS runs.
 
-### 5.7 Verify everything is live
-```powershell
-$b = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com"
-"$b/stable/manifest.json","$b/stable/pdm-1.0.18.zip","$b/downloads/PDM-1.0.18.msi","$b/stable/downloads.json" |
-  ForEach-Object { "{0}  {1}" -f (Invoke-WebRequest $_ -Method Head -UseBasicParsing).StatusCode, $_ }
-```
-All should return `200`.
+### 5.6 What `release.ps1` intentionally does **not** stage in git
 
-### 5.8 Commit source + tag (never commit `dist/` binaries)
-```powershell
-git add src/ installer/ build/ website/index.html
-git commit -m "release: PDM 1.0.18 — <summary>"
-git tag v1.0.18
-git push
-git push --tags
-```
-> `dist/` is gitignored; the MSI/ZIP live in S3 only. Do **not** commit `.env.local`,
-> `admin-portal/firebase-service-account.json`, or any key.
+`dist/` is gitignored; the MSI/ZIP/Setup.exe live in S3 only. The script never commits any
+secret file: `.env*.local`, `firebase-service-account.json`, `*.pem`, `*.pfx`, `*.p12`, `*.key`
+are all either gitignored or blocked by the pre-commit secret-scan inside `release.ps1`. If the
+scan flags a staged file, the script aborts BEFORE committing so you can un-stage the file and
+re-run.
 
 ---
 
@@ -262,29 +212,24 @@ npm test           # 239 property/unit tests
 ## 9. Quick reference (typical desktop release)
 
 ```powershell
-$V = "1.0.18"                       # app version
-$MV = "$V.0"                        # MSI ProductVersion
+./build/release.ps1                    # prompts for version + notes, does the whole flow
+./build/release.ps1 -Version 1.2.3     # non-interactive
+./build/release.ps1 -Version 1.2.3 -ReleaseNotes "Fixed X.`nImproved Y."
+```
 
-./build/publish.ps1 -Version $V
-./build/build-installer.ps1 -Version $MV
-./backend/updates/sign-release.ps1 -Version $V -Channel Stable -ReleaseNotes "…"
+That single command: preflights AWS + git, patches every version marker on the website, builds
+the NativeAOT dist + zip + MSI + Setup.exe, signs and uploads the update package + installer +
+`downloads.json` to S3, HEAD-verifies every URL, commits (`src/` + `installer/` + `build/` +
+`backend/` + patched website files), tags `vX.Y.Z`, and pushes both branch and tags. Cloudflare
+Pages redeploys the site off the `main` push automatically.
 
-aws s3 cp "dist/PDM-$MV.msi" "s3://pdm-updates-452359090613-aps1/downloads/PDM-$V.msi" `
-    --content-type "application/x-msi" --region ap-south-1
-
-$msi = (Get-Item "dist/PDM-$MV.msi").Length
-$zip = (Get-Item "dist/PDM-$V.zip").Length
-@{ version=$V
-   msiUrl="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-$V.msi"
-   msiSizeBytes=$msi
-   portableZipUrl="https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-$V.zip"
-   portableSizeBytes=$zip } | ConvertTo-Json | Set-Content dist/downloads.json -NoNewline
-aws s3 cp dist/downloads.json "s3://pdm-updates-452359090613-aps1/stable/downloads.json" `
-    --content-type "application/json" --cache-control "public, max-age=300" --region ap-south-1
-Remove-Item dist/downloads.json
-
-# then edit website/index.html versions+hrefs, commit src/ + website, tag vX.Y.Z, push,
-# and redeploy the website (Cloudflare).
+Retrying after a partial failure (all switches):
+```powershell
+./build/release.ps1 -Version 1.2.3 -SkipBuild            # re-run upload/commit only
+./build/release.ps1 -Version 1.2.3 -SkipUpload           # patch website + commit only
+./build/release.ps1 -Version 1.2.3 -SkipCommit           # do everything except git
+./build/release.ps1 -Version 1.2.3 -YesToAll             # no confirmation prompt
+./build/release.ps1 -Version 1.3.0-rc.1 -Channel Beta    # publish to stable/beta/
 ```
 
 ---

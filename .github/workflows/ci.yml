@@ -74,9 +74,9 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      # Publishes the Avalonia desktop head as a NativeAOT, self-contained, runtime-free binary
-      # (the artifact the retargeted installer will package). The script fails the job if the native
-      # binary is not produced. This is the §11 Phase 2 exit gate for the Windows head build.
-      - name: Publish Avalonia head (NativeAOT)
+      # Assembles the runtime-free NativeAOT dist (PDM.exe, native host, update launcher) that
+      # the installer packages. Fails the job if any binary is missing. This is the single publish
+      # path we ship - the old framework-dependent publish.ps1 (WPF head) has been removed.
+      - name: Publish PDM (NativeAOT, runtime-free)
         shell: pwsh
-        run: ./build/publish-avalonia-aot.ps1
+        run: ./build/publish-aot-dist.ps1

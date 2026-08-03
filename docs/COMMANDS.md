@@ -30,14 +30,29 @@ dotnet run --project src/PDM.Cli -- "https://example.com/file.bin" ".\downloads"
 
 ## Packaging a release
 
-```powershell
-# 1. Publish app + native host + update launcher into dist/PDM and a portable/update zip
-./build/publish.ps1 -Version 1.0.0
+The whole flow (build -> S3 -> git) is one command. It's the only supported path:
 
-# 2. Build the MSI installer (dist/PDM-1.0.0.0.msi)
+```powershell
+./build/release.ps1                     # prompts for version + release notes
+./build/release.ps1 -Version 1.2.3 -ReleaseNotes "Fixed X.`nImproved Y."
+```
+
+See docs/DEPLOYMENT.md #5 for what it does step-by-step and the retry switches
+(`-SkipBuild`, `-SkipUpload`, `-SkipCommit`, `-YesToAll`, `-Channel Beta`).
+
+Individual pieces (for debugging only - a real release should always go through `release.ps1`):
+
+```powershell
+# NativeAOT dist assembler (produces dist/PDM/)
+./build/publish-aot-dist.ps1 -Version 1.0.0
+
+# MSI installer (produces dist/PDM-1.0.0.0.msi; requires dist/PDM/ from step 1)
 ./build/build-installer.ps1 -Version 1.0.0.0
 
-# 3. (optional) Harden the licensing assembly with obfuscation
+# Bootstrapper Setup.exe (produces dist/PDM-1.0.0.0-Setup.exe; requires the MSI)
+./build/build-bundle.ps1 -Version 1.0.0.0
+
+# Optional: harden the licensing assembly with obfuscation
 ./build/obfuscate.ps1
 ```
 
@@ -147,18 +162,14 @@ aws cloudformation delete-stack --stack-name pdm-licensing --region ap-south-1
 # Prints the update public key - embed in LicensingConfig.UpdatePublicKeyBase64 and rebuild.
 ```
 
-**Publish a new release** (this is the whole workflow — three commands):
+**Publish a new release** - one command:
 ```powershell
-# 1. Build + publish (produces dist/PDM-<version>.zip)
-./build/publish.ps1 -Version 1.2.0
-
-# 2. Sign the manifest + upload manifest + zip to S3
-./backend/updates/sign-release.ps1 -Version 1.2.0 -Channel Stable `
-  -ReleaseNotes "What's new in 1.2.0..."
-
-# 3. Optionally build a signed MSI for direct download links
-./build/build-installer.ps1 -Version 1.2.0.0
+./build/release.ps1 -Version 1.2.3 -ReleaseNotes "What's new in 1.2.3..."
 ```
+
+This orchestrates everything: NativeAOT build, MSI + Setup.exe, signed update manifest,
+S3 upload of zip / MSI / Setup.exe / downloads.json, website version patch, git commit, tag,
+push. Existing installs pick up the new version on next Check for Updates.
 
 Existing installations pick up the new version on their next Check for Updates (silent on
 startup, or manual via toolbar).

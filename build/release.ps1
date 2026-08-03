@@ -146,7 +146,13 @@ if (-not $SkipWebsite -and $Channel -eq "Stable") {
 
     $index = Join-Path $repo "website/index.html"
     if (-not (Test-Path $index)) { Die "website/index.html not found." }
-    $html = Get-Content $index -Raw
+    # Read as UTF-8 explicitly. Windows PowerShell 5.1's Get-Content -Raw defaults to the ANSI
+    # codepage (Windows-1252) for BOM-less files. Since our website files are BOM-less UTF-8,
+    # Get-Content would mis-decode every multi-byte character (bytes get treated as CP1252 code
+    # points), and the WriteAllText below would then re-encode them as UTF-8 -> classic double-
+    # encoding mojibake ("Ãƒâ€šÃ‚Â·" for "·", etc). Always read with an explicit UTF-8 encoding.
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    $html = [System.IO.File]::ReadAllText($index, $utf8NoBom)
 
     # Byte-for-byte version markers documented in DEPLOYMENT.md §5.6. The patterns are anchored on
     # stable attribute markers so they cannot accidentally match unrelated text.
@@ -165,15 +171,16 @@ if (-not $SkipWebsite -and $Channel -eq "Stable") {
         "`${1}$BaseUrl/stable/pdm-$Version.zip`${2}")
 
     # UTF-8 without BOM, LF endings preserved.
-    [System.IO.File]::WriteAllText($index, $html, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($index, $html, $utf8NoBom)
     Ok "index.html patched"
 
     # Changelog: prepend a new section (only if this version is not already recorded). Built as
-    # plain string joins — no here-strings — so the script stays syntactically robust across
+    # plain string joins (no here-strings) so the script stays syntactically robust across
     # PowerShell versions and terminal encodings.
     $changelog = Join-Path $repo "website/changelog.html"
     if (Test-Path $changelog) {
-        $cl = Get-Content $changelog -Raw
+        # Same UTF-8-explicit read as index.html above; do NOT use Get-Content on BOM-less HTML.
+        $cl = [System.IO.File]::ReadAllText($changelog, $utf8NoBom)
         $escVersion = [regex]::Escape($Version)
         if ($cl -match ('<h2>\s*' + $escVersion + '\s*</h2>')) {
             Warn ("changelog.html already has an entry for " + $Version + " - leaving it alone.")
@@ -343,9 +350,13 @@ if (-not $SkipCommit) {
     Say ""
     Say "==> Git commit / tag / push" "Magenta"
 
-    # Match the DEPLOYMENT.md pattern (§5.8): only source + installer + build scripts + the
-    # patched marketing pages. Never `git add .` (would sweep in dist/, secrets, junk).
-    $paths = @("src/", "installer/", "build/", "backend/")
+    # Only source + installer + build scripts + CI + the patched marketing pages. Never
+    # `git add .` (would sweep in dist/, secrets, junk). `.github/` is included so a workflow tweak
+    # travels with the release commit - historically it was omitted, and a CI-yaml fix that pointed
+    # at a deleted script was silently left out of a release. `docs/` is deliberately NOT included:
+    # documentation edits are committed on their own cadence, and blanket-staging docs/ would sweep
+    # in untracked personal notes.
+    $paths = @("src/", "installer/", "build/", "backend/", ".github/")
     if ($Channel -eq "Stable" -and -not $SkipWebsite) {
         $paths += "website/index.html"
         if (Test-Path (Join-Path $repo "website/changelog.html")) { $paths += "website/changelog.html" }
