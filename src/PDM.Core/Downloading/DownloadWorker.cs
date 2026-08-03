@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
@@ -24,7 +25,13 @@ public sealed class DownloadWorker
     private readonly HttpClient _client;
     private readonly IDownloadStateStore _stateStore;
     private readonly IProgress<DownloadProgress>? _progress;
+
+    // Per-download cap (from options). Always present; disabled when the option is 0.
     private readonly SpeedLimiter _limiter;
+
+    // Optional cap shared across every concurrent download so an aggregate global speed limit is
+    // enforced accurately regardless of how many downloads run. Null when no global cap applies.
+    private readonly SpeedLimiter? _globalLimiter;
 
     // Live (possibly not-yet-durable) byte counts per segment for smooth progress.
     private readonly long[] _liveBytes;
@@ -40,7 +47,8 @@ public sealed class DownloadWorker
         DownloadOptions options,
         HttpClient client,
         IDownloadStateStore stateStore,
-        IProgress<DownloadProgress>? progress = null)
+        IProgress<DownloadProgress>? progress = null,
+        SpeedLimiter? globalLimiter = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -55,6 +63,7 @@ public sealed class DownloadWorker
         }
 
         _limiter = new SpeedLimiter(_options.MaxBytesPerSecond);
+        _globalLimiter = globalLimiter;
         _liveBytes = _state.Segments.Select(s => s.BytesDownloaded).ToArray();
         _flushThreshold = Math.Max(1L * 1024 * 1024, _options.ReadBufferSize * 8L);
     }
@@ -278,9 +287,15 @@ public sealed class DownloadWorker
         // last persisted offset) instead of hanging the whole download indefinitely.
         using var stallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
+        // Rent the read buffer from the shared pool instead of allocating a fresh array on every
+        // segment attempt/retry, which removes a large source of GC pressure under many concurrent
+        // downloads. The rented array may be larger than requested, so reads are always clamped to
+        // the configured buffer size to keep chunk sizing identical.
+        int bufferSize = _options.ReadBufferSize;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+
         try
         {
-            byte[] buffer = new byte[_options.ReadBufferSize];
             long sinceFlush = 0;
             long written = segment.BytesDownloaded;
 
@@ -292,7 +307,7 @@ public sealed class DownloadWorker
                     break;
                 }
 
-                int toRead = buffer.Length;
+                int toRead = bufferSize;
                 if (!openEnded)
                 {
                     long remaining = segment.Length - written;
@@ -340,16 +355,21 @@ public sealed class DownloadWorker
                 sinceFlush += read;
                 Interlocked.Exchange(ref _liveBytes[segment.Index], written);
 
-                await _limiter.ThrottleAsync(read, cancellationToken).ConfigureAwait(false);
+                await ApplyRateLimitsAsync(read, cancellationToken).ConfigureAwait(false);
 
                 if (sinceFlush >= _flushThreshold)
                 {
-                    FlushToDisk(file);
+                    // Checkpoint flush: push the FileStream's buffer to the OS (so the bytes survive a
+                    // process crash and the advanced durable offset is honest) WITHOUT forcing an
+                    // expensive hardware sync on the hot path. Full durability is ensured by the single
+                    // hard flush when the segment completes.
+                    await FlushBufferAsync(file, cancellationToken).ConfigureAwait(false);
                     segment.BytesDownloaded = written; // Advance durable offset only after flush.
                     sinceFlush = 0;
                 }
             }
 
+            // Segment finished: one hard flush to guarantee the tail is physically persisted.
             FlushToDisk(file);
             segment.BytesDownloaded = written;
 
@@ -372,11 +392,39 @@ public sealed class DownloadWorker
         }
         finally
         {
+            ArrayPool<byte>.Shared.Return(buffer);
             await file.DisposeAsync().ConfigureAwait(false);
         }
     }
 
-    /// <summary>Flushes buffered bytes to disk, translating storage failures into a disk-error.</summary>
+    /// <summary>Applies the per-download cap and, when present, the shared global cap after a read.</summary>
+    private async ValueTask ApplyRateLimitsAsync(int byteCount, CancellationToken cancellationToken)
+    {
+        await _limiter.ThrottleAsync(byteCount, cancellationToken).ConfigureAwait(false);
+        if (_globalLimiter is not null)
+        {
+            await _globalLimiter.ThrottleAsync(byteCount, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Flushes the FileStream's own buffer to the operating system without forcing a hardware sync.
+    /// Cheap enough for the hot path and sufficient to make an advanced resume offset safe against a
+    /// process crash (the bytes live in the OS page cache). Storage failures become a disk-error.
+    /// </summary>
+    private static async ValueTask FlushBufferAsync(FileStream file, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await file.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw DiskWriteFailure(ex);
+        }
+    }
+
+    /// <summary>Flushes buffered bytes all the way to disk, translating storage failures into a disk-error.</summary>
     private static void FlushToDisk(FileStream file)
     {
         try

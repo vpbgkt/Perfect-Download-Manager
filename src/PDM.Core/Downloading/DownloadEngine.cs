@@ -164,11 +164,13 @@ public sealed class DownloadEngine
         DownloadState state,
         IProgress<DownloadProgress>? progress = null,
         DownloadOptions? options = null,
+        SpeedLimiter? globalLimiter = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        var worker = new DownloadWorker(state, options ?? _defaultOptions, _client, _stateStore, progress);
+        var worker = new DownloadWorker(
+            state, options ?? _defaultOptions, _client, _stateStore, progress, globalLimiter);
         return worker.RunAsync(cancellationToken);
     }
 
@@ -190,7 +192,7 @@ public sealed class DownloadEngine
                 url, destinationDirectory, fileNameOverride, category, overwritePolicy,
                 allowWebPage, options, referrer: null, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
-        await RunAsync(state, progress, options, cancellationToken).ConfigureAwait(false);
+        await RunAsync(state, progress, options, globalLimiter: null, cancellationToken).ConfigureAwait(false);
         return state;
     }
 

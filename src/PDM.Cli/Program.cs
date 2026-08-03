@@ -60,7 +60,7 @@ internal static class Program
             Console.WriteLine($"Size: {FormatBytes(state.TotalBytes)}  Ranges: {state.SupportsRanges}  " +
                               $"Connections: {state.Segments.Count}");
 
-            await engine.RunAsync(state, reporter, options, cts.Token);
+            await engine.RunAsync(state, reporter, options, globalLimiter: null, cts.Token);
 
             reporter.Finish();
             Console.WriteLine($"\nCompleted: {state.DestinationPath}");

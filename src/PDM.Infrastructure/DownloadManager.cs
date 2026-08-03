@@ -39,6 +39,12 @@ public sealed class DownloadManager : IAsyncDisposable
     private readonly ConcurrentDictionary<Guid, ManagedDownload> _downloads = new();
     private readonly ConcurrentDictionary<Guid, RunningEntry> _running = new();
 
+    // A single rate limiter shared by every running download's segments, so the configured global
+    // speed cap is enforced as a true aggregate ceiling regardless of how many downloads run at once
+    // (the previous approach divided the cap by the max-simultaneous setting, under-using the link
+    // when fewer downloads were active). Reconfigured from settings on each scheduling pass.
+    private readonly SpeedLimiter _globalLimiter = new(0);
+
     // Signals the scheduler loop to re-evaluate what should be running.
     private readonly SemaphoreSlim _scheduleSignal = new(0, int.MaxValue);
     private readonly CancellationTokenSource _lifetimeCts = new();
@@ -944,9 +950,10 @@ public sealed class DownloadManager : IAsyncDisposable
         return new DownloadOptions
         {
             MaxConnections = maxConnections,
-            MaxBytesPerSecond = _settings.GlobalMaxBytesPerSecond > 0 && _settings.MaxSimultaneousDownloads > 0
-                ? _settings.GlobalMaxBytesPerSecond / Math.Max(1, _settings.MaxSimultaneousDownloads)
-                : 0,
+            // The global speed cap is enforced by the shared _globalLimiter across all downloads, so
+            // the per-download limiter is left unlimited here. This makes the cap a true aggregate
+            // ceiling that fully uses the link even when only one download is active.
+            MaxBytesPerSecond = 0,
             UserAgent = _settings.UserAgent
         };
     }
@@ -1001,6 +1008,9 @@ public sealed class DownloadManager : IAsyncDisposable
         {
             return;
         }
+
+        // Keep the shared cap in step with the current setting (no-op when unchanged).
+        _globalLimiter.SetBytesPerSecond(_settings.GlobalMaxBytesPerSecond);
 
         int slots = Math.Max(0, EffectiveMaxSimultaneousDownloads - _running.Count);
         if (slots == 0)
@@ -1058,7 +1068,8 @@ public sealed class DownloadManager : IAsyncDisposable
                     ReparallelizeRemaining(managed.State);
                 }
 
-                await _engine.RunAsync(managed.State, progress, BuildOptions(), cts.Token).ConfigureAwait(false);
+                await _engine.RunAsync(managed.State, progress, BuildOptions(), _globalLimiter, cts.Token)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
