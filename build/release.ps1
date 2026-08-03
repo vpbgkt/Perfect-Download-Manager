@@ -228,24 +228,37 @@ $setupPath = Join-Path $dist "PDM-$MsiVersion-Setup.exe"
 
 if (-not $SkipBuild) {
     Say ""
-    Say "==> Build (publish → installer → bootstrapper)" "Magenta"
+    Say "==> Build (NativeAOT publish -> zip -> installer -> bootstrapper)" "Magenta"
 
-    & (Join-Path $PSScriptRoot "publish.ps1") -Version $Version
-    Check-Exit "publish.ps1"
-    if (-not (Test-Path $zipPath)) { Die "Expected $zipPath was not produced." }
-    Ok "publish.ps1 → $zipPath"
+    # NativeAOT, runtime-free dist assembler for the Avalonia head. This is the ONLY publish
+    # path we ship. The old framework-dependent publish.ps1 (WPF head) has been deleted so we
+    # cannot accidentally cut a release from the wrong tree again.
+    & (Join-Path $PSScriptRoot "publish-aot-dist.ps1") -Version $Version
+    Check-Exit "publish-aot-dist.ps1"
+    $distPdm = Join-Path $dist "PDM"
+    if (-not (Test-Path (Join-Path $distPdm "PDM.exe"))) {
+        Die "publish-aot-dist.ps1 did not produce dist/PDM/PDM.exe."
+    }
+    Ok "publish-aot-dist.ps1 -> $distPdm"
+
+    # Assemble the update/portable zip from the runtime-free dist. Files sit at the archive
+    # root so the launcher can unpack straight over the install directory.
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Compress-Archive -Path (Join-Path $distPdm "*") -DestinationPath $zipPath -CompressionLevel Optimal
+    if (-not (Test-Path $zipPath)) { Die "Failed to create $zipPath." }
+    Ok "zipped -> $zipPath"
 
     & (Join-Path $PSScriptRoot "build-installer.ps1") -Version $MsiVersion
     Check-Exit "build-installer.ps1"
     if (-not (Test-Path $msiPath)) { Die "Expected $msiPath was not produced." }
-    Ok "build-installer.ps1 → $msiPath"
+    Ok "build-installer.ps1 -> $msiPath"
 
     & (Join-Path $PSScriptRoot "build-bundle.ps1") -Version $MsiVersion
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $setupPath)) {
         Warn "build-bundle.ps1 did not produce $setupPath. Continuing without the Setup.exe wrapper."
         $setupPath = $null
     } else {
-        Ok "build-bundle.ps1 → $setupPath"
+        Ok "build-bundle.ps1 -> $setupPath"
     }
 } else {
     Say ""

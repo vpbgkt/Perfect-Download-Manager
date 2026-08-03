@@ -1,7 +1,9 @@
 # Signs a release package and publishes it (+ its manifest) to the update bucket.
 #
 # Prereqs:
-#   1. ./build/publish.ps1 has produced dist/PDM-<version>.zip.
+#   1. ./build/release.ps1 has produced dist/PDM-<version>.zip (via publish-aot-dist.ps1 + zip).
+#      Do NOT run this script directly for a real release - use build/release.ps1 which orchestrates
+#      the entire flow (build, S3, downloads.json, git commit + tag + push).
 #   2. ./deploy.ps1 has been run (bucket exists, SSM key exists).
 #
 # What it does:
@@ -33,7 +35,7 @@ $bucket = "$BucketName-$accountId-aps1"
 
 $zip = Join-Path $repo "dist/PDM-$Version.zip"
 if (-not (Test-Path $zip)) {
-    Write-Error "Package not found at $zip. Run ./build/publish.ps1 -Version $Version first."
+    Write-Error "Package not found at $zip. Run ./build/release.ps1 -Version $Version first (it produces the zip from the NativeAOT dist)."
     exit 1
 }
 

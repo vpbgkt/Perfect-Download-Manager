@@ -1,18 +1,19 @@
-# Assembles the runtime-free distribution folder for the NativeAOT Windows build
-# (docs/MIGRATION-AVALONIA-NATIVEAOT.md §9, §11 Phase 2). Replaces the framework-dependent
-# publish.ps1 for the Avalonia head: the app, native host, and update launcher are all published
-# without a .NET runtime dependency, so the installer no longer needs to bundle/download the runtime.
+# Assembles the runtime-free distribution folder for the NativeAOT Windows build. Publishes the
+# Avalonia head + native host + update launcher without a .NET runtime dependency, so the
+# installer needs no runtime bundling/downloading. This is the ONLY publish path we ship - a real
+# release should always go through build/release.ps1, which calls this script and adds the zip,
+# MSI, Setup.exe, S3 upload, git commit + tag + push.
 #
 # Produces dist/PDM/ containing:
 #   PDM.exe                 - Avalonia desktop head, NativeAOT self-contained
 #   pdm-native-host.exe     - browser native-messaging host, NativeAOT self-contained
 #   pdm-update.exe          - update launcher, self-contained single-file
 #   <native deps>           - e_sqlite3.dll, Skia/HarfBuzz, ANGLE, etc. (from the AOT publish)
-#   Assets/pdm.ico          - loose icon for the installer + shortcuts (Avalonia embeds it, so it is
-#                             copied here explicitly for WiX)
+#   Assets/pdm.ico          - loose icon for the installer + shortcuts (Avalonia embeds it, so it
+#                             is copied here explicitly for WiX)
 #
 # Usage:
-#   ./build/publish-aot-dist.ps1 -Version 1.0.23
+#   ./build/publish-aot-dist.ps1 -Version 1.2.3
 
 param(
     [string]$Configuration = "Release",

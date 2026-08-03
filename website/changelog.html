@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Changelog â€” Perfect Download Manager (PDM) for Windows</title>
+    <title>Changelog Ã¢â‚¬â€ Perfect Download Manager (PDM) for Windows</title>
     <meta name="description" content="Release notes and version history for Perfect Download Manager (PDM), the free multi-connection download manager for Windows 10 and 11." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
 
@@ -49,20 +49,39 @@
     <main class="doc-content">
         <h1>Changelog</h1>
         <p>
-            Release notes for Perfect Download Manager (PDM). PDM updates itself automatically â€”
+            Release notes for Perfect Download Manager (PDM). PDM updates itself automatically Ã¢â‚¬â€
             existing installs are offered each new stable release from inside the app
-            (toolbar menu â†’ Check for Updates). You can also
+            (toolbar menu Ã¢â€ â€™ Check for Updates). You can also
             <a href="/#download">download the latest version</a> any time.
         </p>
 
-                <section>
-            <h2>1.2.2</h2>
+                        <section>
+            <h2>1.2.3</h2>
             <p class="release-date">2026-08-03</p>
             <p><em>Latest stable</em></p>
+            <ul>
+                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
+                <li>Release script now uses publish-aot-dist.ps1; removed the obsolete publish.ps1 and publish-avalonia-aot.ps1 so we cannot pick the wrong tree again.</li>
+            </ul>
+        </section>
+
+<section>
+            <h2>1.2.2</h2>
+            <p class="release-date">2026-08-03</p>
             <ul>
                 <li>Download popup: cleaner card layout with tighter spacing.</li>
                 <li>Sidebar: clickable logo now opens perfectdownloadmanager.com.</li>
                 <li>Internal: added build/release.ps1 one-command release automation.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>1.2.3</h2>
+            <p class="release-date">2026-08-03</p>
+            <p><em>Latest stable</em></p>
+            <ul>
+                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
+                <li>Release script now uses publish-aot-dist.ps1; removed the obsolete publish.ps1 and publish-avalonia-aot.ps1 so we cannot pick the wrong tree again.</li>
             </ul>
         </section>
 
@@ -70,22 +89,41 @@
             <h2>1.2.0</h2>
             <ul>
                 <li><strong>Rebuilt, modern interface.</strong> A faster, cleaner UI with polished light and dark themes, a collapsible sidebar, real per-file icons, and a redesigned download popup with a Download/Options layout.</li>
-                <li><strong>Smarter download status.</strong> The popup now explains stalls in plain language â€” no internet, waiting for the server, connection timed out, unstable network, or disk errors â€” instead of a silent "stuck" state.</li>
+                <li><strong>Smarter download status.</strong> The popup now explains stalls in plain language Ã¢â‚¬â€ no internet, waiting for the server, connection timed out, unstable network, or disk errors Ã¢â‚¬â€ instead of a silent "stuck" state.</li>
                 <li><strong>When-done actions.</strong> Optionally open the file automatically or shut down the PC after a download finishes (with a cancellable countdown).</li>
                 <li><strong>Cleaner toolbar &amp; quick access.</strong> Primary actions up top with an overflow menu, a one-click Downloads-folder button, remembered browser, and a merged Add/Bulk-add button.</li>
-                <li><strong>Self-contained &amp; lighter.</strong> The app now ships without a separate .NET runtime requirement â€” nothing extra to install.</li>
+                <li><strong>Self-contained &amp; lighter.</strong> The app now ships without a separate .NET runtime requirement Ã¢â‚¬â€ nothing extra to install.</li>
                 <li>Numerous reliability and performance improvements throughout.</li>
             </ul>
         </section>
 
-                <section>
-            <h2>1.2.2</h2>
+                        <section>
+            <h2>1.2.3</h2>
             <p class="release-date">2026-08-03</p>
             <p><em>Latest stable</em></p>
+            <ul>
+                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
+                <li>Release script now uses publish-aot-dist.ps1; removed the obsolete publish.ps1 and publish-avalonia-aot.ps1 so we cannot pick the wrong tree again.</li>
+            </ul>
+        </section>
+
+<section>
+            <h2>1.2.2</h2>
+            <p class="release-date">2026-08-03</p>
             <ul>
                 <li>Download popup: cleaner card layout with tighter spacing.</li>
                 <li>Sidebar: clickable logo now opens perfectdownloadmanager.com.</li>
                 <li>Internal: added build/release.ps1 one-command release automation.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>1.2.3</h2>
+            <p class="release-date">2026-08-03</p>
+            <p><em>Latest stable</em></p>
+            <ul>
+                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
+                <li>Release script now uses publish-aot-dist.ps1; removed the obsolete publish.ps1 and publish-avalonia-aot.ps1 so we cannot pick the wrong tree again.</li>
             </ul>
         </section>
 
@@ -96,20 +134,39 @@
                 <li><strong>Refreshed links on resume.</strong> When a download is resumed, PDM re-resolves the source link, so expiring CDN and file-host links keep working.</li>
                 <li><strong>Smarter duplicate detection.</strong> Starting a download PDM already has now recognises the same file even when the link changes each time (Google Drive, signed links), and offers to continue the existing partial download, open the finished file, or start a fresh copy.</li>
                 <li><strong>Change or refresh a download's link.</strong> Right-click a download to paste a new link, or re-capture a fresh one from your browser, and continue where you left off.</li>
-                <li><strong>Smaller, self-setup installer.</strong> The new installer is about 41&nbsp;MB and installs the .NET 10 runtime automatically if it's missing â€” no separate download.</li>
+                <li><strong>Smaller, self-setup installer.</strong> The new installer is about 41&nbsp;MB and installs the .NET 10 runtime automatically if it's missing Ã¢â‚¬â€ no separate download.</li>
                 <li><strong>Support & contact.</strong> Reach the team for help or license renewals from the toolbar menu and the <a href="/support">support page</a>.</li>
                 <li>Lower memory usage while idle, and a refreshed green installer.</li>
             </ul>
         </section>
 
-                <section>
-            <h2>1.2.2</h2>
+                        <section>
+            <h2>1.2.3</h2>
             <p class="release-date">2026-08-03</p>
             <p><em>Latest stable</em></p>
+            <ul>
+                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
+                <li>Release script now uses publish-aot-dist.ps1; removed the obsolete publish.ps1 and publish-avalonia-aot.ps1 so we cannot pick the wrong tree again.</li>
+            </ul>
+        </section>
+
+<section>
+            <h2>1.2.2</h2>
+            <p class="release-date">2026-08-03</p>
             <ul>
                 <li>Download popup: cleaner card layout with tighter spacing.</li>
                 <li>Sidebar: clickable logo now opens perfectdownloadmanager.com.</li>
                 <li>Internal: added build/release.ps1 one-command release automation.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>1.2.3</h2>
+            <p class="release-date">2026-08-03</p>
+            <p><em>Latest stable</em></p>
+            <ul>
+                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
+                <li>Release script now uses publish-aot-dist.ps1; removed the obsolete publish.ps1 and publish-avalonia-aot.ps1 so we cannot pick the wrong tree again.</li>
             </ul>
         </section>
 
@@ -144,7 +201,7 @@
                 <a href="/privacy.html">Privacy</a>
                 <a href="/support">Support</a>
             </nav>
-            <p class="footer-copy">Â© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
+            <p class="footer-copy">Ã‚Â© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
         </div>
     </footer>
 
