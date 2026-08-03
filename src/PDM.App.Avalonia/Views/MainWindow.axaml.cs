@@ -108,6 +108,32 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Opens the PDM official website in the user's default browser. Wired to the
+    /// sidebar brand (logo + wordmark).</summary>
+    private void OnOpenWebsite(object? sender, RoutedEventArgs e) =>
+        OpenExternal("https://perfectdownloadmanager.com", "Open website");
+
+    /// <summary>Opens the "Help or report a problem" feedback form in the user's default browser.
+    /// Wired to the More flyout item.</summary>
+    private void OnHelpOrReport(object? sender, RoutedEventArgs e) =>
+        OpenExternal("https://forms.gle/V6H35fHA3ViKgsgU6", "Help or report a problem");
+
+    /// <summary>
+    /// Launches an https URL through the OS shell (default browser). Failures show an in-app toast
+    /// rather than throw, so a missing or misconfigured default browser never crashes the app.
+    /// </summary>
+    private void OpenExternal(string url, string errorTitle)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            _notifier.ShowError(errorTitle, "Could not open the link in your default browser.");
+        }
+    }
+
     /// <summary>
     /// Opens the update window for the version the background check found. Wired to the sidebar
     /// "Update now" button; a no-op if the manifest is somehow gone (e.g. superseded).

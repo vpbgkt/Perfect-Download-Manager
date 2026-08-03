@@ -50,18 +50,23 @@
                      leaving just the status glyph. -->
                 <!-- Brand pinned to the very bottom; text hides when collapsed, leaving the logo only.
                      Declared first among the bottom-docked items so it takes the lowest edge, with the
-                     plan tag and update notice stacking above it. -->
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10"
-                            Margin="6,12,6,2" VerticalAlignment="Center">
-                    <Image Width="22" Height="22" VerticalAlignment="Center"
-                           Source="{x:Static views:MainWindow.AppIcon}" />
-                    <StackPanel VerticalAlignment="Center"
-                                IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
-                        <TextBlock Text="Perfect" FontWeight="Bold" FontSize="12.5"
-                                   Foreground="{DynamicResource AppTextPrimaryBrush}" />
-                        <TextBlock Text="Download Manager" Classes="caption" Margin="0,-2,0,0" />
+                     plan tag and update notice stacking above it. Wrapped in a ghost button so the
+                     whole logo+wordmark row opens the official website when clicked. -->
+                <Button DockPanel.Dock="Bottom" Classes="ghost" Click="OnOpenWebsite"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Padding="6,10" Margin="0,2,0,0"
+                        ToolTip.Tip="Open perfectdownloadmanager.com">
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Image Width="22" Height="22" VerticalAlignment="Center"
+                               Source="{x:Static views:MainWindow.AppIcon}" />
+                        <StackPanel VerticalAlignment="Center"
+                                    IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                            <TextBlock Text="Perfect" FontWeight="Bold" FontSize="12.5"
+                                       Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                            <TextBlock Text="Download Manager" Classes="caption" Margin="0,-2,0,0" />
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
+                </Button>
 
                 <!-- Plan tag: sits directly above the brand. Premium shows an accent badge;
                      free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
@@ -261,6 +266,8 @@
                             <MenuItem Header="License" Click="OnOpenLicense" />
                             <MenuItem Header="Browser setup" Click="OnBrowserSetup" />
                             <MenuItem Header="Check for updates" Click="OnCheckForUpdates" />
+                            <Separator />
+                            <MenuItem Header="Help or report a problem" Click="OnHelpOrReport" />
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
