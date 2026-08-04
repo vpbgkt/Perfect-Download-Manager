@@ -46,23 +46,72 @@ public sealed class JsonSettingsStore
                 return new AppSettings();
             }
 
-            await using var stream = new FileStream(
-                _path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-            try
+            AppSettings settings;
+            await using (var stream = new FileStream(
+                _path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true))
             {
-                return await JsonSerializer.DeserializeAsync(stream, AppSettingsTypeInfo, cancellationToken)
-                       .ConfigureAwait(false) ?? new AppSettings();
+                try
+                {
+                    settings = await JsonSerializer
+                                   .DeserializeAsync(stream, AppSettingsTypeInfo, cancellationToken)
+                                   .ConfigureAwait(false) ?? new AppSettings();
+                }
+                catch (JsonException)
+                {
+                    // Corrupt settings should not brick the app; fall back to defaults.
+                    return new AppSettings();
+                }
             }
-            catch (JsonException)
+
+            // Apply one-time migrations and persist them, so an existing install picks up improved
+            // defaults instead of being stuck on the values written by an older version.
+            if (Migrate(settings))
             {
-                // Corrupt settings should not brick the app; fall back to defaults.
-                return new AppSettings();
+                try
+                {
+                    await WriteAsync(settings, cancellationToken).ConfigureAwait(false);
+                }
+                catch (IOException)
+                {
+                    // A failed migration write is non-fatal: the migrated values are already in effect
+                    // for this session and the write will be retried on the next load.
+                }
             }
+
+            return settings;
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Brings an older settings file up to date. Returns true when something changed and the file
+    /// should be rewritten.
+    ///
+    /// <para>Migrations must only replace values that are recognisably an old <em>default</em>, never a
+    /// value the user may have chosen deliberately — hence the equality checks against the previous
+    /// defaults rather than blanket overwrites.</para>
+    /// </summary>
+    private static bool Migrate(AppSettings settings)
+    {
+        bool changed = false;
+
+        // v1: the per-download connection default moved from 8 to 16 (see AppSettings for the
+        // rationale). Only bump installs still sitting on the old default of exactly 8.
+        if (settings.SettingsVersion < 1)
+        {
+            if (settings.MaxConnectionsPerDownload == 8)
+            {
+                settings.MaxConnectionsPerDownload = 16;
+            }
+
+            settings.SettingsVersion = 1;
+            changed = true;
+        }
+
+        return changed;
     }
 
     /// <summary>Persists the given settings, replacing any previous file atomically.</summary>
@@ -73,27 +122,37 @@ public sealed class JsonSettingsStore
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            string tempPath = _path + ".tmp";
-            await using (var stream = new FileStream(
-                tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true))
-            {
-                await JsonSerializer.SerializeAsync(stream, settings, AppSettingsTypeInfo, cancellationToken)
-                    .ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            if (File.Exists(_path))
-            {
-                File.Replace(tempPath, _path, destinationBackupFileName: null);
-            }
-            else
-            {
-                File.Move(tempPath, _path);
-            }
+            await WriteAsync(settings, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Writes the settings atomically (temp file then replace). Caller must already hold
+    /// <see cref="_gate"/>; kept separate so the migration path in <see cref="LoadAsync"/> can reuse it
+    /// without re-entering the non-reentrant semaphore.
+    /// </summary>
+    private async Task WriteAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        string tempPath = _path + ".tmp";
+        await using (var stream = new FileStream(
+            tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+        {
+            await JsonSerializer.SerializeAsync(stream, settings, AppSettingsTypeInfo, cancellationToken)
+                .ConfigureAwait(false);
+            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (File.Exists(_path))
+        {
+            File.Replace(tempPath, _path, destinationBackupFileName: null);
+        }
+        else
+        {
+            File.Move(tempPath, _path);
         }
     }
 }

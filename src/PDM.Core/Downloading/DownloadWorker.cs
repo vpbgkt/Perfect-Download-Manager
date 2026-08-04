@@ -818,13 +818,41 @@ public sealed class DownloadWorker
         _state.Status = DownloadStatus.Verifying;
         Report(stopwatch, force: true);
 
+        // Real integrity verification before the file is handed to the user.
+        //
+        // IMPORTANT: comparing the part file's length against TotalBytes is NOT a verification. The
+        // part file is preallocated to the full size by PreparePartFile (SetLength) before any byte
+        // arrives, so its length always matches and such a check can never fail. A download that
+        // missed a region would sail through it and be delivered with zero-filled holes — which is
+        // exactly how a "successfully downloaded" archive ends up failing to extract.
+        //
+        // Instead we verify the byte accounting itself: every segment complete, the segment ranges
+        // tiling the file exactly once with no gaps or overlaps, and the accounted bytes summing to
+        // the expected size.
+        string? problem = VerifyTransferCompleteness();
+        if (problem is not null)
+        {
+            // Never deliver a file we cannot prove is complete. Reset the plan so the retry
+            // re-downloads from scratch rather than resuming on top of suspect data.
+            ResetPlanForCleanRetry();
+
+            _state.Status = DownloadStatus.Failed;
+            _state.ErrorMessage =
+                $"Integrity check failed: {problem}. The file was not saved; the download will start over.";
+            _state.CompletedUtc = DateTimeOffset.UtcNow;
+            await SaveStateSafelyAsync().ConfigureAwait(false);
+            throw new DownloadException(_state.ErrorMessage);
+        }
+
+        // Secondary sanity check: catches a part file truncated or tampered with outside PDM.
         long actual = new FileInfo(PartPath).Length;
         if (_state.TotalBytes is > 0 && actual != _state.TotalBytes.Value)
         {
             _state.Status = DownloadStatus.Failed;
+            _state.ErrorMessage =
+                $"Size mismatch: expected {_state.TotalBytes.Value} bytes but the file on disk is {actual}.";
             await SaveStateSafelyAsync().ConfigureAwait(false);
-            throw new DownloadException(
-                $"Size mismatch: expected {_state.TotalBytes.Value} bytes but wrote {actual}.");
+            throw new DownloadException(_state.ErrorMessage);
         }
 
         _state.Status = DownloadStatus.Assembling;
@@ -839,6 +867,106 @@ public sealed class DownloadWorker
         _state.ErrorMessage = null;
         await _stateStore.SaveAsync(_state, cancellationToken).ConfigureAwait(false);
         Report(stopwatch, force: true);
+    }
+
+    /// <summary>
+    /// Proves the transfer actually covered every byte of the file, returning null when everything
+    /// checks out or a human-readable description of the first problem found.
+    ///
+    /// <para>This is the guard that makes a silently-incomplete download impossible. Because the part
+    /// file is preallocated to its final size, a length comparison proves nothing; what matters is
+    /// whether the segments account for the whole file:</para>
+    /// <list type="number">
+    ///   <item><b>Every segment complete</b> — no connection stopped early.</item>
+    ///   <item><b>Ranges tile the file exactly</b> — sorted by start offset they must be perfectly
+    ///         contiguous from byte 0 to the last byte, with no gap (a gap would be a zero-filled hole
+    ///         in the output) and no overlap (an overlap means some region was never claimed).</item>
+    ///   <item><b>Accounted bytes equal the file size</b> — a final independent cross-check of the
+    ///         per-segment counters against the expected total.</item>
+    /// </list>
+    /// Together these catch any plan or scheduling defect that would otherwise produce a corrupt file,
+    /// including a bad work-stealing split.
+    /// </summary>
+    private string? VerifyTransferCompleteness()
+    {
+        // One reference to the copy-on-write plan for a self-consistent view.
+        List<DownloadSegment> plan = _state.Segments;
+
+        if (plan.Count == 0)
+        {
+            return "the download plan is empty";
+        }
+
+        for (int i = 0; i < plan.Count; i++)
+        {
+            DownloadSegment s = plan[i];
+            if (!s.IsComplete)
+            {
+                return $"segment {s.Index} is incomplete ({s.BytesDownloaded:N0} of {s.Length:N0} bytes)";
+            }
+        }
+
+        // An unknown-size download is a single open-ended stream that discovered its own length at
+        // end-of-stream; there is no expected total to cross-check it against.
+        if (_state.TotalBytes is not > 0)
+        {
+            return null;
+        }
+
+        long total = _state.TotalBytes.Value;
+
+        // Ranges must form a perfect, contiguous cover of [0, total).
+        List<DownloadSegment> ordered = plan.OrderBy(s => s.Start).ToList();
+        long cursor = 0;
+        foreach (DownloadSegment s in ordered)
+        {
+            if (s.Start != cursor)
+            {
+                return s.Start > cursor
+                    ? $"a {s.Start - cursor:N0} byte gap was left at offset {cursor:N0}"
+                    : $"segments overlap at offset {s.Start:N0}";
+            }
+
+            cursor = s.End + 1;
+        }
+
+        if (cursor != total)
+        {
+            return $"the plan covers {cursor:N0} bytes but the file is {total:N0} bytes";
+        }
+
+        // Independent cross-check of the byte counters.
+        long accounted = 0;
+        for (int i = 0; i < plan.Count; i++)
+        {
+            accounted += Math.Min(plan[i].BytesDownloaded, plan[i].Length);
+        }
+
+        if (accounted != total)
+        {
+            return $"only {accounted:N0} of {total:N0} bytes were accounted for";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Discards the current plan and rebuilds a fresh one from byte 0, so a download that failed
+    /// verification restarts cleanly instead of resuming on top of data we could not prove correct.
+    /// Correctness is preferred over saving the partial transfer here: delivering a corrupt file is a
+    /// far worse outcome than re-downloading.
+    /// </summary>
+    private void ResetPlanForCleanRetry()
+    {
+        lock (_planLock)
+        {
+            _state.Segments = SegmentPlanner.Plan(_state.TotalBytes, _state.SupportsRanges, _options);
+            _claimed.Clear();
+            for (int i = 0; i < _liveBytes.Length; i++)
+            {
+                Interlocked.Exchange(ref _liveBytes[i], 0);
+            }
+        }
     }
 
     private async Task RunProgressLoopAsync(Stopwatch stopwatch, CancellationToken token)

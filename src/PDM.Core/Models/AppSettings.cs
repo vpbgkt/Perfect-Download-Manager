@@ -6,6 +6,12 @@ namespace PDM.Core.Models;
 /// </summary>
 public sealed class AppSettings
 {
+    /// <summary>
+    /// Schema version of the persisted settings file, used to apply one-time migrations when defaults
+    /// change. 0 means the file predates versioning. See <c>JsonSettingsStore.Migrate</c>.
+    /// </summary>
+    public int SettingsVersion { get; set; }
+
     /// <summary>Directory used when a download does not specify one.</summary>
     public string DefaultDownloadDirectory { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "PDM");
