@@ -24,6 +24,20 @@ public sealed class DownloadState
     /// </summary>
     public string? Referrer { get; set; }
 
+    // ──────────────────────────────────────────────────────────────────────────────────────
+    // TODO: Add when implementing session-cookie forwarding for login-gated downloads.
+    //
+    // /// <summary>
+    // /// Optional HTTP headers captured from the browser's original request (primarily Cookie /
+    // /// Authorization). Forwarded on every segment request so downloads behind a login session
+    // /// (Google Drive large files, OneDrive, Dropbox, etc.) succeed the same way as in the browser.
+    // /// Null when the extension did not capture headers or the download is public.
+    // /// Persisted so a resumed download can re-send them; consider encrypting at rest (DPAPI).
+    // /// Cookies expire — a "re-capture from browser" UX may be needed when they go stale.
+    // /// </summary>
+    // public Dictionary<string, string>? Headers { get; set; }
+    // ──────────────────────────────────────────────────────────────────────────────────────
+
     /// <summary>Absolute path to the final output file.</summary>
     public string DestinationPath { get; set; } = string.Empty;
 

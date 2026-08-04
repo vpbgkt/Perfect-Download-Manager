@@ -287,6 +287,34 @@ public sealed class DownloadWorker
             request.Headers.Referrer = referrerUri;
         }
 
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        // TODO: Forward session cookies / auth headers here when implementing login-gated downloads.
+        //
+        // Once DownloadState carries a persisted Headers dictionary (captured from the browser via
+        // DownloadRequest.Headers), attach them to every outgoing request like we do with Referrer:
+        //
+        //   if (_state.Headers is { Count: > 0 } headers)
+        //   {
+        //       foreach (var (name, value) in headers)
+        //       {
+        //           // Only forward safe, download-relevant headers (Cookie, Authorization).
+        //           // Skip headers the HttpClient sets itself (Range, User-Agent, Accept, etc.).
+        //           if (IsForwardableHeader(name))
+        //           {
+        //               request.Headers.TryAddWithoutValidation(name, value);
+        //           }
+        //       }
+        //   }
+        //
+        // This is the fix for large Google Drive files (and any login-gated download) that currently
+        // fail with "The server returned a web page instead of the file". The browser succeeds
+        // because it sends its session Cookie; without it, Google returns an HTML interstitial.
+        //
+        // Blocked on: browser extension needing the "cookies" or "webRequest" permission, which adds
+        // friction for users who distrust broad permissions. Planned as an opt-in advanced feature.
+        // See DownloadRequest.cs class-level remarks for the full design notes.
+        // ──────────────────────────────────────────────────────────────────────────────────────
+
         // A single-segment plan has exactly one writer, so it can safely resume via a range request
         // even if multi-connection range support was previously ruled out (the response's start
         // offset is validated below before any byte is written).

@@ -44,6 +44,21 @@ public sealed class RemoteFileInspector : IRemoteFileInspector
             request.Headers.Referrer = referrerUri;
         }
 
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        // TODO: Forward session cookies / auth headers on the probe too (same as in DownloadWorker).
+        //
+        // Without the browser's session Cookie, Google Drive (and similar login-gated services)
+        // may return an HTML interstitial even on the probe request, causing PrepareAsync to throw
+        // LikelyWebPageException for a URL that is actually a valid file when the session is present.
+        //
+        // Once DownloadRequest/DownloadState carries a Headers dictionary, accept it as a parameter
+        // here and attach forwardable headers to this probe request. This mirrors the existing
+        // Referrer forwarding pattern above.
+        //
+        // See DownloadRequest.cs class-level remarks for the full implementation plan and why this
+        // is blocked on browser extension permission decisions.
+        // ──────────────────────────────────────────────────────────────────────────────────────
+
         using HttpResponseMessage response = await _client
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
