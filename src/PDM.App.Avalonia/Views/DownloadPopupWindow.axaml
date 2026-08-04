@@ -5,8 +5,8 @@
         x:Class="PDM.App.Avalonia.Views.DownloadPopupWindow"
         x:DataType="vm:DownloadPopupViewModel"
         Title="{Binding FileNameDisplay}"
-        Width="540" Height="400"
-        MinWidth="480" MinHeight="360"
+        Width="700" Height="400"
+        MinWidth="600" MinHeight="360"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppWindowBackgroundBrush}">
 
@@ -118,7 +118,12 @@
                             </Border>
 
                             <!-- Live metrics (hidden once terminal). -->
-                            <Grid ColumnDefinitions="*,*,*,*" IsVisible="{Binding ShowLiveMetrics}">
+                            <!-- Live metrics (hidden once terminal). TRANSFERRED holds the longest
+                                 value ("1.2 GB / 100 GB"), so it gets extra star width, and an explicit
+                                 ColumnSpacing guarantees a gap so 3-digit sizes can never run into the
+                                 SPEED column. Values wrap-free with ellipsis as a final guard. -->
+                            <Grid ColumnDefinitions="1.7*,*,*,0.8*" ColumnSpacing="16"
+                                  IsVisible="{Binding ShowLiveMetrics}">
                                 <StackPanel Grid.Column="0" Spacing="3">
                                     <TextBlock Classes="section" Text="TRANSFERRED" />
                                     <TextBlock Text="{Binding DownloadedText}" FontWeight="SemiBold"
@@ -126,15 +131,18 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Spacing="3">
                                     <TextBlock Classes="section" Text="SPEED" />
-                                    <TextBlock Text="{Binding SpeedText}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding SpeedText}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Spacing="3">
                                     <TextBlock Classes="section" Text="TIME LEFT" />
-                                    <TextBlock Text="{Binding EtaText}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding EtaText}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="3" Spacing="3">
                                     <TextBlock Classes="section" Text="LINKS" />
-                                    <TextBlock Text="{Binding ConnectionsText}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding ConnectionsText}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                             </Grid>
 

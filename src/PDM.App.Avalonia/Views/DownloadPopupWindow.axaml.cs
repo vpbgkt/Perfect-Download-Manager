@@ -52,19 +52,56 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         // Run the "when done" options once the download finishes (auto-open/extract and/or shutdown).
         _viewModel.Completed += OnDownloadCompleted;
 
-        // Surface the popup above other windows *once* when the link is received (so it isn't missed),
-        // then let it behave like a normal window — clicking another window brings that forward.
+        // Surface the popup above other windows when the link is received (so it isn't missed), then
+        // let it behave like a normal window — clicking another window brings that forward.
         Opened += OnPopupOpened;
+        Deactivated += OnPopupDeactivated;
     }
 
     private void OnPopupOpened(object? sender, EventArgs e)
     {
-        WindowForeground.BringToFrontOnce(this);
+        SurfaceToUser();
 
         // "Download link received" chime — only for a live download, not when reopening a finished one.
         if (!_viewModel.IsTerminal)
         {
             NotificationSound.Play();
+        }
+    }
+
+    /// <summary>
+    /// Raises the popup above every other window and keeps it pinned until the user interacts with a
+    /// different window.
+    /// <para>
+    /// A plain <c>SetForegroundWindow</c>/one-shot raise is not enough for the browser-extension flow:
+    /// the capture arrives while the <em>browser</em> owns the foreground, and Windows refuses to let a
+    /// background process steal focus, so the popup ended up behind the browser. Setting
+    /// <see cref="Window.Topmost"/> does not require foreground rights, so it reliably brings the popup
+    /// into view; <see cref="OnPopupDeactivated"/> then clears it on the first click elsewhere so the
+    /// window does not stay stuck above everything.
+    /// </para>
+    /// </summary>
+    private void SurfaceToUser()
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Topmost = true;
+        WindowForeground.BringToFrontOnce(this);
+        Activate();
+    }
+
+    /// <summary>
+    /// Releases the temporary always-on-top pin as soon as the user moves to another window, restoring
+    /// normal z-order behaviour (Requirement: on top until the user clicks away, then normal).
+    /// </summary>
+    private void OnPopupDeactivated(object? sender, EventArgs e)
+    {
+        if (Topmost)
+        {
+            Topmost = false;
         }
     }
 
@@ -87,14 +124,12 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         }
     }
 
-    // IDownloadPopup.Activate() is void; Window.Activate() is also void here, but implement
-    // explicitly for clarity and to bring the window to the foreground.
-    void IDownloadPopup.Activate()
-    {
-        Activate();
-        Topmost = true;
-        Topmost = false;
-    }
+    /// <summary>
+    /// Called by <see cref="PopupManager"/> when an already-open popup is re-requested (e.g. "Show
+    /// popup" from the main window, or a duplicate capture for the same download). Routed through the
+    /// same surfacing path so a reopened popup reliably comes to the front too.
+    /// </summary>
+    void IDownloadPopup.Activate() => SurfaceToUser();
 
     /// <inheritdoc />
     public void ApplyProgress(DownloadProgress progress) => _viewModel.ApplyProgress(progress);
@@ -174,10 +209,10 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     /// </summary>
     private async void OnDownloadCompleted()
     {
-        // Completion chime, and surface the popup once so the finished download isn't missed (it
-        // does not stay pinned on top afterwards).
+        // Completion chime, and surface the popup so the finished download isn't missed. The pin is
+        // released as soon as the user clicks another window.
         NotificationSound.Play();
-        WindowForeground.BringToFrontOnce(this);
+        SurfaceToUser();
 
         // Auto-extract takes precedence over auto-open for archives; both are user-armed intents.
         if (_viewModel.AutoExtractWhenDone && _viewModel.IsArchive && App.Host is { } host)
@@ -260,6 +295,8 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         // Closing is a pure window-lifecycle event: it never pauses/cancels the download or interrupts
         // the transfer. Notify the manager so it releases this popup while keeping it reopenable.
         _viewModel.Completed -= OnDownloadCompleted;
+        Opened -= OnPopupOpened;
+        Deactivated -= OnPopupDeactivated;
         StopShutdownTimer();
         _onClosed?.Invoke(_viewModel.Id);
         base.OnClosed(e);
