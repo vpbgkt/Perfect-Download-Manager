@@ -126,8 +126,13 @@ public sealed class DownloadEngine
 
         var state = new DownloadState
         {
-            SourceUrl = url.ToString(),
-            EffectiveUrl = info.EffectiveUrl.ToString(),
+            // Persist URLs via AbsoluteUri, NOT ToString(). Uri.ToString() is a display form that
+            // unescapes percent-encoded reserved characters (e.g. "%3A" -> ":"), which silently
+            // corrupts signed download tokens such as Google Drive's "&at=...%3A..." parameter when
+            // the URL is later rebuilt and re-sent. AbsoluteUri preserves the exact escaping so the
+            // request we send matches what the browser sent.
+            SourceUrl = url.AbsoluteUri,
+            EffectiveUrl = info.EffectiveUrl.AbsoluteUri,
             Referrer = string.IsNullOrWhiteSpace(referrer) ? null : referrer,
             DestinationPath = destination,
             TotalBytes = info.TotalBytes,

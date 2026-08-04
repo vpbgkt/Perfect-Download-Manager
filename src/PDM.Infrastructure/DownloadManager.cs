@@ -174,7 +174,8 @@ public sealed class DownloadManager : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(url);
 
-        string target = url.ToString();
+        // AbsoluteUri to match how URLs are stored on the state (see PrepareFromInfoAsync).
+        string target = url.AbsoluteUri;
         string candidateName = ResolveCandidateName(url, candidateFileName);
         bool useName = IsUsableName(candidateName);
 
@@ -328,7 +329,8 @@ public sealed class DownloadManager : IAsyncDisposable
     /// </summary>
     private DuplicateInfo? MatchByFileInfo(RemoteFileInfo info)
     {
-        string effective = info.EffectiveUrl.ToString();
+        // AbsoluteUri to match how URLs are stored on the state (see PrepareFromInfoAsync).
+        string effective = info.EffectiveUrl.AbsoluteUri;
         string? name = string.IsNullOrWhiteSpace(info.SuggestedFileName)
             ? null
             : FileNameResolver.Sanitize(info.SuggestedFileName);
@@ -566,9 +568,10 @@ public sealed class DownloadManager : IAsyncDisposable
             ResetPlanFromProbe(state, newInfo, BuildOptions());
         }
 
-        // Common metadata update for every accepted path.
-        state.SourceUrl = newUrl.ToString();
-        state.EffectiveUrl = newInfo.EffectiveUrl.ToString();
+        // Common metadata update for every accepted path. Use AbsoluteUri (not ToString(), which is
+        // lossy for percent-encoded reserved characters) so signed tokens in the URL survive intact.
+        state.SourceUrl = newUrl.AbsoluteUri;
+        state.EffectiveUrl = newInfo.EffectiveUrl.AbsoluteUri;
         state.Referrer = string.IsNullOrWhiteSpace(normalizedReferrer) ? null : normalizedReferrer;
         state.ETag = newInfo.ETag;
         state.LastModified = newInfo.LastModified;
@@ -1148,7 +1151,9 @@ public sealed class DownloadManager : IAsyncDisposable
             return;
         }
 
-        string fresh = info.EffectiveUrl.ToString();
+        // AbsoluteUri (not the lossy ToString()) so any signed token in the refreshed link is kept
+        // byte-for-byte and the resumed request is accepted by the server.
+        string fresh = info.EffectiveUrl.AbsoluteUri;
         if (!string.Equals(state.EffectiveUrl, fresh, StringComparison.Ordinal))
         {
             _logger.LogInformation("Refreshed effective URL for resumed download {Id}.", state.Id);
