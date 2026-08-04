@@ -60,6 +60,20 @@ public sealed class DownloadState
     /// <summary>Server Last-Modified captured at plan time; a weak resume validator.</summary>
     public DateTimeOffset? LastModified { get; set; }
 
+    /// <summary>
+    /// Digest algorithm the server advertised for this content (e.g. <c>SHA-256</c>), or null when it
+    /// advertised none. Persisted so verification still happens after a resume or app restart.
+    /// </summary>
+    public string? ExpectedDigestAlgorithm { get; set; }
+
+    /// <summary>
+    /// Expected content digest as base64, paired with <see cref="ExpectedDigestAlgorithm"/>. When both
+    /// are set, the completed file is hashed and must match before it is delivered. When null (the
+    /// common case, since most servers publish no digest) the download completes on byte accounting
+    /// alone.
+    /// </summary>
+    public string? ExpectedDigestValue { get; set; }
+
     /// <summary>Current lifecycle status.</summary>
     public DownloadStatus Status { get; set; } = DownloadStatus.Queued;
 

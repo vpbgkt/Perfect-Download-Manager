@@ -575,6 +575,10 @@ public sealed class DownloadManager : IAsyncDisposable
         state.Referrer = string.IsNullOrWhiteSpace(normalizedReferrer) ? null : normalizedReferrer;
         state.ETag = newInfo.ETag;
         state.LastModified = newInfo.LastModified;
+        // Adopt the new link's digest (if it published one) so verification checks the file against the
+        // source we are actually downloading from.
+        state.ExpectedDigestAlgorithm = newInfo.DigestAlgorithm;
+        state.ExpectedDigestValue = newInfo.DigestValue;
         state.ErrorMessage = null;
         state.CompletedUtc = null;
         state.Status = DownloadStatus.Queued;
@@ -1162,6 +1166,15 @@ public sealed class DownloadManager : IAsyncDisposable
         state.EffectiveUrl = fresh;
         state.ETag = info.ETag;
         state.LastModified = info.LastModified;
+
+        // Keep the digest in step with the refreshed link. Only overwrite when the fresh probe actually
+        // published one, so a server that omits it on the refresh does not discard a digest we already
+        // captured for the same (size- and ETag-verified) content.
+        if (!string.IsNullOrWhiteSpace(info.DigestAlgorithm) && !string.IsNullOrWhiteSpace(info.DigestValue))
+        {
+            state.ExpectedDigestAlgorithm = info.DigestAlgorithm;
+            state.ExpectedDigestValue = info.DigestValue;
+        }
     }
 
     /// <summary>

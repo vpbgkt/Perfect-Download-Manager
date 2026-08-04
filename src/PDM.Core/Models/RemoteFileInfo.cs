@@ -28,6 +28,18 @@ public sealed class RemoteFileInfo
     public DateTimeOffset? LastModified { get; init; }
 
     /// <summary>
+    /// Canonical name of the digest algorithm the server advertised (e.g. <c>SHA-256</c>), or null when
+    /// it advertised none. Most servers do not, which is expected and never blocks a download.
+    /// </summary>
+    public string? DigestAlgorithm { get; init; }
+
+    /// <summary>
+    /// The expected content digest as base64, paired with <see cref="DigestAlgorithm"/>. When present,
+    /// the completed file is hashed and compared against it before being delivered.
+    /// </summary>
+    public string? DigestValue { get; init; }
+
+    /// <summary>
     /// True when we know the total size and the server supports ranges, meaning a
     /// multi-connection segmented download is possible.
     /// </summary>

@@ -110,6 +110,11 @@ public sealed class RemoteFileInspector : IRemoteFileInspector
         string fileName = FileNameResolver.Resolve(
             effective, response.Content.Headers.ContentDisposition, contentType);
 
+        // Opportunistically pick up a content digest (Repr-Digest / Digest / Content-MD5) so the
+        // finished file can be verified byte-for-byte. Servers rarely advertise one; when absent this
+        // is simply null and the download proceeds and completes as usual.
+        (string Algorithm, string Value)? digest = ContentDigest.TryExtract(response);
+
         return new RemoteFileInfo
         {
             EffectiveUrl = effective,
@@ -118,7 +123,9 @@ public sealed class RemoteFileInspector : IRemoteFileInspector
             SuggestedFileName = fileName,
             ContentType = contentType,
             ETag = response.Headers.ETag?.ToString(),
-            LastModified = response.Content.Headers.LastModified
+            LastModified = response.Content.Headers.LastModified,
+            DigestAlgorithm = digest?.Algorithm,
+            DigestValue = digest?.Value
         };
     }
 }

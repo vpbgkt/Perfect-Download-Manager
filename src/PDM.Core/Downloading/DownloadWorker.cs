@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using PDM.Core.Abstractions;
 using PDM.Core.Models;
+using PDM.Core.Util;
 
 namespace PDM.Core.Downloading;
 
@@ -855,6 +856,11 @@ public sealed class DownloadWorker
             throw new DownloadException(_state.ErrorMessage);
         }
 
+        // Strongest available proof: hash the file and compare against the digest the server published.
+        // Skipped silently when the server advertised none (the common case), so this never prevents a
+        // download from completing — it only adds certainty when the server gave us something to check.
+        await VerifyContentDigestAsync(cancellationToken).ConfigureAwait(false);
+
         _state.Status = DownloadStatus.Assembling;
 
         // Atomically move the completed part file to its final destination. The overwrite overload
@@ -948,6 +954,70 @@ public sealed class DownloadWorker
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Hashes the completed part file and compares it against the digest the server advertised, so a
+    /// file that is the right size but the wrong content is caught rather than delivered.
+    ///
+    /// <para><b>Optional by design.</b> Every step is a no-op when the information is not available:
+    /// no digest advertised, an algorithm PDM cannot compute, or verification disabled via
+    /// <see cref="DownloadOptions.VerifyContentDigest"/>. In all those cases the method simply returns
+    /// and the download completes on byte accounting alone. A missing digest is never an error.</para>
+    ///
+    /// <para>A genuine mismatch means the bytes are wrong, so the file is not delivered: the plan is
+    /// reset and the download is failed with a clear message, exactly like a completeness failure.</para>
+    /// </summary>
+    private async Task VerifyContentDigestAsync(CancellationToken cancellationToken)
+    {
+        if (!_options.VerifyContentDigest)
+        {
+            return;
+        }
+
+        string? algorithm = _state.ExpectedDigestAlgorithm;
+        string? expected = _state.ExpectedDigestValue;
+
+        // No digest offered by the server, or one we cannot compute: nothing to verify against.
+        if (string.IsNullOrWhiteSpace(algorithm) ||
+            string.IsNullOrWhiteSpace(expected) ||
+            !ContentDigest.IsSupported(algorithm))
+        {
+            return;
+        }
+
+        string computed;
+        try
+        {
+            computed = await ContentDigest
+                .ComputeBase64Async(PartPath, algorithm, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw; // a pause during verification is not a failure
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // We could not read the file back to hash it. Treat this as inconclusive rather than as a
+            // corruption verdict: the byte accounting already passed, so deliver the file.
+            return;
+        }
+
+        if (ContentDigest.Matches(expected!, computed, algorithm!))
+        {
+            return; // verified byte-for-byte
+        }
+
+        ResetPlanForCleanRetry();
+
+        _state.Status = DownloadStatus.Failed;
+        _state.ErrorMessage =
+            $"{algorithm} checksum mismatch: the downloaded data does not match the checksum published " +
+            "by the server, so the file was not saved. The download will start over.";
+        _state.CompletedUtc = DateTimeOffset.UtcNow;
+        await SaveStateSafelyAsync().ConfigureAwait(false);
+        throw new DownloadException(_state.ErrorMessage);
     }
 
     /// <summary>
@@ -1185,6 +1255,8 @@ public sealed class DownloadWorker
             AllowWebPage = _state.AllowWebPage,
             ETag = _state.ETag,
             LastModified = _state.LastModified,
+            ExpectedDigestAlgorithm = _state.ExpectedDigestAlgorithm,
+            ExpectedDigestValue = _state.ExpectedDigestValue,
             Status = _state.Status,
             Category = _state.Category,
             CustomCategory = _state.CustomCategory,

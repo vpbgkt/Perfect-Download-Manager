@@ -77,6 +77,16 @@ public sealed class DownloadOptions
     /// <summary>Custom User-Agent header; a sensible default is used when null.</summary>
     public string? UserAgent { get; init; }
 
+    /// <summary>
+    /// When true (the default), a completed file is hashed and compared against the digest the server
+    /// advertised (<c>Repr-Digest</c>, <c>Digest</c>, or <c>Content-MD5</c>) before being delivered.
+    ///
+    /// <para>This only costs anything when a server actually publishes a digest, which is uncommon; with
+    /// no digest available the download completes exactly as before. Set to false to skip the hash pass
+    /// even when a digest is offered (e.g. to save time on very large files over slow storage).</para>
+    /// </summary>
+    public bool VerifyContentDigest { get; init; } = true;
+
     /// <summary>Validates the option values, throwing when a value is out of range.</summary>
     public void Validate()
     {

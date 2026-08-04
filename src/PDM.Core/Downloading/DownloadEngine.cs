@@ -142,6 +142,10 @@ public sealed class DownloadEngine
             AllowWebPage = allowWebPage,
             ETag = info.ETag,
             LastModified = info.LastModified,
+            // Carried through so the finished file can be verified against the server's digest when one
+            // was advertised. Null (no digest offered) is normal and simply skips that check.
+            ExpectedDigestAlgorithm = info.DigestAlgorithm,
+            ExpectedDigestValue = info.DigestValue,
             Status = DownloadStatus.Queued,
             Category = category ?? CategoryClassifier.Classify(fileName),
             Segments = segments
