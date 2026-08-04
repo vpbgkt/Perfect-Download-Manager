@@ -137,6 +137,9 @@ public sealed class DownloadEngine
             DestinationPath = destination,
             TotalBytes = info.TotalBytes,
             SupportsRanges = info.SupportsRanges,
+            // Remember that HTML was explicitly permitted so the worker won't later treat an HTML
+            // body as an expired-link/interstitial error.
+            AllowWebPage = allowWebPage,
             ETag = info.ETag,
             LastModified = info.LastModified,
             Status = DownloadStatus.Queued,

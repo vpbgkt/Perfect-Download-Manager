@@ -332,6 +332,20 @@ public sealed class DownloadWorker
 
         EnsureAcceptableStatus(response);
 
+        // The download was already confirmed to be a real file at prepare time, so an HTML response
+        // here means the link is no longer serving the file: it has expired, hit a quota, or now
+        // needs the browser's sign-in/session (very common with Google Drive large-file "confirm"
+        // links, whose tokens are short-lived / session-bound). Fail fast with a clear, honest
+        // message instead of streaming the ~1 KB warning page and then reporting a size mismatch or a
+        // misleading "Unstable connection" after several retries.
+        if (!_state.AllowWebPage && IsWebPageResponse(response))
+        {
+            throw new DownloadException(
+                "The server returned a web page instead of the file. The download link has likely " +
+                "expired or needs to be opened in your browser first (common for large Google Drive " +
+                "files). Re-capture the download with the browser extension or paste a fresh link.");
+        }
+
         // Reconcile the response with what we requested. For a single-segment download a full 200 (or
         // a range at the wrong offset) is handled by (re)starting from byte 0; for a multi-segment plan
         // it throws RangeNotHonoredException so RunAsync collapses the whole download to a single stream.
@@ -751,6 +765,7 @@ public sealed class DownloadWorker
             DestinationPath = _state.DestinationPath,
             TotalBytes = _state.TotalBytes,
             SupportsRanges = _state.SupportsRanges,
+            AllowWebPage = _state.AllowWebPage,
             ETag = _state.ETag,
             LastModified = _state.LastModified,
             Status = _state.Status,
@@ -811,6 +826,19 @@ public sealed class DownloadWorker
         {
             request.Headers.IfRange = new RangeConditionHeaderValue(lastModified);
         }
+    }
+
+    /// <summary>
+    /// True when the response is an HTML/XHTML page rather than file content. Used to detect that a
+    /// download link has started serving an interstitial/error page (expired token, quota, or a
+    /// sign-in requirement) instead of the file we validated at prepare time.
+    /// </summary>
+    private static bool IsWebPageResponse(HttpResponseMessage response)
+    {
+        string? mediaType = response.Content.Headers.ContentType?.MediaType;
+        return !string.IsNullOrEmpty(mediaType) &&
+               (mediaType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) ||
+                mediaType.StartsWith("application/xhtml+xml", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>What the caller should do with the response body of a (possibly) ranged request.</summary>

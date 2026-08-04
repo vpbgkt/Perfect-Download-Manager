@@ -33,6 +33,13 @@ public sealed class DownloadState
     /// <summary>Whether the server supported range requests when the plan was created.</summary>
     public bool SupportsRanges { get; set; }
 
+    /// <summary>
+    /// True when the user explicitly chose to download this URL even though it is a web page (HTML).
+    /// Persisted so the transfer does not later reject an HTML response as an expired/interstitial
+    /// link — that guard only applies to downloads that were expected to be real files.
+    /// </summary>
+    public bool AllowWebPage { get; set; }
+
     /// <summary>Server ETag captured at plan time; used to detect content changes.</summary>
     public string? ETag { get; set; }
 
