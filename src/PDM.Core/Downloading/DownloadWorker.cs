@@ -33,9 +33,31 @@ public sealed class DownloadWorker
     // enforced accurately regardless of how many downloads run. Null when no global cap applies.
     private readonly SpeedLimiter? _globalLimiter;
 
-    // Live (possibly not-yet-durable) byte counts per segment for smooth progress.
+    // Live (possibly not-yet-durable) byte counts per segment for smooth progress. Pre-sized to
+    // _maxSegments so the work-stealing scheduler can add segments without ever reallocating this
+    // array (a growing array would race with the lock-free Interlocked reads on the transfer path).
     private readonly long[] _liveBytes;
     private readonly long _flushThreshold;
+
+    // ── Work-stealing scheduler state ──────────────────────────────────────────────────────────
+    // Guards structural changes to _state.Segments (adds and end-shrinking splits) and the _claimed
+    // set. Held only for short, non-async bookkeeping; the transfer path itself never takes it.
+    private readonly object _planLock = new();
+
+    // Segment indexes already handed to a connection, so two connections never take the same range.
+    private readonly HashSet<int> _claimed = new();
+
+    // Hard ceiling on how many segments this download may ever have. Bounds memory and keeps the
+    // persisted state small; splitting simply stops once it is reached.
+    private readonly int _maxSegments;
+
+    // Number of connections (worker tasks) for the current attempt; reported as TotalConnections.
+    private int _workerCount;
+
+    // Latest smoothed aggregate throughput (bytes/sec), published by the progress loop and consumed by
+    // the adaptive split threshold. Stored as raw bits in a long because C# does not allow a volatile
+    // double; accessed with Interlocked so the two threads always see a whole value.
+    private long _observedBytesPerSecondBits;
 
     // Live diagnostic hint reported on progress snapshots so the UI can explain a stall/slowdown.
     // Written from segment workers (last-writer-wins) and read by the progress loop; hence volatile.
@@ -64,7 +86,19 @@ public sealed class DownloadWorker
 
         _limiter = new SpeedLimiter(_options.MaxBytesPerSecond);
         _globalLimiter = globalLimiter;
-        _liveBytes = _state.Segments.Select(s => s.BytesDownloaded).ToArray();
+
+        // Reserve room for the initial plan plus the segments work stealing may create. Bounded so a
+        // long download cannot grow the plan (or the persisted state) without limit.
+        _maxSegments = Math.Min(
+            512,
+            _state.Segments.Count + Math.Max(8, _options.MaxConnections * 3));
+
+        _liveBytes = new long[_maxSegments];
+        for (int i = 0; i < _state.Segments.Count && i < _maxSegments; i++)
+        {
+            _liveBytes[i] = _state.Segments[i].BytesDownloaded;
+        }
+
         _flushThreshold = Math.Max(1L * 1024 * 1024, _options.ReadBufferSize * 8L);
     }
 
@@ -99,18 +133,55 @@ public sealed class DownloadWorker
 
         while (true)
         {
-            // A shared "fault" token so the first segment to fail fatally cancels the others promptly,
-            // instead of every sibling running to completion (or hitting the same failure) before the
-            // error surfaces. Linked to the caller's token so a user pause/cancel still stops everything.
+            // A shared "fault" token so the first connection to fail fatally cancels the others
+            // promptly, instead of every sibling running to completion (or hitting the same failure)
+            // before the error surfaces. Linked to the caller's token so a user pause/cancel still
+            // stops everything.
             using var faultCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             Exception? fatal = null;
             int faultClaimed = 0;
 
-            async Task RunSegmentGuardedAsync(DownloadSegment segment)
+            // Decide how many connections to run: one per incomplete segment, capped at the
+            // configured maximum. Segments that are already complete (e.g. pre-completed pieces from
+            // a resume re-plan) need no connection at all.
+            int workers;
+            lock (_planLock)
+            {
+                _claimed.Clear();
+                int incomplete = 0;
+                foreach (DownloadSegment s in _state.Segments)
+                {
+                    if (!s.IsComplete)
+                    {
+                        incomplete++;
+                    }
+                }
+
+                workers = Math.Min(incomplete, _options.MaxConnections);
+            }
+
+            if (workers <= 0)
+            {
+                break; // Nothing left to transfer; go straight to finalize.
+            }
+
+            _workerCount = workers;
+
+            // Each worker pulls work from the shared plan until there is none left. This is the core
+            // of the work-stealing model: a connection that finishes its range does NOT go idle — it
+            // immediately claims an unstarted segment or splits the largest in-flight one and takes
+            // half. That keeps every connection busy until the very end of the file, instead of
+            // leaving the last few percent to whichever single connection happened to be slowest.
+            async Task RunWorkerAsync()
             {
                 try
                 {
-                    await DownloadSegmentAsync(segment, faultCts.Token).ConfigureAwait(false);
+                    DownloadSegment? current = TryClaimWork();
+                    while (current is not null)
+                    {
+                        await DownloadSegmentAsync(current, faultCts.Token).ConfigureAwait(false);
+                        current = TryClaimWork();
+                    }
                 }
                 catch (OperationCanceledException) when (faultCts.IsCancellationRequested)
                 {
@@ -131,8 +202,13 @@ public sealed class DownloadWorker
                 }
             }
 
-            var segmentTasks = _state.Segments.Select(RunSegmentGuardedAsync).ToArray();
-            await Task.WhenAll(segmentTasks).ConfigureAwait(false);
+            var workerTasks = new Task[workers];
+            for (int i = 0; i < workers; i++)
+            {
+                workerTasks[i] = RunWorkerAsync();
+            }
+
+            await Task.WhenAll(workerTasks).ConfigureAwait(false);
 
             // A user-initiated pause/cancel takes precedence over any fault the cancellation triggered.
             if (cancellationToken.IsCancellationRequested)
@@ -182,25 +258,196 @@ public sealed class DownloadWorker
     /// </summary>
     private void CollapseToSingleStream()
     {
-        // Stop advertising range support so the retry sends a plain GET (no Range/If-Range header) and
-        // the response is consumed straight from byte 0.
-        _state.SupportsRanges = false;
-
-        // A single segment covering the whole file. When the size is known we bound it; otherwise we
-        // use the open-ended sentinel and let the writer stop at end-of-stream (and discover the size).
-        long end = _state.TotalBytes is > 0 ? _state.TotalBytes.Value - 1 : long.MaxValue;
-        _state.Segments = new List<DownloadSegment>
+        lock (_planLock)
         {
-            new() { Index = 0, Start = 0, End = end, BytesDownloaded = 0 }
-        };
+            // Stop advertising range support so the retry sends a plain GET (no Range/If-Range header)
+            // and the response is consumed straight from byte 0.
+            _state.SupportsRanges = false;
 
-        // Reset the live byte counters so progress and the resume offset restart from zero. The array
-        // keeps its original length (the new single segment only ever writes index 0; the rest stay 0,
-        // so SumLive still reports the correct total).
-        for (int i = 0; i < _liveBytes.Length; i++)
-        {
-            Interlocked.Exchange(ref _liveBytes[i], 0);
+            // A single segment covering the whole file. When the size is known we bound it; otherwise
+            // we use the open-ended sentinel and let the writer stop at end-of-stream (and discover
+            // the size).
+            long end = _state.TotalBytes is > 0 ? _state.TotalBytes.Value - 1 : long.MaxValue;
+            _state.Segments = new List<DownloadSegment>
+            {
+                new() { Index = 0, Start = 0, End = end, BytesDownloaded = 0 }
+            };
+
+            _claimed.Clear();
+
+            // Reset the live byte counters so progress and the resume offset restart from zero. The
+            // array keeps its original length (the new single segment only ever writes index 0; the
+            // rest stay 0, so SumLive still reports the correct total).
+            for (int i = 0; i < _liveBytes.Length; i++)
+            {
+                Interlocked.Exchange(ref _liveBytes[i], 0);
+            }
         }
+    }
+
+    /// <summary>
+    /// Hands the calling connection its next piece of work, or null when the download has none left.
+    /// This is the heart of the work-stealing scheduler and the fix for the "last 10% runs on one
+    /// connection" problem.
+    ///
+    /// <para>Two strategies, in order:</para>
+    /// <list type="number">
+    ///   <item><b>Claim an unstarted segment.</b> Cheap and always preferred — no extra HTTP request
+    ///         beyond the one this connection was going to make anyway.</item>
+    ///   <item><b>Split the busiest in-flight segment.</b> The segment with the most bytes still
+    ///         outstanding is cut in half: its end is moved back and the freed connection takes the
+    ///         tail. Repeated as connections free up, so parallelism is sustained to the end of the
+    ///         file instead of decaying as segments finish.</item>
+    /// </list>
+    ///
+    /// <para><b>Why splitting is safe.</b> A segment's end only ever moves backwards, and never closer
+    /// than a safety margin ahead of the bytes that segment has already written. The margin is taken
+    /// from the <em>live</em> counter (not the durable one, which lags behind between flushes) plus the
+    /// size of a read that may be in flight. The owning connection re-reads its volatile end each loop
+    /// iteration and stops cleanly at the new boundary, so every downloaded byte is preserved exactly
+    /// once and the two halves remain a perfect, non-overlapping cover of the range.</para>
+    ///
+    /// <para>Splitting is skipped entirely for non-resumable (single-stream) and unknown-size
+    /// downloads, since neither can address a byte range.</para>
+    /// </summary>
+    private DownloadSegment? TryClaimWork()
+    {
+        lock (_planLock)
+        {
+            List<DownloadSegment> segments = _state.Segments;
+
+            // 1) An incomplete segment nobody is working on yet.
+            for (int i = 0; i < segments.Count; i++)
+            {
+                DownloadSegment s = segments[i];
+                if (!s.IsComplete && !_claimed.Contains(s.Index))
+                {
+                    _claimed.Add(s.Index);
+                    return s;
+                }
+            }
+
+            // 2) Split the segment with the most work left. Only possible for a range-capable download
+            //    of known size, and only while we are under the segment ceiling.
+            if (!_state.SupportsRanges || _state.TotalBytes is not > 0 || segments.Count >= _maxSegments)
+            {
+                return null;
+            }
+
+            DownloadSegment? victim = null;
+            long bestRemaining = 0;
+            long victimLive = 0;
+
+            for (int i = 0; i < segments.Count; i++)
+            {
+                DownloadSegment s = segments[i];
+                if (s.IsComplete || s.End == long.MaxValue)
+                {
+                    continue; // finished, or an open-ended stream that cannot be split
+                }
+
+                long live = Interlocked.Read(ref _liveBytes[s.Index]);
+                long remaining = s.End - (s.Start + live) + 1;
+                if (remaining > bestRemaining)
+                {
+                    bestRemaining = remaining;
+                    victim = s;
+                    victimLive = live;
+                }
+            }
+
+            if (victim is null)
+            {
+                return null;
+            }
+
+            // Both halves must be worth a connection, otherwise the HTTP round trip for the new
+            // request costs more than the parallelism gains. The floor is bandwidth-aware, so this
+            // naturally stops splitting earlier on fast links than on slow ones.
+            long floor = ComputeSplitFloor(segments);
+            if (bestRemaining < floor * 2)
+            {
+                return null;
+            }
+
+            // Keep the split point comfortably ahead of the victim's current write position: the live
+            // counter plus a read that may already be in flight.
+            long margin = Math.Max(_options.ReadBufferSize * 2L, 64 * 1024);
+            long splitPoint = victim.Start + victimLive + (bestRemaining / 2);
+            long minSplitPoint = victim.Start + victimLive + margin;
+            if (splitPoint < minSplitPoint)
+            {
+                splitPoint = minSplitPoint;
+            }
+
+            long originalEnd = victim.End;
+            if (splitPoint > originalEnd)
+            {
+                return null; // nothing meaningful left to hand over
+            }
+
+            int newIndex = segments.Count;
+            var tail = new DownloadSegment
+            {
+                Index = newIndex,
+                Start = splitPoint,
+                End = originalEnd,
+                BytesDownloaded = 0
+            };
+
+            Interlocked.Exchange(ref _liveBytes[newIndex], 0);
+
+            // Shrink the victim only after the tail is fully formed, so the range is owned by the tail
+            // before the victim is told to stop short.
+            victim.End = splitPoint - 1;
+
+            // Publish the new plan copy-on-write: mutating the existing list in place would invalidate
+            // enumerators other threads may be holding (the UI reads DownloadState.BytesDownloaded,
+            // which enumerates the segments). Swapping the reference is atomic, so readers always see
+            // a complete, self-consistent list — either the old one or the new one.
+            _state.Segments = new List<DownloadSegment>(segments) { tail };
+
+            _claimed.Add(newIndex);
+            return tail;
+        }
+    }
+
+    /// <summary>
+    /// Minimum bytes a split must hand over to be worthwhile. Takes the larger of the configured
+    /// absolute floor and the amount the observed per-connection throughput would move in
+    /// <see cref="DownloadOptions.MinSplitDuration"/>.
+    ///
+    /// <para>This is what makes the scheduler behave correctly across very different links. On a
+    /// 10 Mbps connection a few megabytes keep a connection busy for many seconds, so the absolute
+    /// floor dominates and splitting stays aggressive. At 1 Gbps the same few megabytes transfer in a
+    /// fraction of a second, so the floor rises into the tens of megabytes and PDM stops splitting
+    /// well before per-request latency would outweigh the benefit.</para>
+    ///
+    /// <para>Must be called while holding <c>_planLock</c>.</para>
+    /// </summary>
+    private long ComputeSplitFloor(List<DownloadSegment> segments)
+    {
+        long absolute = _options.MinSplitSize;
+
+        double bytesPerSecond = BitConverter.Int64BitsToDouble(
+            Interlocked.Read(ref _observedBytesPerSecondBits));
+        if (bytesPerSecond <= 0 || _options.MinSplitDuration <= TimeSpan.Zero)
+        {
+            return absolute; // no measurement yet (start of transfer): use the absolute floor
+        }
+
+        int active = 0;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            if (!segments[i].IsComplete)
+            {
+                active++;
+            }
+        }
+
+        double perConnection = bytesPerSecond / Math.Max(1, active);
+        long byDuration = (long)(perConnection * _options.MinSplitDuration.TotalSeconds);
+        return Math.Max(absolute, byDuration);
     }
 
     /// <summary>
@@ -615,6 +862,9 @@ public sealed class DownloadWorker
                     double instant = (nowBytes - lastBytes) / seconds;
                     // Exponential moving average for a stable readout.
                     smoothed = smoothed <= 0 ? instant : (0.6 * instant) + (0.4 * smoothed);
+
+                    // Publish for the work-stealing scheduler's bandwidth-aware split threshold.
+                    Interlocked.Exchange(ref _observedBytesPerSecondBits, BitConverter.DoubleToInt64Bits(smoothed));
                 }
 
                 lastBytes = nowBytes;
@@ -671,14 +921,23 @@ public sealed class DownloadWorker
         }
 
         double average = elapsed.TotalSeconds > 0 ? bytes / elapsed.TotalSeconds : 0;
+
+        // Take one reference to the (copy-on-write) plan so the counts below are self-consistent even
+        // if a connection publishes a split while we are reading. No lock needed.
+        List<DownloadSegment> plan = _state.Segments;
         int active = 0;
-        for (int i = 0; i < _state.Segments.Count; i++)
+        for (int i = 0; i < plan.Count; i++)
         {
-            if (!_state.Segments[i].IsComplete)
+            if (!plan[i].IsComplete)
             {
                 active++;
             }
         }
+
+        // Report the connection budget actually in use, not the number of segments — splitting grows
+        // the segment list while the number of live connections stays constant.
+        int total = _workerCount > 0 ? _workerCount : plan.Count;
+        active = Math.Min(active, total);
 
         _progress.Report(new DownloadProgress
         {
@@ -687,7 +946,7 @@ public sealed class DownloadWorker
             BytesPerSecond = bytesPerSecond,
             AverageBytesPerSecond = average,
             ActiveConnections = active,
-            TotalConnections = _state.Segments.Count,
+            TotalConnections = total,
             Status = _state.Status,
             Issue = (DownloadIssue)_issueCode,
             RetryAttempt = _retryAttempt,
@@ -770,6 +1029,8 @@ public sealed class DownloadWorker
     /// </summary>
     private DownloadState SnapshotForCheckpoint()
     {
+        // One reference to the copy-on-write plan, so the snapshot is a self-consistent view even if a
+        // connection publishes a split while we serialize.
         List<DownloadSegment> source = _state.Segments;
         var segments = new List<DownloadSegment>(source.Count);
         for (int i = 0; i < source.Count; i++)

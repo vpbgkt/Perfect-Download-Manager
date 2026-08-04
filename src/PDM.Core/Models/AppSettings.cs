@@ -24,8 +24,12 @@ public sealed class AppSettings
     /// <summary>Maximum number of downloads that may transfer at the same time.</summary>
     public int MaxSimultaneousDownloads { get; set; } = 3;
 
-    /// <summary>Default per-download connection count.</summary>
-    public int MaxConnectionsPerDownload { get; set; } = 8;
+    /// <summary>
+    /// Default per-download connection count. 16 matches the practical ceiling used by established
+    /// download managers — beyond it, per-connection throttling gains flatten while rate-limiting and
+    /// per-IP connection refusals become likely.
+    /// </summary>
+    public int MaxConnectionsPerDownload { get; set; } = 16;
 
     /// <summary>Global speed cap in bytes/sec across all downloads; 0 = unlimited.</summary>
     public long GlobalMaxBytesPerSecond { get; set; }
