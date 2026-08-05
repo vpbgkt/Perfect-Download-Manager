@@ -14,7 +14,8 @@ machine; there is no cloud dependency for browser capture.
 - **Right-click "Download with PDM"** on any link, image, video, audio, or selection, plus a
   "Send this page to PDM" item on the page context menu.
 - **A polished popup** (click the toolbar icon) with:
-  - a live **connection indicator** (green when PDM's native host is reachable),
+  - a live **connection indicator** — Connected, Starting (installed but not answering yet), or
+    Not installed,
   - the auto-intercept **toggle**,
   - **"Send this page to PDM"**, and
   - **"Scan page for media & links"** — lists every downloadable file link and video/audio
@@ -31,6 +32,31 @@ machine; there is no cloud dependency for browser capture.
 - PDM installed (the installer places `pdm-native-host.exe` next to `PDM.exe`).
 - PDM open at least once, so its named-pipe listener is running. If PDM is closed when you
   trigger a capture, the native host will start it automatically.
+
+### If the desktop app isn't installed yet
+
+The extension is usable on its own from v1.3.0. When no native host is registered it detects that
+*before* touching a download and leaves the browser's own transfer alone, so files still download
+normally — you just don't get PDM's multi-connection engine yet. The extension then shows a setup
+page, a persistent amber toolbar badge, and a setup card in the popup.
+
+Nothing about this affects a machine that has PDM: the availability verdict is cached in memory and
+re-probed at most once a minute, so the check adds no per-download cost.
+
+## No stray "Save as" dialog
+
+With Chrome's **Ask where to save each file before downloading** enabled, the save dialog used to
+appear even when PDM had taken the download over. Fixed in v1.3.0 by moving interception into
+`chrome.downloads.onDeterminingFilename`, which Chromium *waits on* — the download is cancelled and
+the cancel acknowledged before the pipeline can reach its prompt step. `onCreated`, used previously,
+is fire-and-forget, so a cold-starting service worker lost the race and the dialog was already open
+(nothing can close an OS file picker after the fact).
+
+One case still shows the dialog by design: turning **"Cancel the browser's own download after
+handoff"** off means you asked the browser to keep downloading too, so it prompts as usual.
+
+See [`browser-extension/README.md`](../browser-extension/README.md) for the pipeline ordering and the
+constraints the barrier imposes.
 
 ## Install — from the Chrome Web Store (one-click)
 
@@ -119,5 +145,16 @@ Still open:
 - **Popup says "PDM could not accept the download: pdm_unavailable"** → PDM couldn't be started.
   Launch it manually and try again; check `%LOCALAPPDATA%\PerfectDownloadManager\logs` for
   errors.
+- **Popup says "Not installed" but PDM is installed** → browsers read the list of registered native
+  messaging hosts at launch, so a freshly installed PDM isn't visible to an already-running browser.
+  Restart the browser, then use **Re-check** on the setup page. The re-check bypasses the cached
+  verdict.
+- **Popup says "Starting…"** → the host is registered and answering is just slow, usually because PDM
+  is cold-starting. Downloads are still handed to PDM in this state; the host waits up to ~30s for the
+  app's pipe and the extension waits with it.
+- **A download went to the browser instead of PDM** → either the file type is filtered (documents and
+  images stay in the browser by default — see **Send documents & images to PDM**), or the handoff
+  failed and the recovery net completed it in the browser so it wasn't lost. The toolbar badge shows
+  amber in the second case.
 - **The wrong browser gets the download** → intercept-toggle is only per browser. Toggle it off
   in browsers where you don't want auto-redirect.

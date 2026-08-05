@@ -35,6 +35,14 @@ jobs:
       - name: Test
         run: dotnet test PDM.sln -c Debug --no-build
 
+      # Guards the browser extension's interception decisions — in particular that the download is
+      # cancelled BEFORE Chromium's filename barrier is released (the "Ask where to save each file"
+      # fix) and that a download is never lost when the native host is missing. Dependency-free:
+      # node:test against a chrome API stub. --test-force-exit because the worker leaves its own
+      # timers pending by design.
+      - name: Test browser extension
+        run: node --test --test-force-exit browser-extension/tests/background.test.js
+
   aot-gate:
     name: NativeAOT gate (${{ matrix.rid }} on ${{ matrix.os }})
     strategy:

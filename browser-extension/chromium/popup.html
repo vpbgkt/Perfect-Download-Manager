@@ -21,6 +21,22 @@
     </div>
   </header>
 
+  <!-- Setup card: shown only while the desktop app is missing. This is the persistent,
+       non-blocking place the user goes after noticing the amber toolbar badge. -->
+  <section id="setup" class="group hidden">
+    <div class="card card--setup">
+      <div class="setup-title">Desktop app not installed</div>
+      <p class="setup-text">
+        Downloads are handled by your browser for now. Install the free Windows app to get
+        multi-connection speed, resume and queueing.
+      </p>
+      <div class="setup-actions">
+        <button id="setup-install" class="btn btn--primary">Install PDM</button>
+        <button id="setup-recheck" class="btn btn--ghost">Re-check</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Download integration -->
   <section class="group">
     <div class="group-title">Download integration</div>

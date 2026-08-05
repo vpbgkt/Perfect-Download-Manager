@@ -47,17 +47,54 @@ function fileNameFromUrl(url) {
 
 // ---- Status ping ------------------------------------------------------------
 
-async function refreshStatus() {
+const setupEl = $("setup");
+const setupInstallBtn = $("setup-install");
+const setupRecheckBtn = $("setup-recheck");
+
+// Three states, three messages. "Not installed" and "Not responding" used to look identical to the
+// user even though the fix is completely different, so they are now distinct — and only the first
+// one shows the setup card.
+async function refreshStatus(force) {
   setStatus("checking", "Checking…");
   statusEl.title = "Checking connection to Perfect Download Manager…";
-  const res = await send({ type: "getStatus" });
-  if (res && res.hostOk) {
+
+  const res = await send({ type: "getStatus", force: Boolean(force) });
+  const state = res && res.state ? res.state : (res && res.hostOk ? "ready" : "missing");
+
+  if (state === "ready") {
     setStatus("ok", "Connected");
-    statusEl.title = "Connected to Perfect Download Manager";
+    statusEl.title = res && res.appRunning === false
+      ? "PDM is installed and will start when you send a download"
+      : "Connected to Perfect Download Manager";
+  } else if (state === "starting") {
+    setStatus("warn", "Starting…");
+    statusEl.title = "PDM is installed but hasn't answered yet — it may still be starting.";
   } else {
-    setStatus("err", "Not detected");
-    statusEl.title = "PDM not detected — open PDM → Browser Setup";
+    setStatus("warn", "Not installed");
+    statusEl.title = "The PDM desktop app isn't installed on this PC. Downloads use your browser.";
   }
+
+  setupEl.classList.toggle("hidden", state !== "missing");
+  return state;
+}
+
+if (setupInstallBtn) {
+  setupInstallBtn.addEventListener("click", () => {
+    send({ type: "openWelcome" });
+    window.close();
+  });
+}
+
+if (setupRecheckBtn) {
+  setupRecheckBtn.addEventListener("click", async () => {
+    setupRecheckBtn.disabled = true;
+    setupRecheckBtn.textContent = "…";
+    const state = await refreshStatus(true);
+    setupRecheckBtn.disabled = false;
+    setupRecheckBtn.textContent = "Re-check";
+    if (state !== "missing") return;
+    statusEl.title = "Still not detected. If you just installed PDM, restart your browser.";
+  });
 }
 
 // ---- Toggles (saved instantly to chrome.storage) ----------------------------
@@ -114,7 +151,13 @@ sendPageBtn.addEventListener("click", async () => {
   sendPageBtn.disabled = true;
   const res = await send({ type: "sendUrl", url: tab.url, referrer: "", filename: "" });
   sendPageBtn.disabled = false;
-  if (res && res.ok) {
+  if (res && res.fallback === "browser") {
+    // Honoured the click, just not with PDM. Say which downloader ran so the result is never a
+    // mystery, and leave the popup open so the setup card is right there.
+    setStatus("warn", "In browser");
+    statusEl.title = "PDM isn't installed, so your browser is downloading it.";
+    setupEl.classList.remove("hidden");
+  } else if (res && res.ok) {
     setStatus("ok", "Sent ✓");
     statusEl.title = "Sent to Perfect Download Manager";
     setTimeout(() => window.close(), 700);
@@ -188,7 +231,9 @@ function renderScan(items) {
       btn.disabled = true;
       btn.textContent = "…";
       const res = await send({ type: "sendUrl", url: item.url, referrer: "", filename: "" });
-      btn.textContent = res && res.ok ? "Sent ✓" : "Failed";
+      btn.textContent = res && res.fallback === "browser"
+        ? "In browser"
+        : (res && res.ok ? "Sent ✓" : "Failed");
     });
 
     li.appendChild(info);
@@ -248,4 +293,4 @@ openOptionsBtn.addEventListener("click", () => {
 
 // ---- Init -------------------------------------------------------------------
 
-refreshStatus();
+refreshStatus(false);

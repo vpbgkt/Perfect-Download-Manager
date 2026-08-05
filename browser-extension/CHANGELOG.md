@@ -1,5 +1,50 @@
 # Changelog — PDM Browser Integration
 
+## 1.3.0
+
+**No more stray "Save as" dialog**
+- Interception moved from `downloads.onCreated` to `downloads.onDeterminingFilename`. Chrome's
+  "Ask where to save each file before downloading" prompt could previously appear even though PDM
+  had taken the download over, leaving the user to dismiss it by hand.
+  - `onCreated` is a notification Chrome does not wait for, so a service worker that had to
+    cold-start lost the race and the dialog was already on screen before `cancel()` landed — and
+    nothing can close an OS file picker that is already open.
+  - `onDeterminingFilename` is a barrier: Chromium pauses target determination until the extension
+    responds, and it pauses across a service-worker cold start. The download is now cancelled and
+    the cancel acknowledged *before* the barrier is released, so target determination resumes on an
+    already-cancelled item and the prompt state is never reached.
+- Existing setups are unaffected in every other respect: with a cached host verdict the barrier is
+  held for about the length of one `downloads.cancel` round-trip, and the handoff to PDM starts
+  immediately afterwards.
+
+**Works before the desktop app is installed**
+- Installing the extension without the Windows app no longer breaks downloads. The extension checks
+  whether the native host is reachable *before* it cancels anything, and when there is no host it
+  leaves the browser's own download completely untouched — original request, cookies, referer and
+  `Content-Disposition` filename all preserved, because the transfer is never restarted.
+- New setup page (opened on install, from the popup, and once on the first fallback) that detects the
+  desktop app live, links to the download, and offers an "I've installed it — re-check" button.
+- A persistent amber toolbar badge and a popup setup card while the app is missing. No blocking
+  prompts and no per-download interruptions.
+- Explicit actions (right-click, "Send this page", page-scan results) fall back to the browser's
+  downloader instead of failing, and report which downloader ran.
+- New setting **Fall back to the browser's downloader** (default on) under "When PDM isn't available".
+
+**Reliability**
+- Three-state host detection (installed / starting / not installed) replaces the previous boolean.
+  "PDM is cold-starting" and "PDM is not installed" need opposite responses and used to be
+  indistinguishable.
+- Native-send timeout raised from 8s to 35s so it outlasts the native host's own ~30s
+  launch-and-retry window. The old ceiling reported a failure while the host went on to succeed,
+  which produced spurious "PDM could not accept the download" toasts.
+- Recovery net: if a handoff fails after the browser's download was cancelled, the download is
+  re-created in the browser rather than lost.
+- The native host answers an explicit `{"ping":true}` handshake with `pong`, its protocol version,
+  and whether the app is currently running. Ping never launches PDM. Older desktop builds are still
+  detected correctly via their `invalid_url` reply.
+- Dependency-free test suite (`browser-extension/tests`) covering cancel-before-suggest ordering,
+  the no-host path, the recovery net, and verdict caching. Wired into CI.
+
 ## 1.2.8
 
 - **Theme support** — new Appearance control (System / Light / Dark) in both the popup and the

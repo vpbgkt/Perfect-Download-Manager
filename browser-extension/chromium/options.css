@@ -97,3 +97,22 @@ h1 { font-size: 20px; margin: 0; }
 
 .ftr { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
 .ftr a { color: var(--brand); }
+
+/* Inline action button inside a settings row (e.g. "Open setup"). Distinct from .seg-btn, which is
+   borderless because it only ever renders inside the .seg segmented control. */
+.opt-btn {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  white-space: nowrap;
+}
+.opt-btn:hover { background: var(--hover); }
+.opt-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

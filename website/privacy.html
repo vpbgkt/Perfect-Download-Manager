@@ -49,9 +49,10 @@
                 per-user Windows named pipe. It never leaves your machine.
             </li>
             <li>
-                <strong>Your interception preference</strong> (whether the browser's own
-                downloads should be intercepted) is stored locally with
-                <code>chrome.storage.local</code>. It is not synced or transmitted anywhere.
+                <strong>Your settings</strong> — the interception toggle, file-type filters,
+                notification and fallback preferences, the chosen theme, and whether the setup
+                page has been shown — are stored locally with
+                <code>chrome.storage.local</code>. They are not synced or transmitted anywhere.
             </li>
             <li>
                 <strong>The active tab URL</strong> is read only when you click the extension's
@@ -67,8 +68,27 @@
             <li>No analytics, telemetry, crash reporting, or third-party tracking.</li>
             <li>No selling or sharing of data with anyone.</li>
             <li>
-                No remote network requests from the extension. All communication is with a
-                local desktop app on the same machine.
+                No requests to our servers or to any third party. The extension talks only to
+                the local desktop app.
+            </li>
+        </ul>
+
+        <h2>Network requests the extension can make</h2>
+        <p>
+            For completeness, the extension does cause two kinds of ordinary browser navigation.
+            Neither sends us any data:
+        </p>
+        <ul>
+            <li>
+                <strong>Falling back to your browser's downloader.</strong> If the desktop app is
+                not installed, or a handoff to it fails, the extension asks your browser to
+                download the file from the same origin server you requested. This is the
+                identical request your browser would have made without the extension.
+            </li>
+            <li>
+                <strong>Opening our website.</strong> The setup page links to
+                perfectdownloadmanager.com so you can install the desktop app. That is a normal
+                page visit that happens only when you click.
             </li>
         </ul>
 
