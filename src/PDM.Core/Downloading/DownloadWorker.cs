@@ -452,13 +452,18 @@ public sealed class DownloadWorker
     }
 
     /// <summary>
-    /// Creates or opens the part file and preallocates it to the known total size to
-    /// reduce fragmentation. Skipped when the total size is unknown.
+    /// Creates or opens the part file and preallocates it to the known total size to reduce
+    /// fragmentation. Marks the file sparse first (Windows) so preallocation + scattered multi-segment
+    /// writes do not trigger a whole-file NTFS zero-fill that would saturate throughput-limited storage
+    /// and stall the network connections. Preallocation is skipped when the total size is unknown.
     /// </summary>
     private void PreparePartFile()
     {
         using var fs = new FileStream(
             PartPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+
+        // Must happen before SetLength / any write: sparse only affects regions not yet written.
+        SparseFile.TryEnable(fs.SafeFileHandle);
 
         if (_state.TotalBytes is > 0 && fs.Length != _state.TotalBytes.Value)
         {
@@ -738,8 +743,13 @@ public sealed class DownloadWorker
                 }
             }
 
-            // Segment finished: one hard flush to guarantee the tail is physically persisted.
-            FlushToDisk(file);
+            // Segment finished: soft flush (push this connection's buffer to the OS). We deliberately
+            // do NOT force a hardware sync here. A synchronous Flush(flushToDisk:true) blocks the
+            // calling thread-pool thread until FlushFileBuffers returns, which on throughput-limited
+            // storage can take a long time; doing that on every segment completion (multiplied by
+            // work-stealing splits) starves the thread pool and stalls the network read continuations.
+            // Physical durability is handled once, for the whole file, in FinalizeAsync.
+            await FlushBufferAsync(file, cancellationToken).ConfigureAwait(false);
             segment.BytesDownloaded = written;
 
             if (openEnded)
@@ -793,16 +803,23 @@ public sealed class DownloadWorker
         }
     }
 
-    /// <summary>Flushes buffered bytes all the way to disk, translating storage failures into a disk-error.</summary>
-    private static void FlushToDisk(FileStream file)
+    /// <summary>
+    /// Forces the completed part file all the way to physical disk exactly once, at finalize. This is
+    /// the single hardware sync per download (the hot path uses cheap async buffer flushes only).
+    /// Best-effort: a failure here does not corrupt anything — the data is already in the OS cache — so
+    /// it must not block delivery of an otherwise-verified file.
+    /// </summary>
+    private void FlushWholeFileToDisk()
     {
         try
         {
-            file.Flush(flushToDisk: true);
+            using var fs = new FileStream(
+                PartPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+            fs.Flush(flushToDisk: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw DiskWriteFailure(ex);
+            // Non-fatal: OS cache already holds the bytes; proceed to verify and deliver.
         }
     }
 
@@ -844,6 +861,11 @@ public sealed class DownloadWorker
             await SaveStateSafelyAsync().ConfigureAwait(false);
             throw new DownloadException(_state.ErrorMessage);
         }
+
+        // One hardware flush for the whole file, replacing the per-segment fsyncs that used to block
+        // worker threads. Best-effort: if it fails the bytes are still in the OS cache and the file is
+        // delivered; only power-loss durability (not correctness) is at stake.
+        FlushWholeFileToDisk();
 
         // Secondary sanity check: catches a part file truncated or tampered with outside PDM.
         long actual = new FileInfo(PartPath).Length;
