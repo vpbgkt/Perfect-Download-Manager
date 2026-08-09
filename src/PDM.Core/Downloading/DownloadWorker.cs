@@ -21,6 +21,12 @@ public sealed class DownloadWorker
     /// <summary>Suffix appended to the destination path for the in-progress part file.</summary>
     public const string PartSuffix = ".pdmdownload";
 
+    /// <summary>
+    /// Minimum throughput multiplier an added connection must deliver to be considered beneficial
+    /// during adaptive probing (1.15 = at least 15% more goodput). Below this, probing stops.
+    /// </summary>
+    private const double ThroughputGainThreshold = 1.15;
+
     private readonly DownloadState _state;
     private readonly DownloadOptions _options;
     private readonly HttpClient _client;
@@ -247,65 +253,39 @@ public sealed class DownloadWorker
                 }
             }
 
-            // Adaptive ramp-up. Start with a moderate number of connections rather than opening the
-            // full ceiling at once: blasting every connection immediately makes connection-limited
-            // servers refuse the excess, and those refused connections then burn seconds in retry
-            // backoff ("waiting for server") — the cause of short downloads taking minutes. We then add
-            // connections one interval at a time, but ONLY while each addition measurably raises
-            // throughput and the server is not pushing back (no retirements). This reaches full
-            // parallelism on servers that benefit from it, and settles at the right (smaller) count on
-            // servers that throttle per-IP — matching a stable, IDM-like connection profile.
-            int target = workers;
-            int initial = Math.Min(target, Math.Max(1, _options.InitialConnections));
+            // Adaptive connection probing.
+            //
+            // We do NOT open a fixed number of connections. We start with a small count and add one at
+            // a time ONLY while each new connection measurably increases the real end-to-end
+            // throughput. The moment an added connection stops helping — because the link is saturated,
+            // the disk is the bottleneck, or the server caps per-IP bandwidth/connections — we stop
+            // adding. This converges on the optimal connection count for each server/network:
+            //   • Fast server that rewards parallelism  -> climbs toward the ceiling.
+            //   • Server that throttles many connections -> settles low (2-3), like IDM parking its
+            //     extra connections in "Connecting" — and never pushes hard enough to trip the throttle
+            //     that was collapsing speed partway through the download.
+            //   • Slow link / slow server               -> 1-2 connections saturate it, so it stays
+            //     there; adding more is correctly judged useless and avoided.
+            //
+            // Throughput is measured from DURABLE (written-to-disk) bytes, not bytes read off the
+            // socket. Read speed is masked by the in-memory write buffer during the opening burst and
+            // would falsely look like "still improving", causing over-connection; durable bytes reflect
+            // the true sustained goodput.
+            int ceiling = workers;
+            int current = Math.Min(ceiling, Math.Max(1, _options.InitialConnections));
 
-            var workerTasks = new List<Task>(target);
-            for (int i = 0; i < initial; i++)
+            var workerTasks = new List<Task>(ceiling);
+            for (int i = 0; i < current; i++)
             {
                 workerTasks.Add(RunWorkerAsync());
             }
 
-            _workerCount = initial;
+            _workerCount = current;
 
-            int running = initial;
-            if (target > initial)
+            if (ceiling > current)
             {
-                // Establish a throughput baseline for the initial connection count.
-                long prevBytes = SumLive();
-                double prevRate = -1;
-
-                while (running < target)
-                {
-                    try
-                    {
-                        await Task.Delay(_options.RampUpInterval, faultCts.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
-
-                    if (_state.AllSegmentsComplete || _retiredThisRound > 0)
-                    {
-                        break; // done, or the server is already refusing connections — do not add more
-                    }
-
-                    long nowBytes = SumLive();
-                    double rate = (nowBytes - prevBytes) / _options.RampUpInterval.TotalSeconds;
-                    prevBytes = nowBytes;
-
-                    // Stop once an added connection no longer raises throughput by a meaningful margin
-                    // (link or disk saturated, or a per-IP bandwidth cap). The first interval only
-                    // establishes the baseline.
-                    if (prevRate >= 0 && rate <= prevRate * 1.10)
-                    {
-                        break;
-                    }
-
-                    prevRate = rate;
-                    workerTasks.Add(RunWorkerAsync());
-                    running++;
-                    _workerCount = running;
-                }
+                await ProbeConnectionsAsync(
+                    ceiling, current, workerTasks, RunWorkerAsync, faultCts.Token).ConfigureAwait(false);
             }
 
             await Task.WhenAll(workerTasks).ConfigureAwait(false);
@@ -1362,6 +1342,84 @@ public sealed class DownloadWorker
         }
 
         return sum;
+    }
+
+    /// <summary>
+    /// Total bytes actually written to disk so far (durable offset). Unlike <see cref="SumLive"/>
+    /// (bytes read off the socket, which the write buffer inflates during bursts), this reflects the
+    /// true sustained goodput and is the signal the connection-probing controller measures.
+    /// </summary>
+    private long SumDurable()
+    {
+        List<DownloadSegment> segments = _state.Segments;
+        long sum = 0;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            sum += segments[i].BytesDownloaded;
+        }
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Adaptive connection controller. Starting from <paramref name="current"/> connections, adds one
+    /// at a time and keeps it only while it raises the measured durable throughput by at least
+    /// <see cref="ThroughputGainThreshold"/>. Stops as soon as an added connection fails to help (link,
+    /// disk, or server saturated) or the server starts refusing connections. This is what makes the
+    /// connection count adapt to each server/network instead of being fixed.
+    /// </summary>
+    private async Task ProbeConnectionsAsync(
+        int ceiling, int current, List<Task> workerTasks, Func<Task> spawnWorker, CancellationToken token)
+    {
+        TimeSpan interval = _options.RampUpInterval;
+        try
+        {
+            // Warm-up: let the initial connections establish and TCP windows grow before measuring, so
+            // the first reading reflects steady throughput rather than the ramp.
+            await Task.Delay(interval, token).ConfigureAwait(false);
+            long prevDurable = SumDurable();
+            await Task.Delay(interval, token).ConfigureAwait(false);
+
+            long now = SumDurable();
+            double beforeRate = (now - prevDurable) / interval.TotalSeconds;
+            prevDurable = now;
+
+            while (current < ceiling)
+            {
+                if (_state.AllSegmentsComplete || _retiredThisRound > 0)
+                {
+                    break;
+                }
+
+                // Add one connection, then observe whether it actually increased throughput.
+                workerTasks.Add(spawnWorker());
+                current++;
+                _workerCount = current;
+
+                await Task.Delay(interval, token).ConfigureAwait(false);
+                if (_state.AllSegmentsComplete || _retiredThisRound > 0)
+                {
+                    break;
+                }
+
+                now = SumDurable();
+                double afterRate = (now - prevDurable) / interval.TotalSeconds;
+                prevDurable = now;
+
+                // Require a clear gain to justify climbing further. If the added connection did not
+                // meaningfully help, stop — more would only risk tripping the server's throttle.
+                if (afterRate <= beforeRate * ThroughputGainThreshold)
+                {
+                    break;
+                }
+
+                beforeRate = afterRate;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Pause/cancel or a sibling fault; the outer loop decides the outcome.
+        }
     }
 
     private async Task SaveStateSafelyAsync()

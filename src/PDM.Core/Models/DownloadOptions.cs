@@ -17,15 +17,16 @@ public sealed class DownloadOptions
     public int MaxConnections { get; init; } = 8;
 
     /// <summary>
-    /// Number of connections a download opens at the start, before any adaptive ramp-up. Defaults to 8
-    /// so a download reaches full parallelism immediately (important for short transfers). When it
-    /// equals <see cref="MaxConnections"/> (the default), the connection count is simply held steady —
-    /// the stable, IDM-like profile — and no ramp-up occurs. Ramp-up only happens when a larger
-    /// <see cref="MaxConnections"/> is configured.
+    /// Number of connections a download opens at the start, before adaptive probing. Kept low (2) so a
+    /// download never blasts a server it hasn't measured yet: the scheduler then adds connections one
+    /// at a time, keeping only those that measurably raise real throughput. This converges on each
+    /// server's optimal count — climbing where parallelism helps, staying at 2 where the server
+    /// throttles or the link/disk is already saturated (the profile that keeps speed stable instead of
+    /// collapsing partway through, and that matches how IDM parks unneeded connections).
     /// </summary>
-    public int InitialConnections { get; init; } = 8;
+    public int InitialConnections { get; init; } = 2;
 
-    /// <summary>How long to observe throughput between adding connections during ramp-up.</summary>
+    /// <summary>How long to observe throughput at each step of adaptive connection probing.</summary>
     public TimeSpan RampUpInterval { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
