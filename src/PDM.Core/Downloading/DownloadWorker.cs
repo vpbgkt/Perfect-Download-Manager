@@ -55,6 +55,16 @@ public sealed class DownloadWorker
     // Number of connections (worker tasks) for the current attempt; reported as TotalConnections.
     private int _workerCount;
 
+    // Adaptive connection ceiling. Starts at the configured maximum and is reduced when connections
+    // fail (a strong signal the server is limiting/throttling concurrent connections from this IP, as
+    // many mirrors and CDNs do). This lets a download that opened "too many" connections settle to a
+    // count the server actually tolerates instead of failing outright.
+    private int _effectiveMaxConnections;
+
+    // Number of connections that retired (gave up their segment after exhausting retries) in the
+    // current round. Reset at the start of each round.
+    private int _retiredThisRound;
+
     // Latest smoothed aggregate throughput (bytes/sec), published by the progress loop and consumed by
     // the adaptive split threshold. Stored as raw bits in a long because C# does not allow a volatile
     // double; accessed with Interlocked so the two threads always see a whole value.
@@ -101,6 +111,7 @@ public sealed class DownloadWorker
         }
 
         _flushThreshold = Math.Max(1L * 1024 * 1024, _options.ReadBufferSize * 8L);
+        _effectiveMaxConnections = Math.Max(1, _options.MaxConnections);
     }
 
     /// <summary>Absolute path to the part file being written.</summary>
@@ -142,9 +153,9 @@ public sealed class DownloadWorker
             Exception? fatal = null;
             int faultClaimed = 0;
 
-            // Decide how many connections to run: one per incomplete segment, capped at the
-            // configured maximum. Segments that are already complete (e.g. pre-completed pieces from
-            // a resume re-plan) need no connection at all.
+            // Decide how many connections to run: one per incomplete segment, capped at the current
+            // adaptive maximum. Segments that are already complete (e.g. pre-completed pieces from a
+            // resume re-plan) need no connection at all.
             int workers;
             lock (_planLock)
             {
@@ -158,7 +169,7 @@ public sealed class DownloadWorker
                     }
                 }
 
-                workers = Math.Min(incomplete, _options.MaxConnections);
+                workers = Math.Min(incomplete, _effectiveMaxConnections);
             }
 
             if (workers <= 0)
@@ -167,6 +178,8 @@ public sealed class DownloadWorker
             }
 
             _workerCount = workers;
+            _retiredThisRound = 0;
+            long roundStartBytes = SumLive();
 
             // Each worker pulls work from the shared plan until there is none left. This is the core
             // of the work-stealing model: a connection that finishes its range does NOT go idle — it
@@ -180,7 +193,24 @@ public sealed class DownloadWorker
                     DownloadSegment? current = TryClaimWork();
                     while (current is not null)
                     {
-                        await DownloadSegmentAsync(current, faultCts.Token).ConfigureAwait(false);
+                        try
+                        {
+                            await DownloadSegmentAsync(current, faultCts.Token).ConfigureAwait(false);
+                        }
+                        catch (SegmentUnavailableException)
+                        {
+                            // This connection could not sustain its segment (the server kept refusing
+                            // or resetting it — typically because it limits concurrent connections per
+                            // IP). Do NOT fail the whole download: release the segment back to the pool
+                            // with its progress intact, and RETIRE this connection. Fewer live
+                            // connections eases the pressure that caused the failure, and the surviving
+                            // connections (or the next round) pick up the released work. As long as one
+                            // connection keeps making progress, the download completes.
+                            ReleaseSegment(current);
+                            Interlocked.Increment(ref _retiredThisRound);
+                            return;
+                        }
+
                         current = TryClaimWork();
                     }
                 }
@@ -191,6 +221,7 @@ public sealed class DownloadWorker
                 }
                 catch (Exception ex)
                 {
+                    // A genuinely fatal error (disk failure, a non-recoverable server response, etc.).
                     // First fatal wins: record it and cancel the rest so they stop immediately.
                     if (Interlocked.Exchange(ref faultClaimed, 1) == 0)
                     {
@@ -220,28 +251,63 @@ public sealed class DownloadWorker
                 throw new OperationCanceledException(cancellationToken);
             }
 
+            // A genuinely fatal error (disk, unrecoverable server response) takes priority.
+            if (fatal is not null)
+            {
+                // The server refused to honour our range requests, or the content changed under an
+                // If-Range validator. Both are recoverable: re-download as a single stream from the
+                // start. Only done once; a second occurrence is a real error.
+                if (fatal is RangeNotHonoredException && !collapsedToSingleStream)
+                {
+                    collapsedToSingleStream = true;
+                    CollapseToSingleStream();
+                    continue;
+                }
+
+                _state.Status = DownloadStatus.Failed;
+                _state.ErrorMessage = fatal.Message;
+                _state.CompletedUtc = DateTimeOffset.UtcNow;
+                await SaveStateSafelyAsync().ConfigureAwait(false);
+                await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
+                throw fatal as DownloadException ?? new DownloadException("The download failed.", fatal);
+            }
+
             // All segments finished cleanly — leave the loop and finalize below.
-            if (fatal is null)
+            if (_state.AllSegmentsComplete)
             {
                 break;
             }
 
-            // The server refused to honour our range requests (fresh download) or the content changed
-            // under an If-Range validator (resume). Both are recoverable: re-download the whole file as
-            // a single stream from the start. We only do this once; a second failure is a real error.
-            if (fatal is RangeNotHonoredException && !collapsedToSingleStream)
+            // Not complete, not cancelled, no fatal error: one or more connections retired because the
+            // server kept refusing them. Decide whether to try another round.
+            long roundProgress = SumLive() - roundStartBytes;
+            if (roundProgress <= 0)
             {
-                collapsedToSingleStream = true;
-                CollapseToSingleStream();
-                continue; // retry the transfer with the single-stream plan
+                // A whole round moved zero bytes — the server/link is genuinely unusable right now.
+                // Fail (resumably: all downloaded bytes are preserved, so the user can retry later).
+                _state.Status = DownloadStatus.Failed;
+                _state.ErrorMessage =
+                    "Could not keep a connection to the server alive long enough to make progress. " +
+                    "The server may be limiting connections or temporarily unavailable. Your progress " +
+                    "was saved — try resuming in a little while.";
+                _state.CompletedUtc = DateTimeOffset.UtcNow;
+                await SaveStateSafelyAsync().ConfigureAwait(false);
+                await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
+                throw new DownloadException(_state.ErrorMessage);
             }
 
-            _state.Status = DownloadStatus.Failed;
-            _state.ErrorMessage = fatal.Message;
-            _state.CompletedUtc = DateTimeOffset.UtcNow;
+            // Progress WAS made this round, so the server is usable — it just could not sustain this
+            // many parallel connections. Reduce the connection ceiling and go again for the remaining
+            // ranges. This is what lets a download that opened 16 connections settle to, say, the 8 the
+            // server actually allows, and then finish, instead of failing. Persist first so the retry
+            // resumes from the latest offsets.
+            if (_retiredThisRound > 0)
+            {
+                int reduced = _effectiveMaxConnections - Math.Max(1, _effectiveMaxConnections / 4);
+                _effectiveMaxConnections = Math.Max(1, reduced);
+            }
+
             await SaveStateSafelyAsync().ConfigureAwait(false);
-            await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
-            throw fatal as DownloadException ?? new DownloadException("The download failed.", fatal);
         }
 
         await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
@@ -414,6 +480,18 @@ public sealed class DownloadWorker
     }
 
     /// <summary>
+    /// Returns a segment to the unclaimed pool (keeping its downloaded bytes) so another connection,
+    /// or a later lower-concurrency round, can pick it up. Called when a connection retires.
+    /// </summary>
+    private void ReleaseSegment(DownloadSegment segment)
+    {
+        lock (_planLock)
+        {
+            _claimed.Remove(segment.Index);
+        }
+    }
+
+    /// <summary>
     /// Minimum bytes a split must hand over to be worthwhile. Takes the larger of the configured
     /// absolute floor and the amount the observed per-connection throughput would move in
     /// <see cref="DownloadOptions.MinSplitDuration"/>.
@@ -511,8 +589,10 @@ public sealed class DownloadWorker
                 attempt++;
                 if (attempt > _options.MaxRetriesPerSegment)
                 {
-                    throw new DownloadException(
-                        $"Segment {segment.Index} failed after {_options.MaxRetriesPerSegment} retries.", ex);
+                    // Retries exhausted for THIS connection. Signal the worker loop to retire this
+                    // connection and release the segment, rather than failing the whole download — a
+                    // surviving connection (or a lower-concurrency retry round) can still finish it.
+                    throw new SegmentUnavailableException(segment.Index, _options.MaxRetriesPerSegment, ex);
                 }
 
                 // Record the most likely cause so the progress loop can surface a clear status while
@@ -1433,10 +1513,11 @@ public sealed class DownloadWorker
     private static bool IsTransient(Exception ex) => ex switch
     {
         DownloadException => false,
-        // Not transient: this is not retried per-segment. It is handled once at the whole-download
-        // level by collapsing to a single stream (see RunAsync), so we must let it escape the
-        // per-segment retry loop rather than treat it as a connection hiccup.
+        // Not transient: these are not retried per-segment. RangeNotHonored is handled at the
+        // whole-download level (collapse to a single stream); SegmentUnavailable is handled by the
+        // worker loop (retire the connection). Both must escape the per-segment retry loop.
         RangeNotHonoredException => false,
+        SegmentUnavailableException => false,
         HttpRequestException => true,
         IOException => true,
         TimeoutException => true,
@@ -1453,6 +1534,19 @@ public sealed class DownloadWorker
     private sealed class RangeNotHonoredException : Exception
     {
         public RangeNotHonoredException(string message) : base(message)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Internal signal that a single connection exhausted its retries for a segment. It is NOT fatal:
+    /// the worker loop catches it, releases the segment, and retires just that connection, so the
+    /// download keeps going on the remaining connections instead of failing outright.
+    /// </summary>
+    private sealed class SegmentUnavailableException : Exception
+    {
+        public SegmentUnavailableException(int segmentIndex, int retries, Exception inner)
+            : base($"Segment {segmentIndex} could not be sustained after {retries} retries.", inner)
         {
         }
     }
