@@ -78,6 +78,15 @@ public sealed class DownloadOptions
     public string? UserAgent { get; init; }
 
     /// <summary>
+    /// Maximum bytes buffered in memory between the network readers and the disk writer. This buffer is
+    /// what smooths a bursty/throughput-limited disk into a steady network speed: connections keep
+    /// reading into it while the writer drains to disk. Larger absorbs longer disk stalls at the cost of
+    /// RAM; the default (128 MiB) covers a couple of seconds of a fast link. Shared across all of a
+    /// download's connections.
+    /// </summary>
+    public long MaxBufferedBytes { get; init; } = 128L * 1024 * 1024; // 128 MiB
+
+    /// <summary>
     /// When true (the default), a completed file is hashed and compared against the digest the server
     /// advertised (<c>Repr-Digest</c>, <c>Digest</c>, or <c>Content-MD5</c>) before being delivered.
     ///
@@ -130,6 +139,12 @@ public sealed class DownloadOptions
         {
             throw new ArgumentOutOfRangeException(nameof(MinSplitDuration), MinSplitDuration,
                 "MinSplitDuration cannot be negative.");
+        }
+
+        if (MaxBufferedBytes < ReadBufferSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MaxBufferedBytes), MaxBufferedBytes,
+                "MaxBufferedBytes must be at least ReadBufferSize.");
         }
     }
 }
