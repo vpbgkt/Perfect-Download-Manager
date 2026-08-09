@@ -8,21 +8,20 @@ public sealed class DownloadOptions
 {
     /// <summary>
     /// Maximum number of parallel connections (segments) for one download — the ceiling the adaptive
-    /// scheduler is allowed to ramp <em>up</em> to. Defaults to 16: per-connection server throttling
-    /// gains flatten out around this point, while going higher mainly invites HTTP 429 rate limiting
-    /// and per-IP connection refusals. A download does not open this many at once (see
-    /// <see cref="InitialConnections"/>); it starts smaller and adds connections only while they
-    /// measurably increase throughput.
+    /// scheduler is allowed to ramp <em>up</em> to. Defaults to 8, the same stable count established
+    /// managers (e.g. IDM) use by default, because it is comfortably under the per-IP connection limit
+    /// most servers enforce. Going higher tends to trigger refusals/throttling and retry-backoff churn
+    /// that makes downloads slower and jumpy, not faster. Advanced users can raise this; the scheduler
+    /// then ramps toward it only while extra connections measurably increase throughput.
     /// </summary>
-    public int MaxConnections { get; init; } = 16;
+    public int MaxConnections { get; init; } = 8;
 
     /// <summary>
-    /// Number of connections a download opens at the start, before adaptive ramp-up. Defaults to 8 —
-    /// the count established managers use — so a download reaches near-full parallelism immediately
-    /// (important for short transfers) without blasting the server with the full
-    /// <see cref="MaxConnections"/> at once, which on connection-limited servers triggers refusals and
-    /// slow retry/backoff churn. The scheduler then ramps toward <see cref="MaxConnections"/> only if
-    /// added connections actually raise throughput, and backs off if the server pushes back.
+    /// Number of connections a download opens at the start, before any adaptive ramp-up. Defaults to 8
+    /// so a download reaches full parallelism immediately (important for short transfers). When it
+    /// equals <see cref="MaxConnections"/> (the default), the connection count is simply held steady —
+    /// the stable, IDM-like profile — and no ramp-up occurs. Ramp-up only happens when a larger
+    /// <see cref="MaxConnections"/> is configured.
     /// </summary>
     public int InitialConnections { get; init; } = 8;
 
