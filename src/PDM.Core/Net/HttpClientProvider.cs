@@ -91,10 +91,25 @@ public sealed class HttpClientProvider : IDisposable
                 MaxAutomaticRedirections = 10,
                 AutomaticDecompression = DecompressionMethods.None,
                 MaxConnectionsPerServer = MaxConnectionsPerServer,
-                // WinHttpHandler has no ConnectTimeout; its SendTimeout / ReceiveHeadersTimeout /
-                // ReceiveDataTimeout (each ~30s by default) govern the handshake and header phases.
-                // Data reads are additionally governed by the caller's own cancellation, so a slow-
-                // but-alive transfer is never cut off here.
+
+                // WHY THESE TIMEOUTS ARE GENEROUS (not the ~30s defaults):
+                // During a fast multi-connection download the OS write cache fills within seconds; when
+                // it does, WriteAsync blocks while a throughput-limited disk (typical on cloud VMs)
+                // drains. While a connection is blocked on disk it stops draining its socket, so
+                // WinHTTP's receive buffer fills, TCP flow control pauses the server, and WinHTTP sees
+                // "no data received" — with the default 30s ReceiveDataTimeout it then aborts the
+                // connection. With 16 connections that produced frequent mid-download drops and
+                // eventually a failed segment, even though nothing was actually wrong: the pause was
+                // just normal disk backpressure. A generous receive-data timeout lets a transfer ride
+                // through those disk-bound pauses instead of being killed by them.
+                //
+                // Genuine dead connections are still caught quickly by the worker's own inactivity
+                // watchdog (DownloadOptions.StallTimeout, armed only while we are actively reading), so
+                // raising the WinHTTP receive timeout does not make real stalls linger.
+                ReceiveDataTimeout = TimeSpan.FromMinutes(5),
+                ReceiveHeadersTimeout = TimeSpan.FromSeconds(60),
+                SendTimeout = TimeSpan.FromSeconds(60),
+
                 // Preserve the previous behaviour: only use a proxy when one was explicitly
                 // configured in settings. (WinHTTP could also inherit the WinINet/system proxy,
                 // but we keep parity to avoid surprising users on unusual networks.)

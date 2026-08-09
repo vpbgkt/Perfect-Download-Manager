@@ -108,6 +108,14 @@ public sealed class DownloadEngine
             string.IsNullOrWhiteSpace(fileNameOverride) ? info.SuggestedFileName : fileNameOverride);
 
         Directory.CreateDirectory(destinationDirectory);
+
+        // Fail fast if the destination volume cannot hold the file. This matters especially now that
+        // the part file is sparse: SetLength to the full size succeeds even without the space, so a
+        // too-small disk would otherwise surface as an opaque IOException partway through a large
+        // download instead of a clear, upfront message. Best-effort — skipped when the size is unknown
+        // or the free space cannot be queried (e.g. some network paths).
+        EnsureSufficientDiskSpace(destinationDirectory, info.TotalBytes);
+
         string candidate = Path.Combine(destinationDirectory, fileName);
         string destination = ResolveDestination(candidate, overwritePolicy);
 
@@ -206,6 +214,64 @@ public sealed class DownloadEngine
             .ConfigureAwait(false);
         await RunAsync(state, progress, options, globalLimiter: null, cancellationToken).ConfigureAwait(false);
         return state;
+    }
+
+    /// <summary>
+    /// Throws a clear <see cref="DownloadException"/> when the destination volume does not have room for
+    /// a file of <paramref name="totalBytes"/>. A small headroom margin is required on top of the file
+    /// size so the download does not fill the disk to the last byte. No-op when the size is unknown or
+    /// the volume's free space cannot be determined.
+    /// </summary>
+    private static void EnsureSufficientDiskSpace(string destinationDirectory, long? totalBytes)
+    {
+        if (totalBytes is not > 0)
+        {
+            return;
+        }
+
+        long required = totalBytes.Value;
+        try
+        {
+            string? root = Path.GetPathRoot(Path.GetFullPath(destinationDirectory));
+            if (string.IsNullOrEmpty(root))
+            {
+                return;
+            }
+
+            var drive = new DriveInfo(root);
+            if (!drive.IsReady)
+            {
+                return;
+            }
+
+            // Keep a small margin free (64 MiB or 1% of the file, whichever is larger).
+            long margin = Math.Max(64L * 1024 * 1024, required / 100);
+            if (drive.AvailableFreeSpace < required + margin)
+            {
+                throw new DownloadException(
+                    $"Not enough free space on {root} to download this file. " +
+                    $"Need about {FormatSize(required)}, but only {FormatSize(drive.AvailableFreeSpace)} is available.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            // Could not determine free space (unusual path, network share, permissions): skip the
+            // check rather than block a download that might well succeed.
+        }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = { "bytes", "KB", "MB", "GB", "TB" };
+        double value = bytes;
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return $"{value:0.#} {units[unit]}";
     }
 
     private static string ResolveDestination(string candidate, OverwritePolicy policy)
