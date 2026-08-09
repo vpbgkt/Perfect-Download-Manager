@@ -247,10 +247,65 @@ public sealed class DownloadWorker
                 }
             }
 
-            var workerTasks = new Task[workers];
-            for (int i = 0; i < workers; i++)
+            // Adaptive ramp-up. Start with a moderate number of connections rather than opening the
+            // full ceiling at once: blasting every connection immediately makes connection-limited
+            // servers refuse the excess, and those refused connections then burn seconds in retry
+            // backoff ("waiting for server") — the cause of short downloads taking minutes. We then add
+            // connections one interval at a time, but ONLY while each addition measurably raises
+            // throughput and the server is not pushing back (no retirements). This reaches full
+            // parallelism on servers that benefit from it, and settles at the right (smaller) count on
+            // servers that throttle per-IP — matching a stable, IDM-like connection profile.
+            int target = workers;
+            int initial = Math.Min(target, Math.Max(1, _options.InitialConnections));
+
+            var workerTasks = new List<Task>(target);
+            for (int i = 0; i < initial; i++)
             {
-                workerTasks[i] = RunWorkerAsync();
+                workerTasks.Add(RunWorkerAsync());
+            }
+
+            _workerCount = initial;
+
+            int running = initial;
+            if (target > initial)
+            {
+                // Establish a throughput baseline for the initial connection count.
+                long prevBytes = SumLive();
+                double prevRate = -1;
+
+                while (running < target)
+                {
+                    try
+                    {
+                        await Task.Delay(_options.RampUpInterval, faultCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+
+                    if (_state.AllSegmentsComplete || _retiredThisRound > 0)
+                    {
+                        break; // done, or the server is already refusing connections — do not add more
+                    }
+
+                    long nowBytes = SumLive();
+                    double rate = (nowBytes - prevBytes) / _options.RampUpInterval.TotalSeconds;
+                    prevBytes = nowBytes;
+
+                    // Stop once an added connection no longer raises throughput by a meaningful margin
+                    // (link or disk saturated, or a per-IP bandwidth cap). The first interval only
+                    // establishes the baseline.
+                    if (prevRate >= 0 && rate <= prevRate * 1.10)
+                    {
+                        break;
+                    }
+
+                    prevRate = rate;
+                    workerTasks.Add(RunWorkerAsync());
+                    running++;
+                    _workerCount = running;
+                }
             }
 
             await Task.WhenAll(workerTasks).ConfigureAwait(false);

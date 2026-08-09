@@ -7,13 +7,27 @@ namespace PDM.Core.Models;
 public sealed class DownloadOptions
 {
     /// <summary>
-    /// Maximum number of parallel connections (segments) for one download. Defaults to 16, which is
-    /// the same practical ceiling established download managers use: per-connection server throttling
+    /// Maximum number of parallel connections (segments) for one download — the ceiling the adaptive
+    /// scheduler is allowed to ramp <em>up</em> to. Defaults to 16: per-connection server throttling
     /// gains flatten out around this point, while going higher mainly invites HTTP 429 rate limiting
-    /// and per-IP connection refusals. Combined with the default 3 simultaneous downloads this stays
-    /// inside the HTTP handler's 64-connections-per-server pool.
+    /// and per-IP connection refusals. A download does not open this many at once (see
+    /// <see cref="InitialConnections"/>); it starts smaller and adds connections only while they
+    /// measurably increase throughput.
     /// </summary>
     public int MaxConnections { get; init; } = 16;
+
+    /// <summary>
+    /// Number of connections a download opens at the start, before adaptive ramp-up. Defaults to 8 —
+    /// the count established managers use — so a download reaches near-full parallelism immediately
+    /// (important for short transfers) without blasting the server with the full
+    /// <see cref="MaxConnections"/> at once, which on connection-limited servers triggers refusals and
+    /// slow retry/backoff churn. The scheduler then ramps toward <see cref="MaxConnections"/> only if
+    /// added connections actually raise throughput, and backs off if the server pushes back.
+    /// </summary>
+    public int InitialConnections { get; init; } = 8;
+
+    /// <summary>How long to observe throughput between adding connections during ramp-up.</summary>
+    public TimeSpan RampUpInterval { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Minimum bytes a segment must span. Prevents spawning many tiny connections for
@@ -58,8 +72,12 @@ public sealed class DownloadOptions
     /// <summary>Base delay for exponential backoff between retries.</summary>
     public TimeSpan RetryBaseDelay { get; init; } = TimeSpan.FromSeconds(1);
 
-    /// <summary>Upper bound on the backoff delay between retries.</summary>
-    public TimeSpan RetryMaxDelay { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// Upper bound on the backoff delay between retries. Kept modest (10s) so a connection the server
+    /// is refusing does not sit idle for tens of seconds before retiring — long backoff on refused
+    /// connections was the dominant source of "waiting for server" dead-time on short downloads.
+    /// </summary>
+    public TimeSpan RetryMaxDelay { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>How often progress snapshots are emitted to observers.</summary>
     public TimeSpan ProgressInterval { get; init; } = TimeSpan.FromMilliseconds(500);
@@ -103,6 +121,18 @@ public sealed class DownloadOptions
         {
             throw new ArgumentOutOfRangeException(nameof(MaxConnections), MaxConnections,
                 "MaxConnections must be between 1 and 64.");
+        }
+
+        if (InitialConnections < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(InitialConnections), InitialConnections,
+                "InitialConnections must be at least 1.");
+        }
+
+        if (RampUpInterval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(RampUpInterval), RampUpInterval,
+                "RampUpInterval must be greater than zero.");
         }
 
         if (MinSegmentSize < 1)
