@@ -55,6 +55,13 @@ public sealed class DownloadManager : IAsyncDisposable
     public TimeSpan ScheduleTick { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
+    /// How long a paused download's stored URL is trusted before a resume re-probes it. Signed/CDN links
+    /// typically stay valid for many minutes, so a download resumed shortly after being paused can start
+    /// transferring immediately instead of paying a probe round trip first.
+    /// </summary>
+    public TimeSpan ResumeUrlTrustWindow { get; init; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
     /// Optional upper bound on the parallel connections a single download may use, layered on top of
     /// <see cref="AppSettings.MaxConnectionsPerDownload"/>. Null means no cap (the setting is used as-is).
     /// The composition root sets this to a small value for unlicensed/expired installs so accelerated
@@ -1060,23 +1067,36 @@ public sealed class DownloadManager : IAsyncDisposable
         {
             try
             {
-                // For a resume (progress already on disk), re-resolve the source URL first so an
-                // expired or relocated CDN link is refreshed to a working one. A stale effective URL
-                // is the usual cause of a resumed transfer crawling at a fraction of full speed (or
-                // failing) while a brand-new download of the same file runs at full speed.
                 if (managed.State.BytesDownloaded > 0)
                 {
-                    await RefreshEffectiveUrlAsync(managed.State, cts.Token).ConfigureAwait(false);
+                    // For a resume, re-resolve the source URL when the stored link may have gone stale,
+                    // so an expired or relocated CDN link is refreshed to a working one (a stale
+                    // effective URL is a common cause of a resumed transfer crawling or failing).
+                    //
+                    // This used to run on EVERY resume, which cost a network round trip before any data
+                    // could flow and spent an extra request against hosts that rate-limit requests per
+                    // IP. It is now conditional: a download paused and resumed moments later keeps its
+                    // link, so it starts transferring immediately. See ShouldRefreshUrlOnResume.
+                    if (ShouldRefreshUrlOnResume(managed.State))
+                    {
+                        await RefreshEffectiveUrlAsync(managed.State, cts.Token).ConfigureAwait(false);
+                    }
 
-                    // Restore full parallelism for the remaining bytes. Without this a resumed
-                    // download can crawl on a single connection (static segments are not replaced as
-                    // they finish), which is why a resume — even on a fresh link — stays slow while a
-                    // brand-new download runs at full speed.
+                    // Pre-split the remaining ranges so the first round starts with full parallelism
+                    // instead of having to steal work into existence. Pure CPU, no I/O, and a no-op when
+                    // the remaining ranges are already well spread (see SegmentPlanner.ReplanRemaining).
                     ReparallelizeRemaining(managed.State);
                 }
 
+                // Record the attempt so the next resume can judge how stale the link is.
+                managed.State.LastAttemptUtc = DateTimeOffset.UtcNow;
+
                 await _engine.RunAsync(managed.State, progress, BuildOptions(), _globalLimiter, cts.Token)
                     .ConfigureAwait(false);
+
+                // Reached only when the transfer succeeded: the stored link is known good, so a later
+                // resume need not re-probe it.
+                managed.State.LastAttemptFailed = false;
             }
             catch (OperationCanceledException)
             {
@@ -1088,6 +1108,10 @@ public sealed class DownloadManager : IAsyncDisposable
                 managed.State.Status = DownloadStatus.Failed;
                 managed.State.ErrorMessage = ex.Message;
                 managed.State.CompletedUtc = DateTimeOffset.UtcNow;
+
+                // Remember the failure across the resume that clears ErrorMessage, so the next attempt
+                // re-probes the URL (see ShouldRefreshUrlOnResume).
+                managed.State.LastAttemptFailed = true;
                 _logger.LogError(ex, "Download {Id} failed", managed.Id);
             }
             finally
@@ -1116,6 +1140,41 @@ public sealed class DownloadManager : IAsyncDisposable
     /// as-is and the worker/user handles it (via the download's normal failure path or "Change link").
     /// Never throws except on cancellation.</para>
     /// </summary>
+    /// <summary>
+    /// Decides whether a resuming download should re-probe its source URL before transferring.
+    ///
+    /// <para>Re-probing costs a full network round trip before any data flows, and spends an extra
+    /// request against hosts that rate-limit per IP — so it is only worth doing when the stored link is
+    /// actually likely to be stale:</para>
+    /// <list type="bullet">
+    ///   <item><b>The previous attempt failed.</b> A dead or expired link is the most common reason, so
+    ///         refresh before trying again.</item>
+    ///   <item><b>The download has been idle longer than <see cref="ResumeUrlTrustWindow"/>.</b> Signed
+    ///         and time-limited CDN URLs expire; one left paused for hours probably has a dead link.</item>
+    ///   <item><b>The last attempt time is unknown</b> (state written by an older version): be safe and
+    ///         refresh.</item>
+    /// </list>
+    /// Otherwise — the overwhelmingly common "paused and resumed a moment later" case — the link is
+    /// trusted and the transfer starts straight away. If that assumption turns out to be wrong, the
+    /// worker's normal failure path applies and the next resume will refresh (the first bullet).
+    /// </summary>
+    private bool ShouldRefreshUrlOnResume(DownloadState state)
+    {
+        // NOTE: this deliberately checks LastAttemptFailed rather than ErrorMessage — ResumeAsync clears
+        // the error text before the run begins, so ErrorMessage is always null by the time we get here.
+        if (state.LastAttemptFailed)
+        {
+            return true; // previous attempt failed — the link is a prime suspect
+        }
+
+        if (state.LastAttemptUtc is not { } lastAttempt)
+        {
+            return true; // unknown age; refresh rather than risk a dead link
+        }
+
+        return DateTimeOffset.UtcNow - lastAttempt > ResumeUrlTrustWindow;
+    }
+
     private async Task RefreshEffectiveUrlAsync(DownloadState state, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(state.SourceUrl, UriKind.Absolute, out Uri? source))

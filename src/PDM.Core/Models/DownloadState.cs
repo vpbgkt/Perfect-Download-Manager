@@ -95,6 +95,22 @@ public sealed class DownloadState
     /// <summary>UTC timestamp when the download was created.</summary>
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// UTC timestamp of the most recent transfer attempt. Used to judge whether a stored download URL
+    /// is likely stale: a download paused and resumed moments later almost certainly still has a valid
+    /// link, whereas one left for hours may have an expired signed/CDN URL. This lets a resume skip an
+    /// unnecessary re-probe (a network round trip, and one more request against hosts that rate-limit).
+    /// </summary>
+    public DateTimeOffset? LastAttemptUtc { get; set; }
+
+    /// <summary>
+    /// True when the most recent transfer attempt ended in failure. Kept separate from
+    /// <see cref="ErrorMessage"/> because resuming clears the user-facing error text before the next
+    /// attempt starts, yet the fact that the last try failed is exactly what tells the engine the stored
+    /// URL is a prime suspect and should be re-probed. Cleared once an attempt completes successfully.
+    /// </summary>
+    public bool LastAttemptFailed { get; set; }
+
     /// <summary>Total bytes transferred across all segments.</summary>
     public long BytesDownloaded => Segments.Sum(s => s.BytesDownloaded);
 

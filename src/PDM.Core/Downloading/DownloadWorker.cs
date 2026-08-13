@@ -1505,6 +1505,8 @@ public sealed class DownloadWorker
             ErrorMessage = _state.ErrorMessage,
             CompletedUtc = _state.CompletedUtc,
             CreatedUtc = _state.CreatedUtc,
+            LastAttemptUtc = _state.LastAttemptUtc,
+            LastAttemptFailed = _state.LastAttemptFailed,
             Segments = segments
         };
     }
