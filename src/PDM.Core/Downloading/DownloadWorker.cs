@@ -1175,7 +1175,20 @@ public sealed class DownloadWorker
 
     private async Task RunProgressLoopAsync(Stopwatch stopwatch, CancellationToken token)
     {
-        long lastBytes = SumLive();
+        // WHY DURABLE BYTES DRIVE THE READOUT (and not bytes read off the socket)
+        //
+        // Reads and disk writes are decoupled by the DiskWriteQueue. When the queue is full (disk
+        // momentarily behind the network) the readers block in EnqueueAsync, so the READ cursor
+        // (SumLive) freezes — even though the writer is still draining and the file on disk is still
+        // growing normally. Reporting the read cursor therefore produced the confusing symptom of
+        // "speed drops to a few KB/s and it says Waiting for server, but the file keeps downloading":
+        // the transfer was fine, only the metric had stalled.
+        //
+        // Durable bytes (what has actually reached disk) advance smoothly through those moments,
+        // because the writer keeps working while readers are paused. So they give both an honest
+        // progress figure (bytes safely stored) and a stable speed readout. It also matches the signal
+        // the adaptive connection controller measures, so the UI and the controller now agree.
+        long lastBytes = SumDurable();
         long lastTicks = stopwatch.ElapsedTicks;
         double smoothed = 0;
         var saveTimer = Stopwatch.StartNew();
@@ -1186,7 +1199,7 @@ public sealed class DownloadWorker
             {
                 await Task.Delay(_options.ProgressInterval, token).ConfigureAwait(false);
 
-                long nowBytes = SumLive();
+                long nowBytes = SumDurable();
                 long nowTicks = stopwatch.ElapsedTicks;
                 double seconds = (nowTicks - lastTicks) / (double)Stopwatch.Frequency;
                 if (seconds > 0)
@@ -1195,7 +1208,8 @@ public sealed class DownloadWorker
                     // Exponential moving average for a stable readout.
                     smoothed = smoothed <= 0 ? instant : (0.6 * instant) + (0.4 * smoothed);
 
-                    // Publish for the work-stealing scheduler's bandwidth-aware split threshold.
+                    // Publish for the work-stealing scheduler's bandwidth-aware split threshold and the
+                    // adaptive connection controller.
                     Interlocked.Exchange(ref _observedBytesPerSecondBits, BitConverter.DoubleToInt64Bits(smoothed));
                 }
 
@@ -1242,7 +1256,9 @@ public sealed class DownloadWorker
             return;
         }
 
-        EmitProgress(SumLive(), 0, stopwatch.Elapsed);
+        // Durable bytes, to match the progress loop (see the note there on why the read cursor is not
+        // used for reporting).
+        EmitProgress(SumDurable(), 0, stopwatch.Elapsed);
     }
 
     private void EmitProgress(long bytes, double bytesPerSecond, TimeSpan elapsed)
@@ -1271,6 +1287,20 @@ public sealed class DownloadWorker
         int total = _workerCount > 0 ? _workerCount : plan.Count;
         active = Math.Min(active, total);
 
+        // SUPPRESS A STALE ISSUE LABEL WHILE DATA IS FLOWING.
+        //
+        // _issueCode is a single, download-wide "last writer wins" hint set by whichever connection most
+        // recently hit a transient error. With several connections, ONE connection having a hiccup (and
+        // quietly retrying, as designed) would leave the whole download labelled e.g. "Waiting for
+        // server" — even while the other connections were streaming at full speed — until something
+        // happened to clear it. That is what produced alarming "Waiting for server" text during a
+        // perfectly healthy transfer.
+        //
+        // The honest rule: an issue is only worth showing when the download is actually not progressing.
+        // If bytes are still landing on disk, report no issue.
+        DownloadIssue issue = bytesPerSecond > 0 ? DownloadIssue.None : (DownloadIssue)_issueCode;
+        int retryAttempt = issue == DownloadIssue.None ? 0 : _retryAttempt;
+
         _progress.Report(new DownloadProgress
         {
             BytesDownloaded = bytes,
@@ -1280,8 +1310,8 @@ public sealed class DownloadWorker
             ActiveConnections = active,
             TotalConnections = total,
             Status = _state.Status,
-            Issue = (DownloadIssue)_issueCode,
-            RetryAttempt = _retryAttempt,
+            Issue = issue,
+            RetryAttempt = retryAttempt,
             MaxRetries = _options.MaxRetriesPerSegment
         });
     }
