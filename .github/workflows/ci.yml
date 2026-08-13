@@ -13,6 +13,10 @@ on:
     branches: [main, "release/**", "migration/**"]
   pull_request:
     branches: [main, "release/**", "migration/**"]
+  # Nightly trigger for the download-engine stress soak (see the stress-soak job).
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
 
 jobs:
   build-test:
@@ -42,6 +46,38 @@ jobs:
       # timers pending by design.
       - name: Test browser extension
         run: node --test --test-force-exit browser-extension/tests/background.test.js
+
+  # Long soak of the download-engine stress harness (tests/PDM.Core.Tests/DownloadEngineStressTests.cs).
+  #
+  # The stress tests already run on every push as part of build-test, but with only a handful of seeds so
+  # PRs stay fast. Concurrency bugs in the engine's work-stealing splits, parallel disk writes and
+  # connection retirement would most likely surface as a RARE silent wrong byte, so the real value comes
+  # from accumulating many randomised runs on varied hardware over time. This job does that nightly (and
+  # on demand) by raising the seed count via PDM_STRESS_SEEDS.
+  stress-soak:
+    name: Download engine stress soak
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore PDM.sln
+
+      - name: Build core tests
+        run: dotnet build tests/PDM.Core.Tests/PDM.Core.Tests.csproj -c Debug --no-restore
+
+      # Any failure prints the seed, so the exact scenario can be reproduced locally by adding it as an
+      # InlineData case (or running the soak with that seed range).
+      - name: Stress soak (many seeds)
+        env:
+          PDM_STRESS_SEEDS: "150"
+        run: dotnet test tests/PDM.Core.Tests/PDM.Core.Tests.csproj -c Debug --no-build --filter "FullyQualifiedName~DownloadEngineStressTests"
 
   aot-gate:
     name: NativeAOT gate (${{ matrix.rid }} on ${{ matrix.os }})

@@ -135,7 +135,37 @@ public sealed class DownloadEngineStressTests : IDisposable
     [InlineData(1515)]
     [InlineData(1616)]
     [InlineData(1717)]
-    public async Task ChaoticServer_StillProducesByteIdenticalFile(int seed)
+    public Task ChaoticServer_StillProducesByteIdenticalFile(int seed) => RunChaoticDownloadAsync(seed);
+
+    /// <summary>
+    /// Longer soak run for CI. The number of seeds is taken from the <c>PDM_STRESS_SEEDS</c> environment
+    /// variable, so pull requests stay fast (a handful of seeds) while a scheduled/nightly job can
+    /// explore hundreds of different chaos patterns and thread interleavings on different hardware.
+    /// Passing stress tests never prove the absence of a race — the value comes from accumulating runs
+    /// over time, which is what this enables.
+    /// </summary>
+    [Fact]
+    public async Task Soak_ChaoticServer_ProducesByteIdenticalFiles()
+    {
+        int seeds = 3;
+        string? configured = Environment.GetEnvironmentVariable("PDM_STRESS_SEEDS");
+        if (int.TryParse(configured, out int parsed) && parsed > 0)
+        {
+            seeds = Math.Min(parsed, 5000);
+        }
+
+        for (int i = 0; i < seeds; i++)
+        {
+            // Offset well clear of the fixed InlineData seeds so the soak explores new patterns.
+            await RunChaoticDownloadAsync(500_000 + i);
+        }
+    }
+
+    /// <summary>
+    /// One chaotic download end to end: randomised engine settings against a hostile server, asserting
+    /// a byte-identical result and a structurally valid plan. Shared by the seeded theory and the soak.
+    /// </summary>
+    private async Task RunChaoticDownloadAsync(int seed)
     {
         var rng = new Random(seed);
         byte[] content = MakeContent(rng.Next(600, 1400) * 1024, seed);
@@ -169,6 +199,15 @@ public sealed class DownloadEngineStressTests : IDisposable
         Assert.Equal(content.Length, written.Length);
         Assert.True(content.AsSpan().SequenceEqual(written),
             $"Downloaded bytes differ from the source (seed {seed}).");
+
+        // Keep the soak's disk footprint bounded: each iteration's artifacts are no longer needed.
+        try
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
     }
 
     /// <summary>
