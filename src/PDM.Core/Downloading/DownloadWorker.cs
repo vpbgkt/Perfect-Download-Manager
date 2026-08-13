@@ -198,7 +198,8 @@ public sealed class DownloadWorker
 
             // The write queue for this round: network readers hand buffers to it, a single writer
             // drains them to disk. Created per round so each round has a clean, fully-drained boundary.
-            await using var writeQueue = new DiskWriteQueue(PartPath, _writeQueueCapacity, OnChunkWritten);
+            await using var writeQueue = new DiskWriteQueue(
+                PartPath, _writeQueueCapacity, _options.DiskWriteParallelism, OnDurableAdvanced);
 
             // Each worker pulls work from the shared plan until there is none left. This is the core
             // of the work-stealing model: a connection that finishes its range does NOT go idle — it
@@ -804,6 +805,10 @@ public sealed class DownloadWorker
 
         long written = readSoFar; // read cursor; disk writing is handled by the DiskWriteQueue
 
+        // Tell the queue where this segment's contiguous written prefix starts, so it can advance the
+        // durable/resume offset correctly even though writes complete out of order.
+        writeQueue.BeginSegment(segment.Index, segment.Start, written);
+
         while (true)
         {
             // For known-size segments, stop once the assigned range is satisfied.
@@ -905,12 +910,13 @@ public sealed class DownloadWorker
     /// process crash (the bytes live in the OS page cache). Storage failures become a disk-error.
     /// </summary>
     /// <summary>
-    /// Advances a segment's durable (written-to-disk) offset. Invoked by the DiskWriteQueue writer
-    /// after each chunk reaches the OS. Because a segment's chunks are written in order, the offset is
-    /// monotonic. This is the value persisted for resume and checked by verification — distinct from
-    /// the read cursor (_liveBytes), which runs ahead while data is buffered for writing.
+    /// Advances a segment's durable (written-to-disk) offset. Invoked by the DiskWriteQueue once a
+    /// segment's <em>contiguous</em> written prefix grows, so the value is always a length that is
+    /// genuinely safe to resume from even though several writes may be in flight out of order. This is
+    /// the value persisted for resume and checked by verification — distinct from the read cursor
+    /// (_liveBytes), which runs ahead while data is buffered for writing.
     /// </summary>
-    private void OnChunkWritten(int segmentIndex, long offset, int length)
+    private void OnDurableAdvanced(int segmentIndex, long durableLength)
     {
         List<DownloadSegment> segments = _state.Segments;
         if ((uint)segmentIndex >= (uint)segments.Count)
@@ -919,10 +925,9 @@ public sealed class DownloadWorker
         }
 
         DownloadSegment seg = segments[segmentIndex];
-        long durable = offset + length - seg.Start;
-        if (durable > seg.BytesDownloaded)
+        if (durableLength > seg.BytesDownloaded)
         {
-            seg.BytesDownloaded = durable;
+            seg.BytesDownloaded = durableLength;
         }
     }
 
@@ -932,19 +937,8 @@ public sealed class DownloadWorker
     /// Best-effort: a failure here does not corrupt anything — the data is already in the OS cache — so
     /// it must not block delivery of an otherwise-verified file.
     /// </summary>
-    private void FlushWholeFileToDisk()
-    {
-        try
-        {
-            using var fs = new FileStream(
-                PartPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
-            fs.Flush(flushToDisk: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Non-fatal: OS cache already holds the bytes; proceed to verify and deliver.
-        }
-    }
+    // (The whole-file hardware flush was removed: see the note in FinalizeAsync. It cost seconds on
+    // large files and provided only power-loss durability, not correctness.)
 
     // (Per-connection disk-write failures are now produced by DiskWriteQueue; this helper was removed.)
 
@@ -979,10 +973,11 @@ public sealed class DownloadWorker
             throw new DownloadException(_state.ErrorMessage);
         }
 
-        // One hardware flush for the whole file, replacing the per-segment fsyncs that used to block
-        // worker threads. Best-effort: if it fails the bytes are still in the OS cache and the file is
-        // delivered; only power-loss durability (not correctness) is at stake.
-        FlushWholeFileToDisk();
+        // NOTE: we deliberately do NOT force a whole-file hardware flush (FlushFileBuffers) here.
+        // All bytes are already written to the OS, which persists them normally; forcing a full fsync of
+        // a large file adds seconds of dead time at the end of every download (on a 1 GB file that can
+        // be a large fraction of the total time) and buys only power-loss durability, not correctness.
+        // Other download managers do not do it either.
 
         // Secondary sanity check: catches a part file truncated or tampered with outside PDM.
         long actual = new FileInfo(PartPath).Length;

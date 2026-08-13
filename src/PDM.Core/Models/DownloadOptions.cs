@@ -39,12 +39,23 @@ public sealed class DownloadOptions
     public long MaxBytesPerSecond { get; init; }
 
     /// <summary>
-    /// Size of the buffer used for each socket read, in bytes. 256 KiB keeps the number of read
-    /// syscalls low on fast links (at 1 Gbps across 16 connections a 128 KiB buffer would mean
-    /// roughly 60 reads/sec per connection). Buffers are rented from the shared array pool, so the
-    /// larger size does not translate into sustained extra allocation.
+    /// Size of the buffer used for each socket read, in bytes — and therefore the size of each disk
+    /// write. 512 KiB keeps read syscalls and queue operations low on very fast links, and makes each
+    /// disk write large enough to reach good throughput per I/O (write throughput is roughly
+    /// chunk-size ÷ latency, so small chunks cap the writer). Kept at or below the shared array pool's
+    /// 1 MiB bucket so buffers are pooled rather than allocated.
     /// </summary>
-    public int ReadBufferSize { get; init; } = 256 * 1024; // 256 KiB
+    public int ReadBufferSize { get; init; } = 512 * 1024; // 512 KiB
+
+    /// <summary>
+    /// How many disk writes may be in flight at once. A single in-flight write limits throughput to
+    /// chunk-size ÷ write-latency (roughly 100-250 MB/s on typical storage), which on a fast link makes
+    /// the writer — not the network — the bottleneck and causes the bounded buffer to fill and stall
+    /// every connection. Issuing several writes concurrently raises the storage queue depth so fast
+    /// NVMe/premium disks can be saturated. Writes target non-overlapping offsets, and the durable
+    /// resume offset is tracked contiguously, so parallel writes remain safe.
+    /// </summary>
+    public int DiskWriteParallelism { get; init; } = 4;
 
     /// <summary>
     /// Absolute lower bound on the number of bytes a work-stealing split may hand to a freed
@@ -175,6 +186,12 @@ public sealed class DownloadOptions
         {
             throw new ArgumentOutOfRangeException(nameof(MaxBufferedBytes), MaxBufferedBytes,
                 "MaxBufferedBytes must be at least ReadBufferSize.");
+        }
+
+        if (DiskWriteParallelism is < 1 or > 64)
+        {
+            throw new ArgumentOutOfRangeException(nameof(DiskWriteParallelism), DiskWriteParallelism,
+                "DiskWriteParallelism must be between 1 and 64.");
         }
     }
 }
