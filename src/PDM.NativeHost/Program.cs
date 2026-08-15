@@ -20,6 +20,12 @@ internal static class Program
 {
     private const string PipeName = "PDM.DownloadRequest";
 
+    /// <summary>
+    /// Reported back to the extension on a ping so it can tell an up-to-date desktop app from an
+    /// older one. Bump alongside meaningful protocol changes.
+    /// </summary>
+    private const string HostProtocolVersion = "2";
+
     private static async Task<int> Main()
     {
         using Stream stdin = Console.OpenStandardInput();
@@ -49,6 +55,25 @@ internal static class Program
 
     private static async Task<HostReply> HandleAsync(BrowserMessage message)
     {
+        // Liveness probe. The extension asks this before it dares cancel a browser download, so it
+        // must be fast and free of side effects: we answer purely from "can this host run?" plus a
+        // no-write peek at the app's pipe, and we deliberately do NOT launch PDM. Launching on a
+        // ping would start the app every time the user merely opened the extension popup.
+        //
+        // Answering at all is the signal that matters — a machine without PDM has no registered
+        // host, so the browser fails the connection instead and the extension knows to leave
+        // downloads to the browser.
+        if (message.Ping == true)
+        {
+            return new HostReply
+            {
+                Ok = true,
+                Pong = true,
+                HostVersion = HostProtocolVersion,
+                AppRunning = await IsAppListeningAsync().ConfigureAwait(false)
+            };
+        }
+
         if (string.IsNullOrWhiteSpace(message.Url) ||
             !Uri.TryCreate(message.Url, UriKind.Absolute, out Uri? uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -83,6 +108,25 @@ internal static class Program
         }
 
         return new HostReply { Ok = false, Error = "pdm_unavailable" };
+    }
+
+    /// <summary>
+    /// True when the PDM app currently has its capture pipe open. Connect-and-drop only: the app's
+    /// listener reads a line, gets nothing, and returns without touching its rate limiter or its
+    /// dedup cache, so probing is free and repeatable.
+    /// </summary>
+    private static async Task<bool> IsAppListeningAsync()
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut);
+            await client.ConnectAsync(300).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private static async Task<bool> TrySendAsync(string payload)
@@ -202,6 +246,13 @@ internal static class Program
     /// <summary>Incoming native-messaging payload from the browser extension.</summary>
     internal sealed class BrowserMessage
     {
+        /// <summary>
+        /// Set by the extension's availability probe. Nullable so an absent field stays distinct
+        /// from an explicit false.
+        /// </summary>
+        [JsonPropertyName("ping")]
+        public bool? Ping { get; init; }
+
         [JsonPropertyName("url")]
         public string? Url { get; init; }
 
@@ -233,6 +284,18 @@ internal static class Program
 
         [JsonPropertyName("error")]
         public string? Error { get; init; }
+
+        /// <summary>Ping acknowledgement. Omitted from normal download replies (nulls are skipped).</summary>
+        [JsonPropertyName("pong")]
+        public bool? Pong { get; init; }
+
+        /// <summary>Host protocol version, so the extension can adapt to older installs.</summary>
+        [JsonPropertyName("hostVersion")]
+        public string? HostVersion { get; init; }
+
+        /// <summary>Whether the PDM app is running right now (pipe open). Informational only.</summary>
+        [JsonPropertyName("appRunning")]
+        public bool? AppRunning { get; init; }
     }
 }
 

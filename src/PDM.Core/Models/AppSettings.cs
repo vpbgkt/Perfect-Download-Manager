@@ -31,11 +31,12 @@ public sealed class AppSettings
     public int MaxSimultaneousDownloads { get; set; } = 3;
 
     /// <summary>
-    /// Default per-download connection count. 16 matches the practical ceiling used by established
-    /// download managers — beyond it, per-connection throttling gains flatten while rate-limiting and
-    /// per-IP connection refusals become likely.
+    /// Default per-download connection count. 8 is the stable default established managers (e.g. IDM)
+    /// use: it sits under the per-IP connection limit most servers enforce, so it delivers full speed
+    /// without triggering the refusals/throttling and retry churn that higher counts cause. Users can
+    /// raise it for servers that reward more connections.
     /// </summary>
-    public int MaxConnectionsPerDownload { get; set; } = 16;
+    public int MaxConnectionsPerDownload { get; set; } = 8;
 
     /// <summary>Global speed cap in bytes/sec across all downloads; 0 = unlimited.</summary>
     public long GlobalMaxBytesPerSecond { get; set; }

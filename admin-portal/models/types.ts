@@ -34,6 +34,15 @@ export interface LicenseSummary {
   createdAt?: string;
   activationCount: number;
   resellerAccountId?: string;
+  /** Normalized Custom_Key_Prefix, present only when the key was minted with one. */
+  keyPrefix?: string;
+  /** Customer_Fields — additive, omitted when absent from the stored item. */
+  customerEmail?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerCountry?: string;
+  customerCompany?: string;
+  customerNotes?: string;
 }
 
 /** Full single-record license view. */
@@ -54,6 +63,15 @@ export interface CreateLicenseBody {
   owner?: string;
   expiresAt?: string;
   features?: string[];
+  /** Custom_Key_Prefix — admin/super_admin only; null/omitted mints an unprefixed key. */
+  keyPrefix?: string | null;
+  /** Customer_Fields — all optional; null or "" stores no attribute. */
+  customerEmail?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerCountry?: string | null;
+  customerCompany?: string | null;
+  customerNotes?: string | null;
 }
 
 /** Attributes accepted when updating a license. */
@@ -63,6 +81,13 @@ export interface UpdateLicenseBody {
   expiresAt?: string | null;
   owner?: string;
   features?: string[];
+  /** Customer_Fields — all optional; null or "" clears the corresponding attribute. */
+  customerEmail?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerCountry?: string | null;
+  customerCompany?: string | null;
+  customerNotes?: string | null;
 }
 
 /** Release_Metadata as stored/returned. */

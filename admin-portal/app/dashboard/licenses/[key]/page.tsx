@@ -31,6 +31,14 @@ export default function LicenseDetailPage({ params }: { params: Promise<{ key: s
   const [expiresAt, setExpiresAt] = React.useState("");
   const [features, setFeatures] = React.useState("");
 
+  // customer fields
+  const [customerEmail, setCustomerEmail] = React.useState("");
+  const [customerName, setCustomerName] = React.useState("");
+  const [customerPhone, setCustomerPhone] = React.useState("");
+  const [customerCountry, setCustomerCountry] = React.useState("");
+  const [customerCompany, setCustomerCompany] = React.useState("");
+  const [customerNotes, setCustomerNotes] = React.useState("");
+
   const hydrate = React.useCallback((v: LicenseView) => {
     setLicense(v);
     setPlan(v.plan ?? "");
@@ -38,6 +46,13 @@ export default function LicenseDetailPage({ params }: { params: Promise<{ key: s
     setOwner(v.owner ?? "");
     setExpiresAt(v.expiresAt ?? "");
     setFeatures((v.features ?? []).join(", "));
+    // Customer fields: pre-fill from stored value, empty where absent
+    setCustomerEmail(v.customerEmail ?? "");
+    setCustomerName(v.customerName ?? "");
+    setCustomerPhone(v.customerPhone ?? "");
+    setCustomerCountry(v.customerCountry ?? "");
+    setCustomerCompany(v.customerCompany ?? "");
+    setCustomerNotes(v.customerNotes ?? "");
   }, []);
 
   const reload = React.useCallback(async () => {
@@ -84,6 +99,26 @@ export default function LicenseDetailPage({ params }: { params: Promise<{ key: s
           features: features.trim() ? features.split(",").map((f) => f.trim()).filter(Boolean) : [],
         }),
       "Attributes updated."
+    );
+  }
+
+  async function saveCustomer(e: React.FormEvent) {
+    e.preventDefault();
+    // Send only the six customer fields. For each field, if the control was
+    // emptied (the user cleared the value), send "" so the backend removes
+    // the attribute. If the control has a value, send it as-is for the backend
+    // to normalize and validate.
+    const body: Record<string, string> = {
+      customerEmail: customerEmail.trim() === "" ? "" : customerEmail,
+      customerName: customerName.trim() === "" ? "" : customerName,
+      customerPhone: customerPhone.trim() === "" ? "" : customerPhone,
+      customerCountry: customerCountry.trim() === "" ? "" : customerCountry,
+      customerCompany: customerCompany.trim() === "" ? "" : customerCompany,
+      customerNotes: customerNotes.trim() === "" ? "" : customerNotes,
+    };
+    await run(
+      () => api.updateLicense(licenseKey, body),
+      "Customer information updated."
     );
   }
 
@@ -159,6 +194,44 @@ export default function LicenseDetailPage({ params }: { params: Promise<{ key: s
           </CardContent>
         </Card>
       </div>
+
+      {/* Customer information */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Customer information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveCustomer} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customerName">Name</Label>
+              <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customerEmail">Email</Label>
+              <Input id="customerEmail" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customerPhone">Phone</Label>
+              <Input id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customerCountry">Country (2-letter code)</Label>
+              <Input id="customerCountry" maxLength={2} value={customerCountry} onChange={(e) => setCustomerCountry(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customerCompany">Company</Label>
+              <Input id="customerCompany" value={customerCompany} onChange={(e) => setCustomerCompany(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customerNotes">Notes</Label>
+              <Input id="customerNotes" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} />
+            </div>
+            <div>
+              <Button type="submit" disabled={busy}>Save customer info</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Activations */}
       <Card className="mt-6">

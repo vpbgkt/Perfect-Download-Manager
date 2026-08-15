@@ -7,13 +7,27 @@ namespace PDM.Core.Models;
 public sealed class DownloadOptions
 {
     /// <summary>
-    /// Maximum number of parallel connections (segments) for one download. Defaults to 16, which is
-    /// the same practical ceiling established download managers use: per-connection server throttling
-    /// gains flatten out around this point, while going higher mainly invites HTTP 429 rate limiting
-    /// and per-IP connection refusals. Combined with the default 3 simultaneous downloads this stays
-    /// inside the HTTP handler's 64-connections-per-server pool.
+    /// Maximum number of parallel connections (segments) for one download — the ceiling the adaptive
+    /// scheduler is allowed to ramp <em>up</em> to. Defaults to 8, the same stable count established
+    /// managers (e.g. IDM) use by default, because it is comfortably under the per-IP connection limit
+    /// most servers enforce. Going higher tends to trigger refusals/throttling and retry-backoff churn
+    /// that makes downloads slower and jumpy, not faster. Advanced users can raise this; the scheduler
+    /// then ramps toward it only while extra connections measurably increase throughput.
     /// </summary>
-    public int MaxConnections { get; init; } = 16;
+    public int MaxConnections { get; init; } = 8;
+
+    /// <summary>
+    /// Number of connections a download opens at the start, before adaptive probing. Kept low (2) so a
+    /// download never blasts a server it hasn't measured yet: the scheduler then adds connections one
+    /// at a time, keeping only those that measurably raise real throughput. This converges on each
+    /// server's optimal count — climbing where parallelism helps, staying at 2 where the server
+    /// throttles or the link/disk is already saturated (the profile that keeps speed stable instead of
+    /// collapsing partway through, and that matches how IDM parks unneeded connections).
+    /// </summary>
+    public int InitialConnections { get; init; } = 2;
+
+    /// <summary>How long to observe throughput at each step of adaptive connection probing.</summary>
+    public TimeSpan RampUpInterval { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Minimum bytes a segment must span. Prevents spawning many tiny connections for
@@ -25,12 +39,23 @@ public sealed class DownloadOptions
     public long MaxBytesPerSecond { get; init; }
 
     /// <summary>
-    /// Size of the buffer used for each socket read, in bytes. 256 KiB keeps the number of read
-    /// syscalls low on fast links (at 1 Gbps across 16 connections a 128 KiB buffer would mean
-    /// roughly 60 reads/sec per connection). Buffers are rented from the shared array pool, so the
-    /// larger size does not translate into sustained extra allocation.
+    /// Size of the buffer used for each socket read, in bytes — and therefore the size of each disk
+    /// write. 512 KiB keeps read syscalls and queue operations low on very fast links, and makes each
+    /// disk write large enough to reach good throughput per I/O (write throughput is roughly
+    /// chunk-size ÷ latency, so small chunks cap the writer). Kept at or below the shared array pool's
+    /// 1 MiB bucket so buffers are pooled rather than allocated.
     /// </summary>
-    public int ReadBufferSize { get; init; } = 256 * 1024; // 256 KiB
+    public int ReadBufferSize { get; init; } = 512 * 1024; // 512 KiB
+
+    /// <summary>
+    /// How many disk writes may be in flight at once. A single in-flight write limits throughput to
+    /// chunk-size ÷ write-latency (roughly 100-250 MB/s on typical storage), which on a fast link makes
+    /// the writer — not the network — the bottleneck and causes the bounded buffer to fill and stall
+    /// every connection. Issuing several writes concurrently raises the storage queue depth so fast
+    /// NVMe/premium disks can be saturated. Writes target non-overlapping offsets, and the durable
+    /// resume offset is tracked contiguously, so parallel writes remain safe.
+    /// </summary>
+    public int DiskWriteParallelism { get; init; } = 4;
 
     /// <summary>
     /// Absolute lower bound on the number of bytes a work-stealing split may hand to a freed
@@ -58,8 +83,12 @@ public sealed class DownloadOptions
     /// <summary>Base delay for exponential backoff between retries.</summary>
     public TimeSpan RetryBaseDelay { get; init; } = TimeSpan.FromSeconds(1);
 
-    /// <summary>Upper bound on the backoff delay between retries.</summary>
-    public TimeSpan RetryMaxDelay { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// Upper bound on the backoff delay between retries. Kept modest (10s) so a connection the server
+    /// is refusing does not sit idle for tens of seconds before retiring — long backoff on refused
+    /// connections was the dominant source of "waiting for server" dead-time on short downloads.
+    /// </summary>
+    public TimeSpan RetryMaxDelay { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>How often progress snapshots are emitted to observers.</summary>
     public TimeSpan ProgressInterval { get; init; } = TimeSpan.FromMilliseconds(500);
@@ -78,6 +107,15 @@ public sealed class DownloadOptions
     public string? UserAgent { get; init; }
 
     /// <summary>
+    /// Maximum bytes buffered in memory between the network readers and the disk writer. This buffer is
+    /// what smooths a bursty/throughput-limited disk into a steady network speed: connections keep
+    /// reading into it while the writer drains to disk. Larger absorbs longer disk stalls at the cost of
+    /// RAM; the default (128 MiB) covers a couple of seconds of a fast link. Shared across all of a
+    /// download's connections.
+    /// </summary>
+    public long MaxBufferedBytes { get; init; } = 128L * 1024 * 1024; // 128 MiB
+
+    /// <summary>
     /// When true (the default), a completed file is hashed and compared against the digest the server
     /// advertised (<c>Repr-Digest</c>, <c>Digest</c>, or <c>Content-MD5</c>) before being delivered.
     ///
@@ -94,6 +132,18 @@ public sealed class DownloadOptions
         {
             throw new ArgumentOutOfRangeException(nameof(MaxConnections), MaxConnections,
                 "MaxConnections must be between 1 and 64.");
+        }
+
+        if (InitialConnections < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(InitialConnections), InitialConnections,
+                "InitialConnections must be at least 1.");
+        }
+
+        if (RampUpInterval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(RampUpInterval), RampUpInterval,
+                "RampUpInterval must be greater than zero.");
         }
 
         if (MinSegmentSize < 1)
@@ -130,6 +180,18 @@ public sealed class DownloadOptions
         {
             throw new ArgumentOutOfRangeException(nameof(MinSplitDuration), MinSplitDuration,
                 "MinSplitDuration cannot be negative.");
+        }
+
+        if (MaxBufferedBytes < ReadBufferSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MaxBufferedBytes), MaxBufferedBytes,
+                "MaxBufferedBytes must be at least ReadBufferSize.");
+        }
+
+        if (DiskWriteParallelism is < 1 or > 64)
+        {
+            throw new ArgumentOutOfRangeException(nameof(DiskWriteParallelism), DiskWriteParallelism,
+                "DiskWriteParallelism must be between 1 and 64.");
         }
     }
 }

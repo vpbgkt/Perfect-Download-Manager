@@ -2,27 +2,25 @@
  * Route Handlers for `/api/licenses/{key}`.
  *
  * This file exports a `GET` handler that returns a single License_Record the
- * caller is authorized to view, expanded to the full record shape plus its
- * Activation_Entries and activation count (Req 4.5, 4.6, 7.1, 7.6). A non-owned
- * or unknown key is reported as a genuine `not_found` so a reseller can never
- * learn that a License_Record it does not own exists (Req 2.7, 4.6, 15.5).
+ * caller is authorized to view, and a `PATCH` handler that updates the mutable
+ * attributes of a viewable License_Record.
  *
- * The module is deliberately structured as named handler exports plus imports
- * and a thin scope helper, with all business logic in `lib/licenses/query.ts`
- * — there is no default export. Task 8.3 adds a `PATCH` export (attribute
- * update) to this same file; adding `export async function PATCH(...)` is clean
- * and conflict-free.
+ * Both handlers resolve the caller through {@link resolvePrincipal} (Firebase ID
+ * token or Api_Key) and enforce the appropriate permission. Unknown keys,
+ * `TRIAL#` anchors, `RL#` counter items, and non-owned targets all collapse to
+ * a single 404 body (Req 2.6, 7.3, 7.8, 7.10).
  *
  * @module app/api/licenses/[key]/route
- * Requirements: 4.5, 4.6, 7.1, 7.6, 2.7, 15.5
+ * Requirements: 1.7, 1.9, 2.5, 2.6, 2.8, 3.9, 4.9, 5.7, 5.14, 7.3, 7.8,
+ *               7.10, 7.12, 10.6
  */
 
 import { NextResponse } from "next/server";
 import {
   authErrorResponse,
-  extractIdToken,
   readJsonBody,
   validationErrorResponse,
+  validationErrorResponseMulti,
 } from "../../../../lib/http.ts";
 import { getServerContext } from "../../../../lib/server-context.ts";
 import { createLicenseQuery, type LicenseQueryScope } from "../../../../lib/licenses/query.ts";
@@ -31,7 +29,11 @@ import {
   createAttributeUpdater,
   type LicenseAttributeUpdates,
 } from "../../../../lib/licenses/attributes.ts";
+import { resolvePrincipal } from "../../../../lib/principal.ts";
 import type { Principal } from "../../../../lib/auth.ts";
+
+/** The single, unified not-found body (Req 7.3, 7.8, 7.10). */
+const NOT_FOUND_ERROR = Object.freeze({ code: "not_found" as const, message: "Not found" });
 
 /** Derive the license-query ownership scope from an authenticated principal. */
 function scopeOf(principal: Principal): LicenseQueryScope {
@@ -53,6 +55,9 @@ function sourceIpOf(req: Request): string {
  * actually present on the body are included, so unsubmitted attributes are left
  * untouched by the updater (Req 6.1). `expiresAt` is passed through verbatim
  * (including `""`/`null`) so the updater can clear it (Req 6.5).
+ *
+ * Also collects the six Customer_Field keys when present, forwarding them to
+ * the updater for normalization/validation (Req 2.1, 4.9).
  */
 function collectAttributes(body: Record<string, unknown>): LicenseAttributeUpdates {
   const attributes: LicenseAttributeUpdates = {};
@@ -61,49 +66,51 @@ function collectAttributes(body: Record<string, unknown>): LicenseAttributeUpdat
   if ("expiresAt" in body) attributes.expiresAt = body.expiresAt;
   if ("owner" in body) attributes.owner = body.owner;
   if ("features" in body) attributes.features = body.features;
+  // Forward Customer_Fields to the updater for normalization/validation (Req 2.1, 4.9).
+  if ("customerEmail" in body) attributes.customerEmail = body.customerEmail;
+  if ("customerName" in body) attributes.customerName = body.customerName;
+  if ("customerPhone" in body) attributes.customerPhone = body.customerPhone;
+  if ("customerCountry" in body) attributes.customerCountry = body.customerCountry;
+  if ("customerCompany" in body) attributes.customerCompany = body.customerCompany;
+  if ("customerNotes" in body) attributes.customerNotes = body.customerNotes;
   return attributes;
 }
 
 /**
  * GET /api/licenses/{key} — return one viewable License_Record with its
- * Activation_Entries and count (Req 4.5, 7.1, 7.6), or `not_found` for an
- * unknown / trial-anchor / non-owned key (Req 2.7, 4.6).
+ * Activation_Entries and count (Req 4.5, 7.1, 7.6). Unknown, `TRIAL#`, `RL#`,
+ * and non-owned keys all collapse into one 404 body (Req 2.6, 7.3, 7.8, 7.10).
  */
 export async function GET(
   req: Request,
   context: { params: Promise<{ key: string }> }
 ): Promise<NextResponse> {
-  const idToken = extractIdToken(req, null);
-  if (!idToken) {
-    return authErrorResponse({ code: "session_expired", message: "Missing credentials" });
-  }
-
   const ctx = getServerContext();
 
-  // ── Authenticate (verify Firebase ID token + session gates) (Req 1.x, 2.1). ──
-  const auth = await ctx.authenticator.authenticate({ idToken });
-  if (!auth.ok) {
-    return authErrorResponse(auth.error);
+  // 1. Resolve principal (Api_Key header → Reseller_API; else Firebase ID token).
+  const resolved = await resolvePrincipal(req, null, ctx.authenticator);
+  if (!resolved.ok) {
+    return authErrorResponse(resolved.error);
   }
-  const principal = auth.value;
+  const principal = resolved.value.principal;
 
-  // ── Authorize: require the license:read permission (Req 2.2, 2.3). ──
+  // 2. Require the license:read permission (Req 3.9).
   const permission = ctx.authenticator.requirePermission(principal, "license:read");
   if (!permission.ok) {
     return authErrorResponse(permission.error);
   }
 
-  // ── Resolve the {key} path segment (Next.js 16 async params). ──
+  // 3. Resolve the {key} path segment (Next.js 16 async params).
   const { key } = await context.params;
   const licenseKey = decodeURIComponent(key);
 
-  // ── Delegate the ownership-scoped, trial-excluding view (Req 4.5, 2.7, 15.5). ──
+  // 4. Delegate the ownership-scoped, trial-excluding view.
+  //    Unknown, TRIAL#, RL#, and non-owned targets all collapse to one 404 body.
   const query = createLicenseQuery({ dynamo: ctx.dynamo });
   const view = await query.view(scopeOf(principal), licenseKey);
 
   if (!view) {
-    // Non-owned / unknown / trial keys all collapse to not-found (Req 2.7, 4.6).
-    return authErrorResponse({ code: "not_found", message: "Not found" });
+    return authErrorResponse(NOT_FOUND_ERROR);
   }
 
   return NextResponse.json(view, { status: 200 });
@@ -111,18 +118,16 @@ export async function GET(
 
 /**
  * PATCH /api/licenses/{key} — update the mutable attributes of a viewable
- * License_Record (`plan`, `maxActivations`, `expiresAt`, `owner`, `features`).
+ * License_Record (`plan`, `maxActivations`, `expiresAt`, `owner`, `features`,
+ * plus the six Customer_Fields).
  *
- * Flow (design "Error Handling" taxonomy):
- *  1. Authenticate the interactive caller via the Firebase ID token (lib/auth).
- *  2. Require the `license:update` Permission (Req 6.1, 2.2) → 403 on failure.
- *  3. Require an enrolled MFA factor before any Mutation (Req 1.5) → 403.
- *  4. Update only the submitted attributes and audit the before/after values
- *     (Req 6.1, 6.5, 6.6); invalid values map to 400 (Req 6.2, 6.3, 6.4) and
- *     ownership / unknown-key map to not-found (Req 2.7) → 404.
- *
- * The response body never leaks which credential/field was wrong; all mapping
- * goes through the shared helpers in `lib/http.ts`.
+ * Flow:
+ *  1. Parse body
+ *  2. Resolve principal (Api_Key or Firebase)
+ *  3. Require `license:update` permission → 403
+ *  4. Require MFA enrollment (Firebase only) → 403
+ *  5. Validate Customer_Fields (names all offenders at once) → 400
+ *  6. Update attributes; unknown/TRIAL#/RL#/non-owned → unified 404
  */
 export async function PATCH(
   req: Request,
@@ -130,29 +135,27 @@ export async function PATCH(
 ): Promise<NextResponse> {
   const body = await readJsonBody(req);
 
-  const { authenticator, dynamo } = getServerContext();
+  const ctx = getServerContext();
 
-  // 1. Authenticate the interactive caller (Firebase ID token).
-  const idToken = extractIdToken(req, body);
-  if (!idToken) {
-    return authErrorResponse({ code: "session_expired", message: "Authentication required" });
+  // 1. Resolve principal (Api_Key header → Reseller_API; else Firebase ID token).
+  const resolved = await resolvePrincipal(req, body, ctx.authenticator);
+  if (!resolved.ok) {
+    return authErrorResponse(resolved.error);
   }
-  const authed = await authenticator.authenticate({ idToken });
-  if (!authed.ok) {
-    return authErrorResponse(authed.error);
-  }
-  const principal = authed.value;
+  const principal = resolved.value.principal;
 
-  // 2. Require the license:update Permission (Req 2.2, 6.1).
-  const permitted = authenticator.requirePermission(principal, "license:update");
+  // 2. Require the license:update Permission (Req 2.5, 2.8).
+  const permitted = ctx.authenticator.requirePermission(principal, "license:update");
   if (!permitted.ok) {
     return authErrorResponse(permitted.error);
   }
 
-  // 3. Require an enrolled MFA factor before any Mutation (Req 1.5).
-  const mfa = authenticator.requireMfaEnrolled(principal);
-  if (!mfa.ok) {
-    return authErrorResponse(mfa.error);
+  // 3. Require MFA enrollment before any Mutation (Firebase only, Req 1.5).
+  if (principal.authMethod === "firebase") {
+    const mfa = ctx.authenticator.requireMfaEnrolled(principal);
+    if (!mfa.ok) {
+      return authErrorResponse(mfa.error);
+    }
   }
 
   // Resolve the {key} path segment (Next.js 16 async params).
@@ -160,12 +163,11 @@ export async function PATCH(
   const licenseKey = decodeURIComponent(key);
 
   // 4. Update exactly the submitted attributes on the shared pdm-licenses item
-  //    and audit the before/after values (Req 6.1, 6.5, 6.6).
+  //    and audit the before/after values.
   const updater = createAttributeUpdater({
-    dynamo,
-    audit: createAuditLog(dynamo),
-    // Reuse the Authenticator's ownership scoping (Req 2.7).
-    assertOwnership: (p, record) => authenticator.assertOwnership(p, record),
+    dynamo: ctx.dynamo,
+    audit: createAuditLog(ctx.dynamo),
+    assertOwnership: (p, record) => ctx.authenticator.assertOwnership(p, record),
   });
 
   const result = await updater.update({
@@ -176,11 +178,24 @@ export async function PATCH(
   });
 
   if (!result.ok) {
-    // Map the taxonomy: validation → 400, ownership/unknown → 404 (Req 2.7).
+    // Map the taxonomy: validation → 400, ownership/unknown/TRIAL#/RL# → 404.
     if (result.error.code === "validation_error") {
+      // When the updater names multiple offending fields (Req 4.9), surface
+      // them all via the multi-field response.
+      if (result.error.fields && result.error.fields.length > 1) {
+        return validationErrorResponseMulti(
+          result.error.fields.map((f) => ({
+            field: f,
+            // Extract per-field reasons from the semicolon-joined message or
+            // fall back to the combined message.
+            reason: result.error.message,
+          }))
+        );
+      }
       return validationErrorResponse(result.error.field ?? "attributes", result.error.message);
     }
-    return authErrorResponse({ code: "not_found", message: result.error.message });
+    // Unknown, TRIAL#, RL#, and non-owned targets all collapse into one 404 (Req 7.3, 7.8, 7.10).
+    return authErrorResponse(NOT_FOUND_ERROR);
   }
 
   return NextResponse.json(result.value, { status: 200 });

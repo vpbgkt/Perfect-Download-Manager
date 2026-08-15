@@ -11,9 +11,9 @@ share any personal data with the developer or any third party.
   local Perfect Download Manager desktop app running on the same computer. This
   communication happens over Chrome Native Messaging and a per-user Windows named pipe. It
   never leaves your machine.
-- **Your interception preference** (whether the browser's own downloads should be
-  intercepted) is stored locally with `chrome.storage.local`. It is not synced or
-  transmitted anywhere.
+- **Your settings** — the interception toggle, file-type filters, notification and fallback
+  preferences, the chosen theme, and whether the setup page has been shown — are stored
+  locally with `chrome.storage.local`. They are not synced or transmitted anywhere.
 - **The active tab URL** is read only when you click the extension's popup button "Send
   current tab URL to PDM". This uses Chrome's `activeTab` permission, which grants access
   only in response to your click.
@@ -23,8 +23,21 @@ share any personal data with the developer or any third party.
 - No collection of browsing history, form data, cookies, or account information.
 - No analytics, telemetry, crash reporting, or third-party tracking.
 - No selling or sharing of data with anyone.
-- No remote network requests from the extension. All communication is with a local desktop
-  app on the same machine.
+- No requests to our servers or to any third party. The extension talks only to the local
+  desktop app.
+
+## Network requests the extension can make
+
+For completeness, the extension does cause two kinds of ordinary browser navigation. Neither
+sends us any data:
+
+- **Falling back to your browser's downloader.** If the desktop app is not installed, or a
+  handoff to it fails, the extension asks your browser to download the file from the same
+  origin server you requested. This is the identical request your browser would have made
+  without the extension.
+- **Opening our website.** The setup page links to
+  [perfectdownloadmanager.com](https://perfectdownloadmanager.com/) so you can install the
+  desktop app. That is a normal page visit that happens only when you click.
 
 ## The Perfect Download Manager desktop app
 

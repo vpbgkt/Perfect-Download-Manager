@@ -28,6 +28,10 @@ $out = Join-Path $distDir "pdm-extension-$Version.zip"
 foreach ($required in @("manifest.json", "background.js", "theme.js",
                         "popup.html", "popup.css", "popup.js",
                         "options.html", "options.css", "options.js",
+                        # The setup page is the whole onboarding path for users who install the
+                        # extension before the desktop app. Shipping without it would leave the
+                        # install-time tab and the fallback nudge pointing at a 404.
+                        "welcome.html", "welcome.css", "welcome.js",
                         "icons/icon16.png", "icons/icon32.png",
                         "icons/icon48.png", "icons/icon128.png")) {
     $p = Join-Path $srcDir $required

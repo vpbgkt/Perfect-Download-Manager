@@ -21,6 +21,12 @@ public sealed class DownloadWorker
     /// <summary>Suffix appended to the destination path for the in-progress part file.</summary>
     public const string PartSuffix = ".pdmdownload";
 
+    /// <summary>
+    /// Minimum throughput multiplier an added connection must deliver to be considered beneficial
+    /// during adaptive probing (1.15 = at least 15% more goodput). Below this, probing stops.
+    /// </summary>
+    private const double ThroughputGainThreshold = 1.15;
+
     private readonly DownloadState _state;
     private readonly DownloadOptions _options;
     private readonly HttpClient _client;
@@ -38,7 +44,9 @@ public sealed class DownloadWorker
     // _maxSegments so the work-stealing scheduler can add segments without ever reallocating this
     // array (a growing array would race with the lock-free Interlocked reads on the transfer path).
     private readonly long[] _liveBytes;
-    private readonly long _flushThreshold;
+
+    // Capacity (in chunks) of the in-memory write queue that decouples network reads from disk writes.
+    private readonly int _writeQueueCapacity;
 
     // ── Work-stealing scheduler state ──────────────────────────────────────────────────────────
     // Guards structural changes to _state.Segments (adds and end-shrinking splits) and the _claimed
@@ -54,6 +62,16 @@ public sealed class DownloadWorker
 
     // Number of connections (worker tasks) for the current attempt; reported as TotalConnections.
     private int _workerCount;
+
+    // Adaptive connection ceiling. Starts at the configured maximum and is reduced when connections
+    // fail (a strong signal the server is limiting/throttling concurrent connections from this IP, as
+    // many mirrors and CDNs do). This lets a download that opened "too many" connections settle to a
+    // count the server actually tolerates instead of failing outright.
+    private int _effectiveMaxConnections;
+
+    // Number of connections that retired (gave up their segment after exhausting retries) in the
+    // current round. Reset at the start of each round.
+    private int _retiredThisRound;
 
     // Latest smoothed aggregate throughput (bytes/sec), published by the progress loop and consumed by
     // the adaptive split threshold. Stored as raw bits in a long because C# does not allow a volatile
@@ -100,7 +118,11 @@ public sealed class DownloadWorker
             _liveBytes[i] = _state.Segments[i].BytesDownloaded;
         }
 
-        _flushThreshold = Math.Max(1L * 1024 * 1024, _options.ReadBufferSize * 8L);
+        _effectiveMaxConnections = Math.Max(1, _options.MaxConnections);
+
+        // How many read buffers may sit in memory waiting to be written. Bounds the decoupling buffer
+        // to MaxBufferedBytes so a fast link over a slow disk cannot grow memory without limit.
+        _writeQueueCapacity = (int)Math.Max(8, _options.MaxBufferedBytes / Math.Max(1, _options.ReadBufferSize));
     }
 
     /// <summary>Absolute path to the part file being written.</summary>
@@ -142,9 +164,9 @@ public sealed class DownloadWorker
             Exception? fatal = null;
             int faultClaimed = 0;
 
-            // Decide how many connections to run: one per incomplete segment, capped at the
-            // configured maximum. Segments that are already complete (e.g. pre-completed pieces from
-            // a resume re-plan) need no connection at all.
+            // Decide how many connections to run: one per incomplete segment, capped at the current
+            // adaptive maximum. Segments that are already complete (e.g. pre-completed pieces from a
+            // resume re-plan) need no connection at all.
             int workers;
             lock (_planLock)
             {
@@ -152,13 +174,17 @@ public sealed class DownloadWorker
                 int incomplete = 0;
                 foreach (DownloadSegment s in _state.Segments)
                 {
+                    // Re-sync the read cursor to the durable offset at the start of each round. At a
+                    // round boundary the write queue has been drained, so durable == what was read;
+                    // this makes the read cursor and the resume offset consistent for the new round.
+                    Interlocked.Exchange(ref _liveBytes[s.Index], s.BytesDownloaded);
                     if (!s.IsComplete)
                     {
                         incomplete++;
                     }
                 }
 
-                workers = Math.Min(incomplete, _options.MaxConnections);
+                workers = Math.Min(incomplete, _effectiveMaxConnections);
             }
 
             if (workers <= 0)
@@ -167,6 +193,13 @@ public sealed class DownloadWorker
             }
 
             _workerCount = workers;
+            _retiredThisRound = 0;
+            long roundStartBytes = SumLive();
+
+            // The write queue for this round: network readers hand buffers to it, a single writer
+            // drains them to disk. Created per round so each round has a clean, fully-drained boundary.
+            await using var writeQueue = new DiskWriteQueue(
+                PartPath, _writeQueueCapacity, _options.DiskWriteParallelism, OnDurableAdvanced);
 
             // Each worker pulls work from the shared plan until there is none left. This is the core
             // of the work-stealing model: a connection that finishes its range does NOT go idle — it
@@ -180,7 +213,24 @@ public sealed class DownloadWorker
                     DownloadSegment? current = TryClaimWork();
                     while (current is not null)
                     {
-                        await DownloadSegmentAsync(current, faultCts.Token).ConfigureAwait(false);
+                        try
+                        {
+                            await DownloadSegmentAsync(current, writeQueue, faultCts.Token).ConfigureAwait(false);
+                        }
+                        catch (SegmentUnavailableException)
+                        {
+                            // This connection could not sustain its segment (the server kept refusing
+                            // or resetting it — typically because it limits concurrent connections per
+                            // IP). Do NOT fail the whole download: release the segment back to the pool
+                            // with its progress intact, and RETIRE this connection. Fewer live
+                            // connections eases the pressure that caused the failure, and the surviving
+                            // connections (or the next round) pick up the released work. As long as one
+                            // connection keeps making progress, the download completes.
+                            ReleaseSegment(current);
+                            Interlocked.Increment(ref _retiredThisRound);
+                            return;
+                        }
+
                         current = TryClaimWork();
                     }
                 }
@@ -191,6 +241,7 @@ public sealed class DownloadWorker
                 }
                 catch (Exception ex)
                 {
+                    // A genuinely fatal error (disk failure, a non-recoverable server response, etc.).
                     // First fatal wins: record it and cancel the rest so they stop immediately.
                     if (Interlocked.Exchange(ref faultClaimed, 1) == 0)
                     {
@@ -203,13 +254,54 @@ public sealed class DownloadWorker
                 }
             }
 
-            var workerTasks = new Task[workers];
-            for (int i = 0; i < workers; i++)
+            // Adaptive connection probing.
+            //
+            // We do NOT open a fixed number of connections. We start with a small count and add one at
+            // a time ONLY while each new connection measurably increases the real end-to-end
+            // throughput. The moment an added connection stops helping — because the link is saturated,
+            // the disk is the bottleneck, or the server caps per-IP bandwidth/connections — we stop
+            // adding. This converges on the optimal connection count for each server/network:
+            //   • Fast server that rewards parallelism  -> climbs toward the ceiling.
+            //   • Server that throttles many connections -> settles low (2-3), like IDM parking its
+            //     extra connections in "Connecting" — and never pushes hard enough to trip the throttle
+            //     that was collapsing speed partway through the download.
+            //   • Slow link / slow server               -> 1-2 connections saturate it, so it stays
+            //     there; adding more is correctly judged useless and avoided.
+            //
+            // Throughput is measured from DURABLE (written-to-disk) bytes, not bytes read off the
+            // socket. Read speed is masked by the in-memory write buffer during the opening burst and
+            // would falsely look like "still improving", causing over-connection; durable bytes reflect
+            // the true sustained goodput.
+            int ceiling = workers;
+            int current = Math.Min(ceiling, Math.Max(1, _options.InitialConnections));
+
+            var workerTasks = new List<Task>(ceiling);
+            for (int i = 0; i < current; i++)
             {
-                workerTasks[i] = RunWorkerAsync();
+                workerTasks.Add(RunWorkerAsync());
+            }
+
+            _workerCount = current;
+
+            if (ceiling > current)
+            {
+                await ProbeConnectionsAsync(
+                    ceiling, current, workerTasks, RunWorkerAsync, faultCts.Token).ConfigureAwait(false);
             }
 
             await Task.WhenAll(workerTasks).ConfigureAwait(false);
+
+            // Flush every buffered chunk to disk before inspecting the outcome, so the durable offset
+            // reflects everything that was read this round. A disk write failure surfaces here and is
+            // treated as fatal.
+            try
+            {
+                await writeQueue.CompleteAndDrainAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                fatal ??= ex;
+            }
 
             // A user-initiated pause/cancel takes precedence over any fault the cancellation triggered.
             if (cancellationToken.IsCancellationRequested)
@@ -220,28 +312,63 @@ public sealed class DownloadWorker
                 throw new OperationCanceledException(cancellationToken);
             }
 
+            // A genuinely fatal error (disk, unrecoverable server response) takes priority.
+            if (fatal is not null)
+            {
+                // The server refused to honour our range requests, or the content changed under an
+                // If-Range validator. Both are recoverable: re-download as a single stream from the
+                // start. Only done once; a second occurrence is a real error.
+                if (fatal is RangeNotHonoredException && !collapsedToSingleStream)
+                {
+                    collapsedToSingleStream = true;
+                    CollapseToSingleStream();
+                    continue;
+                }
+
+                _state.Status = DownloadStatus.Failed;
+                _state.ErrorMessage = fatal.Message;
+                _state.CompletedUtc = DateTimeOffset.UtcNow;
+                await SaveStateSafelyAsync().ConfigureAwait(false);
+                await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
+                throw fatal as DownloadException ?? new DownloadException("The download failed.", fatal);
+            }
+
             // All segments finished cleanly — leave the loop and finalize below.
-            if (fatal is null)
+            if (_state.AllSegmentsComplete)
             {
                 break;
             }
 
-            // The server refused to honour our range requests (fresh download) or the content changed
-            // under an If-Range validator (resume). Both are recoverable: re-download the whole file as
-            // a single stream from the start. We only do this once; a second failure is a real error.
-            if (fatal is RangeNotHonoredException && !collapsedToSingleStream)
+            // Not complete, not cancelled, no fatal error: one or more connections retired because the
+            // server kept refusing them. Decide whether to try another round.
+            long roundProgress = SumLive() - roundStartBytes;
+            if (roundProgress <= 0)
             {
-                collapsedToSingleStream = true;
-                CollapseToSingleStream();
-                continue; // retry the transfer with the single-stream plan
+                // A whole round moved zero bytes — the server/link is genuinely unusable right now.
+                // Fail (resumably: all downloaded bytes are preserved, so the user can retry later).
+                _state.Status = DownloadStatus.Failed;
+                _state.ErrorMessage =
+                    "Could not keep a connection to the server alive long enough to make progress. " +
+                    "The server may be limiting connections or temporarily unavailable. Your progress " +
+                    "was saved — try resuming in a little while.";
+                _state.CompletedUtc = DateTimeOffset.UtcNow;
+                await SaveStateSafelyAsync().ConfigureAwait(false);
+                await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
+                throw new DownloadException(_state.ErrorMessage);
             }
 
-            _state.Status = DownloadStatus.Failed;
-            _state.ErrorMessage = fatal.Message;
-            _state.CompletedUtc = DateTimeOffset.UtcNow;
+            // Progress WAS made this round, so the server is usable — it just could not sustain this
+            // many parallel connections. Reduce the connection ceiling and go again for the remaining
+            // ranges. This is what lets a download that opened 16 connections settle to, say, the 8 the
+            // server actually allows, and then finish, instead of failing. Persist first so the retry
+            // resumes from the latest offsets.
+            if (_retiredThisRound > 0)
+            {
+                int reduced = _effectiveMaxConnections - Math.Max(1, _effectiveMaxConnections / 4);
+                _effectiveMaxConnections = Math.Max(1, reduced);
+            }
+
             await SaveStateSafelyAsync().ConfigureAwait(false);
-            await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
-            throw fatal as DownloadException ?? new DownloadException("The download failed.", fatal);
         }
 
         await StopProgressLoopAsync(progressCts, progressLoop).ConfigureAwait(false);
@@ -414,6 +541,18 @@ public sealed class DownloadWorker
     }
 
     /// <summary>
+    /// Returns a segment to the unclaimed pool (keeping its downloaded bytes) so another connection,
+    /// or a later lower-concurrency round, can pick it up. Called when a connection retires.
+    /// </summary>
+    private void ReleaseSegment(DownloadSegment segment)
+    {
+        lock (_planLock)
+        {
+            _claimed.Remove(segment.Index);
+        }
+    }
+
+    /// <summary>
     /// Minimum bytes a split must hand over to be worthwhile. Takes the larger of the configured
     /// absolute floor and the amount the observed per-connection throughput would move in
     /// <see cref="DownloadOptions.MinSplitDuration"/>.
@@ -452,13 +591,18 @@ public sealed class DownloadWorker
     }
 
     /// <summary>
-    /// Creates or opens the part file and preallocates it to the known total size to
-    /// reduce fragmentation. Skipped when the total size is unknown.
+    /// Creates or opens the part file and preallocates it to the known total size to reduce
+    /// fragmentation. Marks the file sparse first (Windows) so preallocation + scattered multi-segment
+    /// writes do not trigger a whole-file NTFS zero-fill that would saturate throughput-limited storage
+    /// and stall the network connections. Preallocation is skipped when the total size is unknown.
     /// </summary>
     private void PreparePartFile()
     {
         using var fs = new FileStream(
             PartPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+
+        // Must happen before SetLength / any write: sparse only affects regions not yet written.
+        SparseFile.TryEnable(fs.SafeFileHandle);
 
         if (_state.TotalBytes is > 0 && fs.Length != _state.TotalBytes.Value)
         {
@@ -466,26 +610,31 @@ public sealed class DownloadWorker
         }
     }
 
-    private async Task DownloadSegmentAsync(DownloadSegment segment, CancellationToken cancellationToken)
+    private async Task DownloadSegmentAsync(
+        DownloadSegment segment, DiskWriteQueue writeQueue, CancellationToken cancellationToken)
     {
         int attempt = 0;
 
-        while (!segment.IsComplete)
+        // Progress and completion are tracked by READ position (_liveBytes), not the durable/written
+        // offset (segment.BytesDownloaded). Reads run ahead of disk writes now that writing is
+        // decoupled into the DiskWriteQueue; the durable offset catches up when the queue drains at the
+        // end of the round. Using read position here keeps the retry loop correct: a segment whose bytes
+        // have all been read is done, even if the writer has not yet flushed them.
+        while (!IsReadComplete(segment))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            long before = segment.BytesDownloaded;
+            long before = ReadBytesOf(segment);
             try
             {
-                await TransferSegmentAsync(segment, cancellationToken).ConfigureAwait(false);
+                await TransferSegmentAsync(segment, writeQueue, cancellationToken).ConfigureAwait(false);
 
-                // Completed (or reached EOF for an unknown-size single stream).
-                if (segment.IsComplete)
+                if (IsReadComplete(segment))
                 {
                     return;
                 }
 
-                // Made progress but the range is not fully satisfied yet; loop to resume.
-                if (segment.BytesDownloaded > before)
+                // Made progress but the range is not fully read yet; loop to resume.
+                if (ReadBytesOf(segment) > before)
                 {
                     attempt = 0;
                     ClearIssue();
@@ -498,7 +647,7 @@ public sealed class DownloadWorker
             catch (Exception ex) when (IsTransient(ex))
             {
                 // A connection that keeps making progress should not exhaust its retries.
-                if (segment.BytesDownloaded > before)
+                if (ReadBytesOf(segment) > before)
                 {
                     attempt = 0;
                 }
@@ -506,8 +655,10 @@ public sealed class DownloadWorker
                 attempt++;
                 if (attempt > _options.MaxRetriesPerSegment)
                 {
-                    throw new DownloadException(
-                        $"Segment {segment.Index} failed after {_options.MaxRetriesPerSegment} retries.", ex);
+                    // Retries exhausted for THIS connection. Signal the worker loop to retire this
+                    // connection and release the segment, rather than failing the whole download — a
+                    // surviving connection (or a lower-concurrency retry round) can still finish it.
+                    throw new SegmentUnavailableException(segment.Index, _options.MaxRetriesPerSegment, ex);
                 }
 
                 // Record the most likely cause so the progress loop can surface a clear status while
@@ -519,10 +670,19 @@ public sealed class DownloadWorker
         }
     }
 
-    private async Task TransferSegmentAsync(DownloadSegment segment, CancellationToken cancellationToken)
+    /// <summary>Bytes read so far for a segment (the read cursor; may run ahead of the written offset).</summary>
+    private long ReadBytesOf(DownloadSegment segment) => Interlocked.Read(ref _liveBytes[segment.Index]);
+
+    /// <summary>True when every byte of the segment's range has been read from the network.</summary>
+    private bool IsReadComplete(DownloadSegment segment) =>
+        segment.End != long.MaxValue && ReadBytesOf(segment) >= segment.Length;
+
+    private async Task TransferSegmentAsync(
+        DownloadSegment segment, DiskWriteQueue writeQueue, CancellationToken cancellationToken)
     {
         bool openEnded = segment.End == long.MaxValue; // unknown total size
-        long writeOffset = segment.Start + segment.BytesDownloaded;
+        long readSoFar = ReadBytesOf(segment);          // resume from the current read cursor
+        long writeOffset = segment.Start + readSoFar;
 
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_state.EffectiveUrl));
 
@@ -571,7 +731,7 @@ public sealed class DownloadWorker
         bool rangeRequested = false;
         if (_state.SupportsRanges)
         {
-            // Normal path: ask for this segment's byte range.
+            // Normal path: ask for this segment's byte range, starting at the read cursor.
             long? to = openEnded ? null : segment.End;
             request.Headers.Range = new RangeHeaderValue(writeOffset, to);
             rangeRequested = true;
@@ -582,7 +742,7 @@ public sealed class DownloadWorker
             // instead of silently stitching bytes from two different versions of the file.
             AddIfRangeHeader(request);
         }
-        else if (isSingleSegment && segment.BytesDownloaded > 0)
+        else if (isSingleSegment && readSoFar > 0)
         {
             // Single-stream RESUME. Even though segmented range support was ruled out (e.g. the server
             // answered an earlier segment request with a full 200), we still try to continue from where
@@ -594,10 +754,10 @@ public sealed class DownloadWorker
             rangeRequested = true;
             AddIfRangeHeader(request);
         }
-        else if (segment.BytesDownloaded > 0)
+        else if (readSoFar > 0)
         {
             // Non-range, multi-segment (should not normally happen): restart this segment from its start.
-            segment.BytesDownloaded = 0;
+            readSoFar = 0;
             Interlocked.Exchange(ref _liveBytes[segment.Index], 0);
             writeOffset = segment.Start;
         }
@@ -627,7 +787,7 @@ public sealed class DownloadWorker
         // it throws RangeNotHonoredException so RunAsync collapses the whole download to a single stream.
         if (ResolveRangeResponse(response, segment, rangeRequested, writeOffset) == RangeOutcome.RestartFromZero)
         {
-            segment.BytesDownloaded = 0;
+            readSoFar = 0;
             Interlocked.Exchange(ref _liveBytes[segment.Index], 0);
             writeOffset = 0;
         }
@@ -638,55 +798,42 @@ public sealed class DownloadWorker
         await using Stream network = await response.Content
             .ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
-        FileStream file;
-        try
-        {
-            file = new FileStream(
-                PartPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite,
-                _options.ReadBufferSize, useAsync: true);
-            file.Seek(writeOffset, SeekOrigin.Begin);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw DiskWriteFailure(ex);
-        }
-
-        // Inactivity watchdog: armed around each network read and disabled while we write/throttle,
+        // Inactivity watchdog: armed around each network read and disabled while we hand off/throttle,
         // so a socket that stays open but stops delivering bytes is abandoned (and retried from the
-        // last persisted offset) instead of hanging the whole download indefinitely.
+        // last read offset) instead of hanging the whole download indefinitely.
         using var stallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        // Rent the read buffer from the shared pool instead of allocating a fresh array on every
-        // segment attempt/retry, which removes a large source of GC pressure under many concurrent
-        // downloads. The rented array may be larger than requested, so reads are always clamped to
-        // the configured buffer size to keep chunk sizing identical.
-        int bufferSize = _options.ReadBufferSize;
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+        long written = readSoFar; // read cursor; disk writing is handled by the DiskWriteQueue
 
-        try
+        // Tell the queue where this segment's contiguous written prefix starts, so it can advance the
+        // durable/resume offset correctly even though writes complete out of order.
+        writeQueue.BeginSegment(segment.Index, segment.Start, written);
+
+        while (true)
         {
-            long sinceFlush = 0;
-            long written = segment.BytesDownloaded;
-
-            while (true)
+            // For known-size segments, stop once the assigned range is satisfied.
+            if (!openEnded && written >= segment.Length)
             {
-                // For known-size segments, stop once the assigned range is satisfied.
-                if (!openEnded && written >= segment.Length)
-                {
-                    break;
-                }
+                break;
+            }
 
-                int toRead = bufferSize;
-                if (!openEnded)
+            int toRead = _options.ReadBufferSize;
+            if (!openEnded)
+            {
+                long remaining = segment.Length - written;
+                if (remaining < toRead)
                 {
-                    long remaining = segment.Length - written;
-                    if (remaining < toRead)
-                    {
-                        toRead = (int)remaining;
-                    }
+                    toRead = (int)remaining;
                 }
+            }
 
-                int read;
+            // A fresh pooled buffer per read: it is handed to the write queue and returned there once
+            // written, so producers never block on disk. The rented array may be larger than requested,
+            // so reads are always clamped to the configured buffer size.
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(_options.ReadBufferSize);
+            int read;
+            try
+            {
                 stallCts.CancelAfter(_options.StallTimeout); // arm the watchdog for this read
                 try
                 {
@@ -697,72 +844,53 @@ public sealed class DownloadWorker
                     when (!cancellationToken.IsCancellationRequested && stallCts.IsCancellationRequested)
                 {
                     // Only the watchdog fired (not a user pause/cancel). Surface a transient timeout so
-                    // the retry loop resumes this segment from its persisted offset.
+                    // the retry loop resumes this segment from its read offset.
                     throw new TimeoutException(
                         $"Segment {segment.Index} stalled: no data received for {_options.StallTimeout.TotalSeconds:0}s.");
                 }
 
-                stallCts.CancelAfter(System.Threading.Timeout.InfiniteTimeSpan); // disarm during write/throttle
-
-                if (read == 0)
-                {
-                    break; // End of stream.
-                }
-
-                // Writing/flushing to disk is separated from the network read so a storage failure
-                // (out of space, permissions) is reported as a disk error, not a transient retry.
-                try
-                {
-                    await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    throw DiskWriteFailure(ex);
-                }
-
-                written += read;
-                sinceFlush += read;
-                Interlocked.Exchange(ref _liveBytes[segment.Index], written);
-
-                await ApplyRateLimitsAsync(read, cancellationToken).ConfigureAwait(false);
-
-                if (sinceFlush >= _flushThreshold)
-                {
-                    // Checkpoint flush: push the FileStream's buffer to the OS (so the bytes survive a
-                    // process crash and the advanced durable offset is honest) WITHOUT forcing an
-                    // expensive hardware sync on the hot path. Full durability is ensured by the single
-                    // hard flush when the segment completes.
-                    await FlushBufferAsync(file, cancellationToken).ConfigureAwait(false);
-                    segment.BytesDownloaded = written; // Advance durable offset only after flush.
-                    sinceFlush = 0;
-                }
+                stallCts.CancelAfter(System.Threading.Timeout.InfiniteTimeSpan); // disarm while handing off
             }
-
-            // Segment finished: one hard flush to guarantee the tail is physically persisted.
-            FlushToDisk(file);
-            segment.BytesDownloaded = written;
-
-            if (openEnded)
+            catch
             {
-                // Finalize the discovered size for a single unknown-length stream.
-                segment.End = segment.Start + written - 1;
-                _state.TotalBytes = written;
-                return;
+                ArrayPool<byte>.Shared.Return(buffer);
+                throw;
             }
 
-            // A known-size segment that ended before its range was satisfied indicates the
-            // connection dropped. Surface it as transient so the caller resumes from the
-            // (now persisted) offset.
-            if (written < segment.Length)
+            if (read == 0)
             {
-                throw new IOException(
-                    $"Segment {segment.Index} ended early: {written} of {segment.Length} bytes received.");
+                ArrayPool<byte>.Shared.Return(buffer);
+                break; // End of stream.
             }
+
+            // Hand the bytes to the disk writer and keep reading. The writer owns the buffer now and
+            // returns it to the pool once written; the read loop does not wait on the disk. When the
+            // disk is behind, EnqueueAsync applies backpressure (awaits queue space) — this is what
+            // keeps the network speed smooth instead of stalling on every disk flush.
+            await writeQueue.EnqueueAsync(
+                new WriteChunk(segment.Index, segment.Start + written, buffer, read), cancellationToken)
+                .ConfigureAwait(false);
+
+            written += read;
+            Interlocked.Exchange(ref _liveBytes[segment.Index], written);
+
+            await ApplyRateLimitsAsync(read, cancellationToken).ConfigureAwait(false);
         }
-        finally
+
+        if (openEnded)
         {
-            ArrayPool<byte>.Shared.Return(buffer);
-            await file.DisposeAsync().ConfigureAwait(false);
+            // Finalize the discovered size for a single unknown-length stream.
+            segment.End = segment.Start + written - 1;
+            _state.TotalBytes = written;
+            return;
+        }
+
+        // A known-size segment that ended before its range was satisfied indicates the connection
+        // dropped. Surface it as transient so the caller resumes from the current read offset.
+        if (written < segment.Length)
+        {
+            throw new IOException(
+                $"Segment {segment.Index} ended early: {written} of {segment.Length} bytes received.");
         }
     }
 
@@ -781,38 +909,38 @@ public sealed class DownloadWorker
     /// Cheap enough for the hot path and sufficient to make an advanced resume offset safe against a
     /// process crash (the bytes live in the OS page cache). Storage failures become a disk-error.
     /// </summary>
-    private static async ValueTask FlushBufferAsync(FileStream file, CancellationToken cancellationToken)
+    /// <summary>
+    /// Advances a segment's durable (written-to-disk) offset. Invoked by the DiskWriteQueue once a
+    /// segment's <em>contiguous</em> written prefix grows, so the value is always a length that is
+    /// genuinely safe to resume from even though several writes may be in flight out of order. This is
+    /// the value persisted for resume and checked by verification — distinct from the read cursor
+    /// (_liveBytes), which runs ahead while data is buffered for writing.
+    /// </summary>
+    private void OnDurableAdvanced(int segmentIndex, long durableLength)
     {
-        try
+        List<DownloadSegment> segments = _state.Segments;
+        if ((uint)segmentIndex >= (uint)segments.Count)
         {
-            await file.FlushAsync(cancellationToken).ConfigureAwait(false);
+            return;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw DiskWriteFailure(ex);
-        }
-    }
 
-    /// <summary>Flushes buffered bytes all the way to disk, translating storage failures into a disk-error.</summary>
-    private static void FlushToDisk(FileStream file)
-    {
-        try
+        DownloadSegment seg = segments[segmentIndex];
+        if (durableLength > seg.BytesDownloaded)
         {
-            file.Flush(flushToDisk: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw DiskWriteFailure(ex);
+            seg.BytesDownloaded = durableLength;
         }
     }
 
     /// <summary>
-    /// Builds a fatal, non-transient disk-write failure with a friendly message. Non-transient so the
-    /// worker fails fast (the storage problem will not fix itself by retrying) and the UI can show
-    /// "Unable to write data to disk...".
+    /// Forces the completed part file all the way to physical disk exactly once, at finalize. This is
+    /// the single hardware sync per download (the hot path uses cheap async buffer flushes only).
+    /// Best-effort: a failure here does not corrupt anything — the data is already in the OS cache — so
+    /// it must not block delivery of an otherwise-verified file.
     /// </summary>
-    private static DownloadException DiskWriteFailure(Exception inner) =>
-        new("Unable to write data to disk. Please check available storage and permissions.", inner);
+    // (The whole-file hardware flush was removed: see the note in FinalizeAsync. It cost seconds on
+    // large files and provided only power-loss durability, not correctness.)
+
+    // (Per-connection disk-write failures are now produced by DiskWriteQueue; this helper was removed.)
 
     private async Task FinalizeAsync(Stopwatch stopwatch, CancellationToken cancellationToken)
     {
@@ -844,6 +972,12 @@ public sealed class DownloadWorker
             await SaveStateSafelyAsync().ConfigureAwait(false);
             throw new DownloadException(_state.ErrorMessage);
         }
+
+        // NOTE: we deliberately do NOT force a whole-file hardware flush (FlushFileBuffers) here.
+        // All bytes are already written to the OS, which persists them normally; forcing a full fsync of
+        // a large file adds seconds of dead time at the end of every download (on a 1 GB file that can
+        // be a large fraction of the total time) and buys only power-loss durability, not correctness.
+        // Other download managers do not do it either.
 
         // Secondary sanity check: catches a part file truncated or tampered with outside PDM.
         long actual = new FileInfo(PartPath).Length;
@@ -1041,7 +1175,20 @@ public sealed class DownloadWorker
 
     private async Task RunProgressLoopAsync(Stopwatch stopwatch, CancellationToken token)
     {
-        long lastBytes = SumLive();
+        // WHY DURABLE BYTES DRIVE THE READOUT (and not bytes read off the socket)
+        //
+        // Reads and disk writes are decoupled by the DiskWriteQueue. When the queue is full (disk
+        // momentarily behind the network) the readers block in EnqueueAsync, so the READ cursor
+        // (SumLive) freezes — even though the writer is still draining and the file on disk is still
+        // growing normally. Reporting the read cursor therefore produced the confusing symptom of
+        // "speed drops to a few KB/s and it says Waiting for server, but the file keeps downloading":
+        // the transfer was fine, only the metric had stalled.
+        //
+        // Durable bytes (what has actually reached disk) advance smoothly through those moments,
+        // because the writer keeps working while readers are paused. So they give both an honest
+        // progress figure (bytes safely stored) and a stable speed readout. It also matches the signal
+        // the adaptive connection controller measures, so the UI and the controller now agree.
+        long lastBytes = SumDurable();
         long lastTicks = stopwatch.ElapsedTicks;
         double smoothed = 0;
         var saveTimer = Stopwatch.StartNew();
@@ -1052,7 +1199,7 @@ public sealed class DownloadWorker
             {
                 await Task.Delay(_options.ProgressInterval, token).ConfigureAwait(false);
 
-                long nowBytes = SumLive();
+                long nowBytes = SumDurable();
                 long nowTicks = stopwatch.ElapsedTicks;
                 double seconds = (nowTicks - lastTicks) / (double)Stopwatch.Frequency;
                 if (seconds > 0)
@@ -1061,7 +1208,8 @@ public sealed class DownloadWorker
                     // Exponential moving average for a stable readout.
                     smoothed = smoothed <= 0 ? instant : (0.6 * instant) + (0.4 * smoothed);
 
-                    // Publish for the work-stealing scheduler's bandwidth-aware split threshold.
+                    // Publish for the work-stealing scheduler's bandwidth-aware split threshold and the
+                    // adaptive connection controller.
                     Interlocked.Exchange(ref _observedBytesPerSecondBits, BitConverter.DoubleToInt64Bits(smoothed));
                 }
 
@@ -1108,7 +1256,9 @@ public sealed class DownloadWorker
             return;
         }
 
-        EmitProgress(SumLive(), 0, stopwatch.Elapsed);
+        // Durable bytes, to match the progress loop (see the note there on why the read cursor is not
+        // used for reporting).
+        EmitProgress(SumDurable(), 0, stopwatch.Elapsed);
     }
 
     private void EmitProgress(long bytes, double bytesPerSecond, TimeSpan elapsed)
@@ -1137,6 +1287,20 @@ public sealed class DownloadWorker
         int total = _workerCount > 0 ? _workerCount : plan.Count;
         active = Math.Min(active, total);
 
+        // SUPPRESS A STALE ISSUE LABEL WHILE DATA IS FLOWING.
+        //
+        // _issueCode is a single, download-wide "last writer wins" hint set by whichever connection most
+        // recently hit a transient error. With several connections, ONE connection having a hiccup (and
+        // quietly retrying, as designed) would leave the whole download labelled e.g. "Waiting for
+        // server" — even while the other connections were streaming at full speed — until something
+        // happened to clear it. That is what produced alarming "Waiting for server" text during a
+        // perfectly healthy transfer.
+        //
+        // The honest rule: an issue is only worth showing when the download is actually not progressing.
+        // If bytes are still landing on disk, report no issue.
+        DownloadIssue issue = bytesPerSecond > 0 ? DownloadIssue.None : (DownloadIssue)_issueCode;
+        int retryAttempt = issue == DownloadIssue.None ? 0 : _retryAttempt;
+
         _progress.Report(new DownloadProgress
         {
             BytesDownloaded = bytes,
@@ -1146,8 +1310,8 @@ public sealed class DownloadWorker
             ActiveConnections = active,
             TotalConnections = total,
             Status = _state.Status,
-            Issue = (DownloadIssue)_issueCode,
-            RetryAttempt = _retryAttempt,
+            Issue = issue,
+            RetryAttempt = retryAttempt,
             MaxRetries = _options.MaxRetriesPerSegment
         });
     }
@@ -1203,6 +1367,84 @@ public sealed class DownloadWorker
         }
 
         return sum;
+    }
+
+    /// <summary>
+    /// Total bytes actually written to disk so far (durable offset). Unlike <see cref="SumLive"/>
+    /// (bytes read off the socket, which the write buffer inflates during bursts), this reflects the
+    /// true sustained goodput and is the signal the connection-probing controller measures.
+    /// </summary>
+    private long SumDurable()
+    {
+        List<DownloadSegment> segments = _state.Segments;
+        long sum = 0;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            sum += segments[i].BytesDownloaded;
+        }
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Adaptive connection controller. Starting from <paramref name="current"/> connections, adds one
+    /// at a time and keeps it only while it raises the measured durable throughput by at least
+    /// <see cref="ThroughputGainThreshold"/>. Stops as soon as an added connection fails to help (link,
+    /// disk, or server saturated) or the server starts refusing connections. This is what makes the
+    /// connection count adapt to each server/network instead of being fixed.
+    /// </summary>
+    private async Task ProbeConnectionsAsync(
+        int ceiling, int current, List<Task> workerTasks, Func<Task> spawnWorker, CancellationToken token)
+    {
+        TimeSpan interval = _options.RampUpInterval;
+        try
+        {
+            // Warm-up: let the initial connections establish and TCP windows grow before measuring, so
+            // the first reading reflects steady throughput rather than the ramp.
+            await Task.Delay(interval, token).ConfigureAwait(false);
+            long prevDurable = SumDurable();
+            await Task.Delay(interval, token).ConfigureAwait(false);
+
+            long now = SumDurable();
+            double beforeRate = (now - prevDurable) / interval.TotalSeconds;
+            prevDurable = now;
+
+            while (current < ceiling)
+            {
+                if (_state.AllSegmentsComplete || _retiredThisRound > 0)
+                {
+                    break;
+                }
+
+                // Add one connection, then observe whether it actually increased throughput.
+                workerTasks.Add(spawnWorker());
+                current++;
+                _workerCount = current;
+
+                await Task.Delay(interval, token).ConfigureAwait(false);
+                if (_state.AllSegmentsComplete || _retiredThisRound > 0)
+                {
+                    break;
+                }
+
+                now = SumDurable();
+                double afterRate = (now - prevDurable) / interval.TotalSeconds;
+                prevDurable = now;
+
+                // Require a clear gain to justify climbing further. If the added connection did not
+                // meaningfully help, stop — more would only risk tripping the server's throttle.
+                if (afterRate <= beforeRate * ThroughputGainThreshold)
+                {
+                    break;
+                }
+
+                beforeRate = afterRate;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Pause/cancel or a sibling fault; the outer loop decides the outcome.
+        }
     }
 
     private async Task SaveStateSafelyAsync()
@@ -1263,6 +1505,8 @@ public sealed class DownloadWorker
             ErrorMessage = _state.ErrorMessage,
             CompletedUtc = _state.CompletedUtc,
             CreatedUtc = _state.CreatedUtc,
+            LastAttemptUtc = _state.LastAttemptUtc,
+            LastAttemptFailed = _state.LastAttemptFailed,
             Segments = segments
         };
     }
@@ -1411,10 +1655,11 @@ public sealed class DownloadWorker
     private static bool IsTransient(Exception ex) => ex switch
     {
         DownloadException => false,
-        // Not transient: this is not retried per-segment. It is handled once at the whole-download
-        // level by collapsing to a single stream (see RunAsync), so we must let it escape the
-        // per-segment retry loop rather than treat it as a connection hiccup.
+        // Not transient: these are not retried per-segment. RangeNotHonored is handled at the
+        // whole-download level (collapse to a single stream); SegmentUnavailable is handled by the
+        // worker loop (retire the connection). Both must escape the per-segment retry loop.
         RangeNotHonoredException => false,
+        SegmentUnavailableException => false,
         HttpRequestException => true,
         IOException => true,
         TimeoutException => true,
@@ -1431,6 +1676,19 @@ public sealed class DownloadWorker
     private sealed class RangeNotHonoredException : Exception
     {
         public RangeNotHonoredException(string message) : base(message)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Internal signal that a single connection exhausted its retries for a segment. It is NOT fatal:
+    /// the worker loop catches it, releases the segment, and retires just that connection, so the
+    /// download keeps going on the remaining connections instead of failing outright.
+    /// </summary>
+    private sealed class SegmentUnavailableException : Exception
+    {
+        public SegmentUnavailableException(int segmentIndex, int retries, Exception inner)
+            : base($"Segment {segmentIndex} could not be sustained after {retries} retries.", inner)
         {
         }
     }

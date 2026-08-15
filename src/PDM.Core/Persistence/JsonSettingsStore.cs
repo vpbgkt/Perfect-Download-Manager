@@ -98,16 +98,22 @@ public sealed class JsonSettingsStore
     {
         bool changed = false;
 
-        // v1: the per-download connection default moved from 8 to 16 (see AppSettings for the
-        // rationale). Only bump installs still sitting on the old default of exactly 8.
-        if (settings.SettingsVersion < 1)
+        // v2: revert the per-download connection default to 8.
+        //
+        // A prior version briefly defaulted this to 16 (and auto-bumped existing installs to 16). In
+        // real testing that proved too aggressive: many servers enforce a per-IP connection limit
+        // below 16, so the extra connections were refused/throttled and the download churned through
+        // retry backoff, becoming SLOWER and jumpier than at 8. 8 is the stable default IDM and others
+        // use. We reset the auto-bumped value (exactly 16) back to 8; any other value is left as the
+        // user's own choice.
+        if (settings.SettingsVersion < 2)
         {
-            if (settings.MaxConnectionsPerDownload == 8)
+            if (settings.MaxConnectionsPerDownload == 16)
             {
-                settings.MaxConnectionsPerDownload = 16;
+                settings.MaxConnectionsPerDownload = 8;
             }
 
-            settings.SettingsVersion = 1;
+            settings.SettingsVersion = 2;
             changed = true;
         }
 

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Set up Perfect Download Manager</title>
+  <link rel="stylesheet" href="welcome.css" />
+</head>
+
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <img class="logo" src="icons/icon128.png" alt="" width="64" height="64" />
+      <div>
+        <h1>Perfect Download Manager</h1>
+        <p class="lede">Browser integration <span class="ver">v<span id="version">0.0.0</span></span></p>
+      </div>
+    </header>
+
+    <!-- Live connection state. One of the three panels below is shown. -->
+    <section id="panel-checking" class="panel">
+      <div class="panel-icon panel-icon--muted" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" /></svg>
+      </div>
+      <h2>Checking for the desktop app…</h2>
+      <p>One moment while we look for Perfect Download Manager on this PC.</p>
+    </section>
+
+    <section id="panel-ready" class="panel hidden">
+      <div class="panel-icon panel-icon--ok" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
+      </div>
+      <h2>You're all set</h2>
+      <p>
+        The desktop app is connected. Downloads you start in this browser are handed to PDM
+        automatically, with no extra dialogs.
+      </p>
+      <div class="row">
+        <button id="close-ready" class="btn btn--primary">Start downloading</button>
+        <button id="options-ready" class="btn btn--ghost">Open settings</button>
+      </div>
+    </section>
+
+    <section id="panel-missing" class="panel hidden">
+      <div class="panel-icon panel-icon--warn" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>
+      </div>
+      <h2>One more step: install the desktop app</h2>
+      <p>
+        This extension is the browser half of Perfect Download Manager. The download engine itself
+        is a free Windows app, and we could not find it on this PC.
+      </p>
+
+      <div class="callout">
+        <strong>Your downloads still work.</strong>
+        Until PDM is installed, files download with your browser's built-in downloader exactly as
+        they normally would. Nothing is blocked and nothing is lost — you just don't get PDM's
+        multi-connection speed, resume, or queue yet.
+      </div>
+
+      <div class="row">
+        <a id="install" class="btn btn--primary" href="https://perfectdownloadmanager.com/#download" target="_blank"
+          rel="noopener">
+          <svg viewBox="0 0 24 24" class="ic" aria-hidden="true">
+            <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+          </svg>
+          Install PDM for Windows — free
+        </a>
+        <button id="recheck" class="btn btn--ghost">I've installed it — re-check</button>
+      </div>
+      <p id="recheck-note" class="note hidden"></p>
+    </section>
+
+    <section id="panel-starting" class="panel hidden">
+      <div class="panel-icon panel-icon--muted" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 8v4l3 2M12 3a9 9 0 1 1-9 9" /></svg>
+      </div>
+      <h2>PDM is installed but not responding yet</h2>
+      <p>
+        The desktop app is on this PC. It may still be starting up, in which case the next download
+        will be captured normally.
+      </p>
+      <div class="row">
+        <button id="recheck-2" class="btn btn--primary">Re-check</button>
+        <button id="options-starting" class="btn btn--ghost">Open settings</button>
+      </div>
+      <p id="recheck-note-2" class="note hidden"></p>
+    </section>
+
+    <!-- Static explainer, always visible -->
+    <section class="how">
+      <h3>How it works</h3>
+      <ol>
+        <li>You click a download link in your browser.</li>
+        <li>The extension hands the link straight to the PDM desktop app.</li>
+        <li>PDM downloads it over multiple connections — and your browser stays quiet.</li>
+      </ol>
+      <p class="fine">
+        Small files like PDFs, Office documents and images stay in the browser by default, because a
+        download manager gains you nothing on those. You can change that in
+        <button id="options-link" class="link-btn">settings</button>.
+      </p>
+    </section>
+
+    <footer class="ftr">
+      <a class="link-btn" href="https://perfectdownloadmanager.com/" target="_blank" rel="noopener">Website</a>
+      <a class="link-btn" href="https://perfectdownloadmanager.com/support" target="_blank" rel="noopener">Support</a>
+      <a class="link-btn" href="https://perfectdownloadmanager.com/privacy" target="_blank" rel="noopener">Privacy</a>
+    </footer>
+  </main>
+
+  <script src="theme.js"></script>
+  <script src="welcome.js"></script>
+</body>
+
+</html>

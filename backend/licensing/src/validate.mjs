@@ -2,12 +2,43 @@
 // Re-checks an already-activated license (heartbeat) and returns a fresh signed token,
 // or a revocation message the client acts on.
 
-import { getPrivateKeyPem, TOKEN_TTL_DAYS } from "./lib/config.mjs";
+import { getPrivateKeyPem, TOKEN_TTL_DAYS, docClient, TABLE_NAME } from "./lib/config.mjs";
 import { getLicense, touchActivation } from "./lib/licenses.mjs";
 import { issueToken } from "./lib/tokens.mjs";
 import { parseBody, json, validateInputs, computeTokenExpiry } from "./lib/http.mjs";
+import {
+  createAttemptLimiter,
+  resolveLimits,
+  clientIp,
+  BUCKET_VALIDATE_TOTAL
+} from "./lib/attemptLimit.mjs";
+
+const RATE_LIMITED_BODY = Object.freeze({ valid: false, message: "rate_limited" });
+
+const limiter = createAttemptLimiter({
+  docClient,
+  tableName: TABLE_NAME,
+  limits: resolveLimits(process.env)
+});
 
 export const handler = async (event) => {
+  const ip = clientIp(event);
+
+  // Per-IP total-request attempt counter (Req 8.2). Fail-open: a counter failure never blocks
+  // a legitimate request (Req 8.7).
+  let totalAllowed = true;
+  try {
+    const result = await limiter.increment(BUCKET_VALIDATE_TOTAL, ip);
+    totalAllowed = result.allowed;
+  } catch (err) {
+    // Fail open — log without key material (Req 8.7).
+    console.log(JSON.stringify({ event: "attempt_counter_failure", bucket: BUCKET_VALIDATE_TOTAL }));
+  }
+
+  if (!totalAllowed) {
+    return json(429, RATE_LIMITED_BODY);
+  }
+
   const body = parseBody(event);
   const input = validateInputs(body);
   if (input.error) {

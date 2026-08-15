@@ -56,6 +56,28 @@
     </section>
 
     <section class="group">
+      <h2>When PDM isn't available</h2>
+
+      <label class="opt">
+        <span>
+          <span class="opt-title">Fall back to the browser's downloader</span>
+          <span class="opt-desc">On by default. If the PDM desktop app isn't installed, or a handoff
+            fails, the download is completed by the browser instead of being lost. Turn this off only
+            if you would rather a download fail than bypass PDM.</span>
+        </span>
+        <input type="checkbox" id="browserFallback" />
+      </label>
+
+      <div class="opt" style="cursor:default">
+        <span>
+          <span class="opt-title">Desktop app</span>
+          <span class="opt-desc" id="host-state">Checking…</span>
+        </span>
+        <button type="button" class="opt-btn" id="open-setup">Open setup</button>
+      </div>
+    </section>
+
+    <section class="group">
       <h2>Notifications</h2>
       <label class="opt">
         <span>

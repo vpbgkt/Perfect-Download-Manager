@@ -21,18 +21,27 @@
  *  - scopes reseller callers to their own records via `assertOwnership` /
  *    `resellerAccountId`; a non-owned or unknown key is reported as not-found
  *    (Req 2.7);
- *  - never touches `TRIAL#` anchor items (Req 14.4); and
+ *  - updates the six additive Customer_Fields, normalizing and validating every
+ *    submitted field before the record is read (a rejected field names all
+ *    offenders and mutates nothing), then `SET`ting each non-empty normalized
+ *    value and `REMOVE`ing each null/empty/whitespace-only one — a no-op when
+ *    the attribute is already absent (Req 2.1, 2.2, 4.9, 4.13);
+ *  - never touches `TRIAL#` anchor items (Req 14.4) or `RL#` rate-limit counter
+ *    items (Req 2.6, 3.6); and
  *  - writes an Audit_Entry recording the actor, the License_Key, and the changed
- *    attributes with their previous and new values (Req 6.6).
+ *    attributes with their previous and new values, plus sorted
+ *    `customerFieldsSet` / `customerFieldsCleared` name arrays written only when
+ *    a Customer_Field actually changed (Req 6.6, 9.1, 9.2, 9.7).
  *
  * All validation happens before any write, so a rejected request never mutates
- * state (Req 6.2, 6.3, 6.4). Every external collaborator — the
+ * state (Req 6.2, 6.3, 6.4, 2.9, 4.9). Every external collaborator — the
  * {@link DynamoClient}, the {@link AuditLog}, the clock, and the ownership
  * check — is injected, so the property/unit tests (8.4/8.5) can drive this
  * module entirely against the in-memory DynamoDB fake.
  *
  * @module lib/licenses/attributes
- * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
+ * Requirements: 2.1, 2.2, 2.4, 2.6, 2.7, 2.9, 4.9, 4.13, 6.1, 6.2, 6.3, 6.4,
+ * 6.5, 6.6, 9.1, 9.2, 9.7, 10.13
  */
 
 import type { DynamoClient, DynamoItem } from "../dynamo.ts";
@@ -42,13 +51,29 @@ import { validateIso8601Utc, validateMaxActivations } from "../validation.ts";
 import {
   LICENSES_TABLE_NAME,
   LICENSE_PARTITION_KEY,
+  RL_COUNTER_PREFIX,
   TRIAL_ANCHOR_PREFIX,
 } from "./create.ts";
+import {
+  CUSTOMER_FIELDS,
+  evaluateCustomerProfile,
+  type CustomerField,
+} from "./customer.ts";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /** Audit action recorded for a license attribute update (Req 6.6). */
 export const LICENSE_ATTRIBUTES_ACTION = "license.attributes.update";
+
+/**
+ * Prefix marking rate-limit counter items (`RL#<bucket>#<ip>`) the portal must
+ * never touch through the license API — guarded alongside {@link
+ * TRIAL_ANCHOR_PREFIX} so a counter item is unreachable via an attribute update
+ * (Req 2.6, 3.6). Re-exported from {@link module:lib/licenses/create} so the
+ * license prefix constants live in one place. Imported above and re-exported
+ * here so this module's existing consumers keep importing it unchanged.
+ */
+export { RL_COUNTER_PREFIX };
 
 /** The mutable License_Record attributes this module may update (Req 6.1). */
 export const UPDATABLE_ATTRIBUTES = [
@@ -76,6 +101,18 @@ export interface LicenseAttributeUpdates {
   expiresAt?: unknown;
   owner?: unknown;
   features?: unknown;
+  /**
+   * The six additive Customer_Fields, kept `unknown` so this module can reject
+   * non-string values itself via {@link evaluateCustomerProfile} before any
+   * read or write (Req 2.1, 4.7, 4.9). Each is normalized and either written
+   * (non-empty) or removed (null/empty/whitespace-only, Req 2.2, 4.13).
+   */
+  customerEmail?: unknown;
+  customerName?: unknown;
+  customerPhone?: unknown;
+  customerCountry?: unknown;
+  customerCompany?: unknown;
+  customerNotes?: unknown;
 }
 
 /**
@@ -95,8 +132,15 @@ export type UpdateAttributesResult =
 /** Failure reasons an attribute-update attempt can produce. */
 export interface UpdateAttributesError {
   code: "validation_error" | "not_found";
-  /** Offending field for validation errors, when applicable. */
+  /** Primary offending field for validation errors, when applicable. */
   field?: string;
+  /**
+   * Every offending field for validation errors that can name more than one at
+   * once — Requirement 4.9 requires naming all failing Customer_Fields. When
+   * present, the route surfaces this array; `field` mirrors its first entry for
+   * callers that read a single field.
+   */
+  fields?: string[];
   message: string;
 }
 
@@ -211,8 +255,13 @@ export function createAttributeUpdater(deps: UpdateAttributesDeps): AttributeUpd
     async update(input) {
       const { licenseKey, attributes, principal, sourceIp } = input;
 
-      // ── Never read or modify trial-anchor items (Req 14.4); not-found. ──
-      if (licenseKey.startsWith(TRIAL_ANCHOR_PREFIX)) {
+      // ── Never read or modify trial-anchor or rate-limit counter items; a
+      //    target beginning with `TRIAL#` (Req 14.4) or `RL#` (Req 2.6, 3.6) is
+      //    reported as not-found so counter items stay unreachable here. ──
+      if (
+        licenseKey.startsWith(TRIAL_ANCHOR_PREFIX) ||
+        licenseKey.startsWith(RL_COUNTER_PREFIX)
+      ) {
         return fail(NOT_FOUND);
       }
 
@@ -266,6 +315,25 @@ export function createAttributeUpdater(deps: UpdateAttributesDeps): AttributeUpd
           }
           newExpiresAt = validated.value;
         }
+      }
+
+      // ── Evaluate every submitted Customer_Field BEFORE the record is read, so
+      //    a rejected update never mutates state (Req 2.9, 4.9). The evaluator
+      //    normalizes each submitted field and reports the fields to `set`
+      //    (normalized, non-empty, valid), the fields to `clear`
+      //    (null/empty/whitespace-only → REMOVE), and every offending field. A
+      //    non-empty `errors` names ALL failing Customer_Fields (Req 4.9). ──
+      const customer = evaluateCustomerProfile(
+        attributes as Record<string, unknown>
+      );
+      if (customer.errors.length > 0) {
+        const fields = customer.errors.map((e) => e.field).sort();
+        return fail({
+          code: "validation_error",
+          field: fields[0],
+          fields,
+          message: customer.errors.map((e) => e.reason).join("; "),
+        });
       }
 
       // ── Load the existing record from the shared licenses item (Req 6.1, 14.1). ──
@@ -335,6 +403,52 @@ export function createAttributeUpdater(deps: UpdateAttributesDeps): AttributeUpd
         } else {
           setAttr("expiresAt", newExpiresAt);
         }
+      }
+
+      // ── Customer_Fields: SET a normalized non-empty value, REMOVE a cleared
+      //    one, tracking only the fields that actually changed for the audit
+      //    (Req 2.1, 2.2, 4.13, 9.1, 9.2). Iterate in the canonical order so the
+      //    recorded name arrays are stable before sorting. ──
+      const customerFieldsSet: CustomerField[] = [];
+      const customerFieldsCleared: CustomerField[] = [];
+
+      for (const field of CUSTOMER_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(customer.set, field)) {
+          // Submitted + non-empty after normalization → SET; record the name
+          // only when the stored value actually changes (Req 2.4, 9.7).
+          const normalized = customer.set[field] as string;
+          if (existing[field] !== normalized) {
+            names[`#${field}`] = field;
+            values[`:${field}`] = normalized;
+            setParts.push(`#${field} = :${field}`);
+            customerFieldsSet.push(field);
+          }
+        } else if (customer.clear.includes(field)) {
+          // Submitted + empty → REMOVE, but a no-op when already absent so the
+          // record and the audit stay unchanged (Req 2.2, 9.7).
+          if (existing[field] !== undefined && existing[field] !== null) {
+            names[`#${field}`] = field;
+            removeParts.push(`#${field}`);
+            customerFieldsCleared.push(field);
+          }
+        }
+      }
+
+      // Additive audit keys, written only when a Customer_Field actually
+      // changed — sorted names only, never values (Req 2.7, 9.1, 9.2). When
+      // none changed, neither key appears, leaving the entry byte-identical to
+      // today's (Req 9.7).
+      if (customerFieldsSet.length > 0) {
+        changes.customerFieldsSet = {
+          before: null,
+          after: [...customerFieldsSet].sort(),
+        };
+      }
+      if (customerFieldsCleared.length > 0) {
+        changes.customerFieldsCleared = {
+          before: [...customerFieldsCleared].sort(),
+          after: null,
+        };
       }
 
       // ── No submitted attributes → no-op success; nothing changed, no audit. ──
