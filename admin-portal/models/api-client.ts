@@ -29,17 +29,32 @@ import type {
   UsagePlan,
 } from "./types.ts";
 
+/** One named validation failure in a multi-field 400 body. */
+export interface ApiErrorField {
+  field: string;
+  reason: string;
+}
+
 /** A structured API error carrying the HTTP status and any field/reason. */
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly field?: string;
-  constructor(status: number, message: string, code?: string, field?: string) {
+  /** All offending fields from a multi-field validation_error, when present. */
+  readonly fields?: ApiErrorField[];
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    field?: string,
+    fields?: ApiErrorField[]
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.field = field;
+    this.fields = fields;
   }
 }
 
@@ -77,7 +92,8 @@ async function request<T>(
       res.status,
       (data.reason as string) || (data.error as string) || `Request failed (${res.status})`,
       data.error as string | undefined,
-      data.field as string | undefined
+      data.field as string | undefined,
+      Array.isArray(data.fields) ? (data.fields as ApiErrorField[]) : undefined
     );
   }
   return data as T;

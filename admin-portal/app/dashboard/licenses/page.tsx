@@ -60,13 +60,13 @@ export default function LicensesPage() {
     <>
       <PageHeader
         title="Licenses"
-        description="Search by license key or owner."
+        description="Search by license key, owner, customer email, name, company, or phone."
         actions={<LinkButton href="/dashboard/licenses/new">New license</LinkButton>}
       />
 
       <form onSubmit={onSearch} className="mb-4 flex gap-2">
         <Input
-          placeholder="Search key or owner…"
+          placeholder="Search key, owner, email, name, company, or phone…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search licenses"
@@ -90,6 +90,7 @@ export default function LicensesPage() {
                 <TH>Plan</TH>
                 <TH>Owner</TH>
                 <TH>Activations</TH>
+                <TH>Customer</TH>
               </TR>
             </THead>
             <TBody>
@@ -107,6 +108,12 @@ export default function LicensesPage() {
                   <TD>{l.plan ?? "—"}</TD>
                   <TD>{l.owner ?? "—"}</TD>
                   <TD>{l.activationCount}{l.maxActivations ? ` / ${l.maxActivations}` : ""}</TD>
+                  <TD>
+                    {!l.customerEmail && !l.customerName && !l.customerPhone &&
+                     !l.customerCountry && !l.customerCompany && !l.customerNotes && (
+                      <Badge tone="warning">No customer info</Badge>
+                    )}
+                  </TD>
                 </TR>
               ))}
             </TBody>

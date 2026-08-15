@@ -107,6 +107,33 @@ jobs:
         shell: pwsh
         run: ./build/aot-harness.ps1 -Rid ${{ matrix.rid }} -SmokeUrl "https://speed.cloudflare.com/__down?bytes=2097152"
 
+  portal-test:
+    name: Portal & licensing tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install admin-portal dependencies
+        working-directory: admin-portal
+        run: npm ci
+
+      - name: Run admin-portal tests
+        working-directory: admin-portal
+        run: npm test
+
+      - name: Install backend/licensing dependencies
+        working-directory: backend/licensing
+        run: npm ci
+
+      - name: Run backend/licensing tests
+        working-directory: backend/licensing
+        run: npm test
+
   avalonia-aot:
     name: Avalonia head NativeAOT publish
     runs-on: windows-latest

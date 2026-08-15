@@ -3,37 +3,36 @@
  *
  * This file exports a `POST` handler that mints a new license (Req 3) and a
  * `GET` handler that returns a paginated, ownership-scoped list (with optional
- * search) of License_Records (Req 4.1–4.4). The module is deliberately
- * structured as a set of named handler exports plus imports and thin helpers,
- * with all business logic living in the `lib/` modules, so there is no default
- * export to collide with.
- *
- * Both handlers are intentionally thin: they authenticate the caller, enforce
- * the required permission (and MFA-enrollment for the `POST` Mutation), then
- * delegate the real work to `lib/licenses/create.ts` and `lib/licenses/query.ts`.
+ * search) of License_Records (Req 4.1–4.4). Both handlers resolve the caller
+ * through {@link resolvePrincipal} (Firebase ID token or Api_Key), enforce
+ * permissions, and gate a supplied `keyPrefix` to `admin`/`super_admin` with a
+ * 403 (Req 5.7).
  *
  * @module app/api/licenses/route
- * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4,
- *               2.2, 2.3, 2.4, 1.5, 15.4, 15.5, 15.7
+ * Requirements: 1.7, 1.9, 2.5, 2.8, 3.9, 3.11, 4.9, 5.7, 5.14, 7.3, 7.8,
+ *               7.10, 7.12, 10.6
  */
 
 import { NextResponse } from "next/server";
 import {
   authErrorResponse,
   badRequestResponse,
-  extractIdToken,
-  readJsonBody,
   validationErrorResponse,
+  validationErrorResponseMulti,
 } from "../../../lib/http.ts";
 import { getServerContext } from "../../../lib/server-context.ts";
 import { createAuditLog } from "../../../lib/audit.ts";
 import { createLicenseCreator, type CreateLicenseInput } from "../../../lib/licenses/create.ts";
 import {
   createLicenseQuery,
+  parseLicenseContinuationToken,
   type LicenseListOptions,
   type LicenseQueryScope,
 } from "../../../lib/licenses/query.ts";
 import { validateIso8601Utc, validateMaxActivations } from "../../../lib/validation.ts";
+import { validateKeyPrefix, normalizeKeyPrefix } from "../../../lib/licenses/keygen.ts";
+import { evaluateCustomerProfile } from "../../../lib/licenses/customer.ts";
+import { resolvePrincipal } from "../../../lib/principal.ts";
 import type { Principal } from "../../../lib/auth.ts";
 
 /** Derive the license-query ownership scope from an authenticated principal. */
@@ -53,41 +52,91 @@ function sourceIpOf(req: Request): string {
 
 /**
  * POST /api/licenses — create a new License_Record (Req 3).
+ *
+ * Flow:
+ *  1. Parse body
+ *  2. Resolve principal (Api_Key or Firebase)
+ *  3. Require `license:create` permission → 403
+ *  4. Require MFA enrollment (Firebase only) → 403
+ *  5. Gate keyPrefix to admin/super_admin → 403
+ *  6. Validate prefix and Customer_Profile before any write → 400
+ *  7. Validate other inputs → 400
+ *  8. Delegate creation
  */
 export async function POST(req: Request): Promise<NextResponse> {
   // ── Parse body first so the ID token can also be read from it. ──
-  const body = await readJsonBody(req);
+  const body = await (async () => {
+    try {
+      const text = await req.text();
+      if (!text) return null;
+      const parsed = JSON.parse(text);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  })();
   if (!body) {
     return badRequestResponse("Request body must be a JSON object");
   }
 
-  const idToken = extractIdToken(req, body);
-  if (!idToken) {
-    return authErrorResponse({ code: "session_expired", message: "Missing credentials" });
-  }
-
   const ctx = getServerContext();
 
-  // ── Authenticate (verify Firebase ID token + session gates) (Req 1.x, 2.1). ──
-  const auth = await ctx.authenticator.authenticate({ idToken });
-  if (!auth.ok) {
-    return authErrorResponse(auth.error);
+  // 1. Resolve principal (Api_Key header → Reseller_API; else Firebase ID token).
+  const resolved = await resolvePrincipal(req, body, ctx.authenticator);
+  if (!resolved.ok) {
+    return authErrorResponse(resolved.error);
   }
-  const principal = auth.value;
+  const principal = resolved.value.principal;
 
-  // ── Authorize: require the license:create permission (Req 2.2, 2.3). ──
+  // 2. Require the license:create permission (Req 1.9).
   const permission = ctx.authenticator.requirePermission(principal, "license:create");
   if (!permission.ok) {
     return authErrorResponse(permission.error);
   }
 
-  // ── Require MFA enrollment before any Mutation (Req 1.5). ──
-  const mfa = ctx.authenticator.requireMfaEnrolled(principal);
-  if (!mfa.ok) {
-    return authErrorResponse(mfa.error);
+  // 3. Require MFA enrollment before any Mutation (Firebase only, Req 1.5).
+  //    Api_Key principals are implicitly mfaEnrolled.
+  if (principal.authMethod === "firebase") {
+    const mfa = ctx.authenticator.requireMfaEnrolled(principal);
+    if (!mfa.ok) {
+      return authErrorResponse(mfa.error);
+    }
   }
 
-  // ── Validate inputs (Req 3.4, 3.5, 15.4). ──
+  // 4. Gate keyPrefix to admin/super_admin roles (Req 5.7).
+  const rawPrefix = body.keyPrefix;
+  if (
+    rawPrefix !== undefined &&
+    rawPrefix !== null &&
+    !(typeof rawPrefix === "string" && rawPrefix.trim() === "")
+  ) {
+    if (principal.role !== "admin" && principal.role !== "super_admin") {
+      return authErrorResponse({ code: "not_authorized", message: "Not authorized" });
+    }
+  }
+
+  // 5. Validate prefix before any write (Req 5.4, 5.5, 5.12).
+  const prefixResult = validateKeyPrefix(rawPrefix);
+  if (!prefixResult.ok) {
+    return validationErrorResponse("keyPrefix", prefixResult.error);
+  }
+  const keyPrefix = prefixResult.value; // string | undefined
+
+  // 6. Validate Customer_Profile before any write (Req 4.9).
+  const customer = evaluateCustomerProfile(body);
+  if (customer.errors.length > 0) {
+    if (customer.errors.length === 1) {
+      return validationErrorResponse(customer.errors[0].field, customer.errors[0].reason);
+    }
+    return validationErrorResponseMulti(
+      customer.errors.map((e) => ({ field: e.field, reason: e.reason }))
+    );
+  }
+
+  // 7. Validate standard inputs (Req 3.4, 3.5, 15.4).
   const maxActivations = validateMaxActivations(body.maxActivations);
   if (!maxActivations.ok) {
     return validationErrorResponse("maxActivations", maxActivations.error);
@@ -134,6 +183,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     expiresAt,
     features,
     resellerAccountId: principal.role === "reseller" ? principal.resellerAccountId : undefined,
+    keyPrefix,
+    customer: Object.keys(customer.set).length > 0 ? customer.set : undefined,
   };
 
   // ── Delegate minting/persistence/auditing to the lib module. ──
@@ -153,36 +204,34 @@ export async function POST(req: Request): Promise<NextResponse> {
     return badRequestResponse(result.error.message);
   }
 
+  // Return the complete generated License_Key plus keyPrefix and present
+  // Customer_Fields (Req 5.14, 10.6).
   return NextResponse.json(result.value, { status: 201 });
 }
 
 /**
  * GET /api/licenses — paginated, ownership-scoped list/search of License_Records
- * (Req 4.1–4.4). Trial anchors are excluded and resellers see only their own
- * records; reads require the `license:read` permission (no Mutation, so no
- * MFA-enrollment gate).
+ * (Req 4.1–4.4). Trial anchors and RL# counter items are excluded; resellers
+ * see only their own records; reads require the `license:read` permission (no
+ * Mutation, so no MFA-enrollment gate).
  *
  * Query parameters:
- *   - `search` — optional term matched against `licenseKey` / `owner` (Req 4.4)
+ *   - `search` — optional term matched against `licenseKey` / `owner` /
+ *     `customerEmail` / `customerName` / `customerCompany` / `customerPhone`
  *   - `limit`  — optional page size (clamped by the query layer)
- *   - `nextToken` — opaque continuation token from a previous page (Req 4.3)
+ *   - `nextToken` — opaque continuation token from a previous page (Req 3.11)
  */
 export async function GET(req: Request): Promise<NextResponse> {
-  const idToken = extractIdToken(req, null);
-  if (!idToken) {
-    return authErrorResponse({ code: "session_expired", message: "Missing credentials" });
-  }
-
   const ctx = getServerContext();
 
-  // ── Authenticate (verify Firebase ID token + session gates) (Req 1.x, 2.1). ──
-  const auth = await ctx.authenticator.authenticate({ idToken });
-  if (!auth.ok) {
-    return authErrorResponse(auth.error);
+  // 1. Resolve principal (Api_Key header → Reseller_API; else Firebase ID token).
+  const resolved = await resolvePrincipal(req, null, ctx.authenticator);
+  if (!resolved.ok) {
+    return authErrorResponse(resolved.error);
   }
-  const principal = auth.value;
+  const principal = resolved.value.principal;
 
-  // ── Authorize: require the license:read permission (Req 2.2, 2.3). ──
+  // 2. Require the license:read permission (Req 3.9).
   const permission = ctx.authenticator.requirePermission(principal, "license:read");
   if (!permission.ok) {
     return authErrorResponse(permission.error);
@@ -212,8 +261,18 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   // ── Delegate the ownership-scoped, trial-excluding query (Req 4.1, 4.2, 15.5). ──
-  const query = createLicenseQuery({ dynamo: ctx.dynamo });
+  // The continuation-token structural guard is injected here (Req 3.11).
+  const query = createLicenseQuery({
+    dynamo: ctx.dynamo,
+    parseToken: parseLicenseContinuationToken,
+  });
   const result = await query.list(scopeOf(principal), options);
+
+  // If the query layer reported a validation error (e.g. bad token or term too
+  // long), surface it as a 400.
+  if (result.error) {
+    return validationErrorResponse("search", result.error);
+  }
 
   return NextResponse.json(result, { status: 200 });
 }

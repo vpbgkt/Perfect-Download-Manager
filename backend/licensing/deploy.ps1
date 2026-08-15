@@ -1,11 +1,12 @@
 # Deploys the PDM licensing backend to AWS (region ap-south-1 by default).
 #
-# Prerequisites: AWS CLI configured, Node.js (for key generation only).
+# Prerequisites: AWS CLI configured, Node.js 22+.
 # What it does:
+#   0. Builds the admin portal and runs the portal and licensing test suites (gating steps).
 #   1. (First run) generates an ECDSA P-256 key pair; stores the PRIVATE key in SSM
 #      SecureString and prints the PUBLIC key (base64) to embed in the client.
 #   2. Zips the Lambda source and uploads it to a deploy bucket.
-#   3. Deploys the CloudFormation stack (DynamoDB + Lambdas + HTTP API).
+#   3. Deploys the CloudFormation stack (DynamoDB + Lambdas + HTTP API) with limiter parameters.
 #   4. Prints the API base URL.
 #
 # Usage:
@@ -17,6 +18,10 @@ param(
     [string]$StackName = "pdm-licensing",
     [string]$TableName = "pdm-licenses",
     [string]$PrivateKeyParam = "/pdm/licensing/private-key",
+    [int]$ActivateRateLimit = 60,
+    [int]$ValidateRateLimit = 60,
+    [int]$ActivateUnknownKeyLimit = 10,
+    [int]$AttemptWindowSeconds = 3600,
     [switch]$RotateKeys
 )
 
@@ -32,13 +37,48 @@ function Assert-LastExit([string]$what) {
     }
 }
 
+# --- 0. Gating steps: build portal, run portal tests, run licensing tests ----
+$repoRoot = (Resolve-Path (Join-Path $here ".." "..")).Path
+$portalDir = Join-Path $repoRoot "admin-portal"
+
+Write-Host "Installing admin-portal dependencies..."
+Push-Location $portalDir
+npm ci
+Assert-LastExit "admin-portal npm ci"
+Pop-Location
+
+Write-Host "Building admin-portal..."
+Push-Location $portalDir
+npm run build
+Assert-LastExit "admin-portal build"
+Pop-Location
+
+Write-Host "Running admin-portal tests..."
+Push-Location $portalDir
+npm test
+Assert-LastExit "admin-portal tests"
+Pop-Location
+
+Write-Host "Installing backend/licensing dependencies..."
+Push-Location $here
+npm ci
+Assert-LastExit "backend/licensing npm ci"
+Pop-Location
+
+Write-Host "Running backend/licensing tests..."
+Push-Location $here
+npm test
+Assert-LastExit "backend/licensing tests"
+Pop-Location
+
+# --- 1. Identity & bucket ---------------------------------------------------
 $accountId = (aws sts get-caller-identity --query Account --output text).Trim()
 Assert-LastExit "sts get-caller-identity"
 $bucket = "pdm-licensing-deploy-$accountId-aps1"
 
 Write-Host "Account: $accountId | Region: $Region | Bucket: $bucket"
 
-# --- 1. Signing key pair -----------------------------------------------------
+# --- 2. Signing key pair -----------------------------------------------------
 aws ssm get-parameter --name $PrivateKeyParam --region $Region --with-decryption > $null 2>&1
 $paramExists = ($LASTEXITCODE -eq 0)
 
@@ -70,7 +110,7 @@ process.stdout.write(JSON.stringify({
     Write-Host "Signing key already present in SSM ($PrivateKeyParam). Use -RotateKeys to replace."
 }
 
-# --- 2. Package + upload Lambda ---------------------------------------------
+# --- 3. Package + upload Lambda ---------------------------------------------
 aws s3api head-bucket --bucket $bucket --region $Region > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Creating deploy bucket $bucket..."
@@ -87,17 +127,25 @@ aws s3 cp $zip "s3://$bucket/$codeKey" --region $Region | Out-Null
 Assert-LastExit "upload lambda zip"
 Remove-Item $zip -Force
 
-# --- 3. Deploy stack ---------------------------------------------------------
+# --- 4. Deploy stack ---------------------------------------------------------
 Write-Host "Deploying CloudFormation stack $StackName..."
 aws cloudformation deploy `
     --template-file (Join-Path $here "template.yaml") `
     --stack-name $StackName `
     --capabilities CAPABILITY_IAM `
     --region $Region `
-    --parameter-overrides "CodeBucket=$bucket" "CodeKey=$codeKey" "PrivateKeyParam=$PrivateKeyParam" "TableName=$TableName"
+    --parameter-overrides `
+        "CodeBucket=$bucket" `
+        "CodeKey=$codeKey" `
+        "PrivateKeyParam=$PrivateKeyParam" `
+        "TableName=$TableName" `
+        "ActivateRateLimit=$ActivateRateLimit" `
+        "ValidateRateLimit=$ValidateRateLimit" `
+        "ActivateUnknownKeyLimit=$ActivateUnknownKeyLimit" `
+        "AttemptWindowSeconds=$AttemptWindowSeconds"
 Assert-LastExit "cloudformation deploy"
 
-# --- 4. Output ---------------------------------------------------------------
+# --- 5. Output ---------------------------------------------------------------
 $apiUrl = (aws cloudformation describe-stacks --stack-name $StackName --region $Region --query "Stacks[0].Outputs[?OutputKey=='ApiBaseUrl'].OutputValue" --output text).Trim()
 Write-Host ""
 Write-Host "=== DEPLOY COMPLETE ==="

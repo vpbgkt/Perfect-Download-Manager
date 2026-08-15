@@ -8,16 +8,32 @@ import { Card, CardContent } from "../../../../components/ui/card.tsx";
 import { Button } from "../../../../components/ui/button.tsx";
 import { Input, Label } from "../../../../components/ui/input.tsx";
 import { ExpiryField } from "../../../../components/ui/expiry-field.tsx";
+import { useSession } from "../../../../components/dashboard/session-provider.tsx";
 
 export default function NewLicensePage() {
   const router = useRouter();
+  const { session } = useSession();
   const [plan, setPlan] = React.useState("standard");
   const [maxActivations, setMaxActivations] = React.useState("1");
   const [owner, setOwner] = React.useState("");
   const [expiresAt, setExpiresAt] = React.useState("");
   const [features, setFeatures] = React.useState("");
+
+  // Customer fields
+  const [customerName, setCustomerName] = React.useState("");
+  const [customerEmail, setCustomerEmail] = React.useState("");
+  const [customerPhone, setCustomerPhone] = React.useState("");
+  const [customerCountry, setCustomerCountry] = React.useState("");
+  const [customerCompany, setCustomerCompany] = React.useState("");
+  const [customerNotes, setCustomerNotes] = React.useState("");
+
+  // Custom key prefix (admin/super_admin only)
+  const [keyPrefix, setKeyPrefix] = React.useState("");
+
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+
+  const isAdmin = session?.role === "admin" || session?.role === "super_admin";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,14 +48,25 @@ export default function NewLicensePage() {
         features: features.trim()
           ? features.split(",").map((f) => f.trim()).filter(Boolean)
           : undefined,
+        keyPrefix: keyPrefix.trim() || undefined,
+        customerName: customerName.trim() || undefined,
+        customerEmail: customerEmail.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
+        customerCountry: customerCountry.trim() || undefined,
+        customerCompany: customerCompany.trim() || undefined,
+        customerNotes: customerNotes.trim() || undefined,
       });
       router.push(`/dashboard/licenses/${encodeURIComponent(created.licenseKey)}`);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? `${err.field ? err.field + ": " : ""}${err.message}`
-          : "Failed to create license"
-      );
+      if (err instanceof ApiError) {
+        if (err.fields && err.fields.length > 0) {
+          setError(err.fields.map((f) => `${f.field}: ${f.reason}`).join("; "));
+        } else {
+          setError(`${err.field ? err.field + ": " : ""}${err.message}`);
+        }
+      } else {
+        setError("Failed to create license");
+      }
       setSaving(false);
     }
   }
@@ -74,6 +101,52 @@ export default function NewLicensePage() {
               <Label htmlFor="features">Features (comma-separated, optional)</Label>
               <Input id="features" value={features} onChange={(e) => setFeatures(e.target.value)} />
             </div>
+
+            {/* Customer information block */}
+            <div className="flex flex-col gap-3 border-t pt-4 mt-2">
+              <div>
+                <h3 className="text-sm font-medium text-[var(--color-fg)]">Customer information</h3>
+                <p className="text-xs text-[var(--color-muted)] mt-0.5">Optional, but recommended</p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customerName">Name</Label>
+                <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customerEmail">Email</Label>
+                <Input id="customerEmail" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customerPhone">Phone</Label>
+                <Input id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customerCountry">Country code</Label>
+                <Input id="customerCountry" maxLength={2} placeholder="e.g. US" value={customerCountry} onChange={(e) => setCustomerCountry(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customerCompany">Company</Label>
+                <Input id="customerCompany" value={customerCompany} onChange={(e) => setCustomerCompany(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customerNotes">Notes</Label>
+                <Input id="customerNotes" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Custom key prefix — admin/super_admin only */}
+            {isAdmin && (
+              <div className="flex flex-col gap-1.5 border-t pt-4 mt-2">
+                <Label htmlFor="keyPrefix">Custom key prefix (optional)</Label>
+                <Input
+                  id="keyPrefix"
+                  maxLength={32}
+                  placeholder="e.g. NEW-YEAR"
+                  value={keyPrefix}
+                  onChange={(e) => setKeyPrefix(e.target.value)}
+                />
+              </div>
+            )}
 
             {error && <ErrorText>{error}</ErrorText>}
 

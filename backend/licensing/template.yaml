@@ -29,6 +29,30 @@ Parameters:
       ECDSA P-256 public key (SPKI base64) matching the SSM private signing key. Used by the
       deactivate handler to verify the caller's signed token (public-key only; no private key access).
       Must be regenerated together with the signing key on rotation.
+  ActivateRateLimit:
+    Type: Number
+    Default: 60
+    Description: >
+      Max total /activate requests per source IP within AttemptWindowSeconds. Out-of-range or
+      non-numeric values are ignored in favour of the built-in default (Req 8.9).
+  ValidateRateLimit:
+    Type: Number
+    Default: 60
+    Description: >
+      Max total /validate requests per source IP within AttemptWindowSeconds. Out-of-range or
+      non-numeric values are ignored in favour of the built-in default (Req 8.9).
+  ActivateUnknownKeyLimit:
+    Type: Number
+    Default: 10
+    Description: >
+      Max /activate requests for unknown license keys per source IP within AttemptWindowSeconds.
+      Out-of-range or non-numeric values are ignored in favour of the built-in default (Req 8.9).
+  AttemptWindowSeconds:
+    Type: Number
+    Default: 3600
+    Description: >
+      Rolling attempt window in seconds shared by the activate and validate rate limits.
+      Out-of-range or non-numeric values are ignored in favour of the built-in default (Req 8.9).
 
 Resources:
 
@@ -105,6 +129,9 @@ Resources:
           LICENSE_TABLE: !Ref TableName
           PRIVATE_KEY_PARAM: !Ref PrivateKeyParam
           TOKEN_TTL_DAYS: !Ref TokenTtlDays
+          ACTIVATE_RATE_LIMIT: !Ref ActivateRateLimit
+          ACTIVATE_RATE_WINDOW_SEC: !Ref AttemptWindowSeconds
+          ACTIVATE_UNKNOWN_KEY_LIMIT: !Ref ActivateUnknownKeyLimit
 
   ValidateFunction:
     Type: AWS::Lambda::Function
@@ -123,6 +150,8 @@ Resources:
           LICENSE_TABLE: !Ref TableName
           PRIVATE_KEY_PARAM: !Ref PrivateKeyParam
           TOKEN_TTL_DAYS: !Ref TokenTtlDays
+          VALIDATE_RATE_LIMIT: !Ref ValidateRateLimit
+          VALIDATE_RATE_WINDOW_SEC: !Ref AttemptWindowSeconds
 
   TrialFunction:
     Type: AWS::Lambda::Function

@@ -20,16 +20,17 @@
  *    no trial anchor can be read or modified (Req 14.4).
  *
  * Every external collaborator — the {@link DynamoClient}, the {@link AuditLog},
- * the clock, and the {@link KeyGenerator} — is injected, so the property/unit
- * tests can drive this module entirely against the in-memory DynamoDB fake.
+ * the clock, and the key generator — is injected, so the property/unit tests
+ * can drive this module entirely against the in-memory DynamoDB fake.
  *
  * @module lib/licenses/create
  * Requirements: 3.1, 3.2, 3.3, 3.6, 3.7, 14.2, 14.3, 14.4
  */
 
 import { ConditionalCheckFailedError, type DynamoClient, type DynamoItem } from "../dynamo.ts";
-import type { AuditLog } from "../audit.ts";
-import { generateLicenseKey, type KeyGenerator } from "./keygen.ts";
+import type { AuditChanges, AuditLog } from "../audit.ts";
+import { generateLicenseKey, KeyGenerationError } from "./keygen.ts";
+import type { CustomerProfile } from "./customer.ts";
 import { validateIso8601Utc, validateMaxActivations } from "../validation.ts";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -42,6 +43,14 @@ export const LICENSE_PARTITION_KEY = "licenseKey";
 
 /** Prefix marking trial-anchor items that the portal must never touch (Req 14.4). */
 export const TRIAL_ANCHOR_PREFIX = "TRIAL#";
+
+/**
+ * Prefix marking rate-limit counter items (`RL#<bucket>#<ip>`) the portal must
+ * never touch or surface through the license API — guarded alongside
+ * {@link TRIAL_ANCHOR_PREFIX} so a counter item is unreachable via an attribute
+ * update and is excluded from every license list/search (Req 2.6, 3.6).
+ */
+export const RL_COUNTER_PREFIX = "RL#";
 
 /** Audit action recorded for a license creation. */
 export const LICENSE_CREATE_ACTION = "license.create";
@@ -57,7 +66,7 @@ export const DEFAULT_MAX_KEY_ATTEMPTS = 5;
  * only additive attribute (Req 14.3) and is present only for reseller-created
  * records.
  */
-export interface LicenseRecord {
+export interface LicenseRecord extends CustomerProfile {
   licenseKey: string;
   status: "active";
   plan: string;
@@ -69,6 +78,11 @@ export interface LicenseRecord {
   createdAt: string;
   /** Additive: owning Reseller_Account, absent for admin-created records. */
   resellerAccountId?: string;
+  /**
+   * Additive: normalized Custom_Key_Prefix, stored verbatim only when a prefix
+   * was supplied and omitted otherwise (Req 5.8, 10.3).
+   */
+  keyPrefix?: string;
 }
 
 /** The actor context needed to write the create Audit_Entry (Req 3.7). */
@@ -98,6 +112,18 @@ export interface CreateLicenseInput {
    * for admin-created records.
    */
   resellerAccountId?: string | null;
+  /**
+   * Already-normalized, already-authorized Custom_Key_Prefix (Req 5.1, 5.7).
+   * The route normalizes/validates and authorizes it; this module persists it
+   * verbatim and feeds it to every key-generation attempt. Absent means an
+   * unprefixed key.
+   */
+  keyPrefix?: string;
+  /**
+   * Already-normalized Customer_Profile (Req 1.2). Only the fields to store are
+   * present; each is spread onto the item so absent fields never appear.
+   */
+  customer?: CustomerProfile;
 }
 
 /** Discriminated-union outcome of a create attempt. */
@@ -107,7 +133,7 @@ export type CreateLicenseResult =
 
 /** Failure reasons a create attempt can produce. */
 export interface CreateLicenseError {
-  code: "validation_error" | "key_generation_failed";
+  code: "validation_error" | "key_generation_failed" | "write_failed";
   /** Offending field for validation errors, when applicable. */
   field?: string;
   message: string;
@@ -121,8 +147,13 @@ export interface CreateLicenseDeps {
   audit: AuditLog;
   /** Clock injection for a deterministic `createdAt` (defaults to `Date`). */
   now?: () => Date;
-  /** Key generator injection (defaults to {@link generateLicenseKey}). */
-  generateKey?: KeyGenerator;
+  /**
+   * Key generator injection (defaults to {@link generateLicenseKey}). Receives
+   * the optional Custom_Key_Prefix so a collision regenerates only the
+   * Key_Secret_Component while the prefix stays fixed (Req 5.9). A generator
+   * that ignores the argument (as older tests do) remains compatible.
+   */
+  generateKey?: (prefix?: string) => string;
   /** Override the licenses table name (defaults to {@link LICENSES_TABLE_NAME}). */
   tableName?: string;
   /** Bounded regeneration attempts on collision (defaults to {@link DEFAULT_MAX_KEY_ATTEMPTS}). */
@@ -181,9 +212,26 @@ export function createLicenseCreator(deps: CreateLicenseDeps): LicenseCreator {
       const createdAt = now().toISOString();
 
       // ── Mint a unique key with bounded regeneration on collision (Req 3.3). ──
+      // Prefix persisted verbatim only when supplied (Req 5.8, 10.3).
+      const keyPrefix =
+        input.keyPrefix !== undefined && input.keyPrefix !== ""
+          ? input.keyPrefix
+          : undefined;
+
       let record: LicenseRecord | undefined;
       for (let attempt = 0; attempt < maxKeyAttempts; attempt++) {
-        const licenseKey = generateKey();
+        // Regenerate only the Key_Secret_Component on each attempt; the prefix
+        // stays fixed (Req 5.9). A KeyGenerationError surfaces before any write
+        // and is mapped to key_generation_failed (Req 6.8).
+        let licenseKey: string;
+        try {
+          licenseKey = generateKey(keyPrefix);
+        } catch (err) {
+          if (err instanceof KeyGenerationError) {
+            return fail({ code: "key_generation_failed", message: err.message });
+          }
+          throw err;
+        }
 
         // Generated keys are always `PDM-…`; guard so a bad generator can never
         // cause the portal to write/overwrite a `TRIAL#` anchor (Req 14.4).
@@ -202,6 +250,11 @@ export function createLicenseCreator(deps: CreateLicenseDeps): LicenseCreator {
           activations: {},
           createdAt,
           resellerAccountId,
+          // Persist the prefix verbatim when present (Req 5.8).
+          ...(keyPrefix !== undefined ? { keyPrefix } : {}),
+          // Spread the normalized Customer_Profile; only present fields appear,
+          // so absent Customer_Fields never land on the item (Req 1.2, 1.3).
+          ...(input.customer ?? {}),
         };
 
         try {
@@ -230,6 +283,27 @@ export function createLicenseCreator(deps: CreateLicenseDeps): LicenseCreator {
       }
 
       // ── Record the create Audit_Entry with the submitted attributes (Req 3.7). ──
+      const changes: AuditChanges = {
+        plan: { before: null, after: record.plan },
+        maxActivations: { before: null, after: record.maxActivations },
+        owner: { before: null, after: record.owner ?? null },
+        features: { before: null, after: record.features },
+        expiresAt: { before: null, after: record.expiresAt ?? null },
+        status: { before: null, after: record.status },
+        resellerAccountId: { before: null, after: record.resellerAccountId ?? null },
+      };
+
+      // Additive audit keys, written only when non-empty (Req 1.8, 5.10, 9.1, 9.2).
+      // keyPrefix carries its normalized value; customerFieldsSet carries the
+      // changed field names only — sorted, never their values.
+      if (keyPrefix !== undefined) {
+        changes.keyPrefix = { before: null, after: keyPrefix };
+      }
+      const customerFieldsSet = Object.keys(input.customer ?? {}).sort();
+      if (customerFieldsSet.length > 0) {
+        changes.customerFieldsSet = { before: null, after: customerFieldsSet };
+      }
+
       await audit.writeAuditEntry({
         actor: actor.actor,
         actorRole: actor.actorRole,
@@ -237,15 +311,7 @@ export function createLicenseCreator(deps: CreateLicenseDeps): LicenseCreator {
         target: record.licenseKey,
         sourceIp: actor.sourceIp,
         timestamp: createdAt,
-        changes: {
-          plan: { before: null, after: record.plan },
-          maxActivations: { before: null, after: record.maxActivations },
-          owner: { before: null, after: record.owner ?? null },
-          features: { before: null, after: record.features },
-          expiresAt: { before: null, after: record.expiresAt ?? null },
-          status: { before: null, after: record.status },
-          resellerAccountId: { before: null, after: record.resellerAccountId ?? null },
-        },
+        changes,
       });
 
       return { ok: true, value: record };

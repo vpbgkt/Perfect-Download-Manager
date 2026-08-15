@@ -1,5 +1,12 @@
 /**
- * License_Key generation for the Admin & Reseller Portal.
+ * License_Key generation for the licensing admin CLI (ES module mirror).
+ *
+ * This module mirrors `admin-portal/lib/licenses/keygen.ts` byte-for-byte in
+ * observable behavior, against the same written specification. A parity
+ * property test imports both implementations and asserts identical grammar and
+ * identical normalization results, so the semantics of {@link normalizeKeyPrefix}
+ * and {@link generateLicenseKey} must stay exactly aligned with the portal
+ * module.
  *
  * A License_Key is composed, in order, of the literal segment `PDM`, an
  * optional normalized Custom_Key_Prefix, and a freshly generated
@@ -11,26 +18,30 @@
  * The Key_Secret_Component is 7 hyphen-separated groups of 4 Key_Alphabet
  * symbols (28 symbols × log2(32) = 140 bits of randomness, above the 128-bit
  * floor). Every byte is drawn from the cryptographically secure source in
- * `node:crypto` through an injectable {@link RandomBytes}; no other source is
+ * `node:crypto` through an injectable random-byte source; no other source is
  * ever consulted, and a source failure or short read surfaces as a
  * {@link KeyGenerationError} rather than a weaker fallback.
  *
- * @module lib/licenses/keygen
- * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.6, 6.7, 6.8
+ * Since the backend has no shared Result type, {@link validateKeyPrefix}
+ * returns a plain object mirroring the portal's `Result` shape:
+ *   - success: `{ ok: true, value }`
+ *   - failure: `{ ok: false, error }`
+ *
+ * @module admin/lib/keygen
+ * Requirements: 6.9, 5.11, 6.1, 6.2, 6.3, 6.6, 6.7
  */
 
 import { randomBytes } from "node:crypto";
-import { type Result } from "../validation.ts";
 
 // ---------------------------------------------------------------------------
-// Result helpers (mirrors lib/validation.ts, whose ok/fail are module-private)
+// Result helpers (mirror the portal's module-private ok/fail)
 // ---------------------------------------------------------------------------
 
-function ok<T>(value: T): Result<T> {
+function ok(value) {
   return { ok: true, value };
 }
 
-function fail<T = never>(error: string): Result<T> {
+function fail(error) {
   return { ok: false, error };
 }
 
@@ -89,28 +100,14 @@ const ACCEPT_LIMIT = 256 - (256 % KEY_ALPHABET.length); // 256
  * No fallback source is consulted; the caller must abort without a write.
  */
 export class KeyGenerationError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
+  constructor(message, options) {
     super(message, options);
     this.name = "KeyGenerationError";
   }
 }
 
-/**
- * Injectable cryptographically secure byte source. Defaults to
- * `node:crypto`'s `randomBytes`. Tests may inject a deterministic or failing
- * source to exercise the mapping and the failure path.
- */
-export type RandomBytes = (n: number) => Uint8Array;
-
-/**
- * A pluggable key generator. Injecting this into the create flow lets tests
- * force collisions (by returning a fixed value) and verify uniqueness/format
- * without relying on real randomness.
- */
-export type KeyGenerator = () => string;
-
 /** Default byte source: cryptographically secure bytes from `node:crypto`. */
-const defaultRandomBytes: RandomBytes = (n) => randomBytes(n);
+const defaultRandomBytes = (n) => randomBytes(n);
 
 // ---------------------------------------------------------------------------
 // Custom_Key_Prefix normalization and validation
@@ -127,8 +124,11 @@ const defaultRandomBytes: RandomBytes = (n) => randomBytes(n);
  *
  * Total and idempotent: `normalizeKeyPrefix(normalizeKeyPrefix(x))` equals
  * `normalizeKeyPrefix(x)` for every input.
+ *
+ * @param {string} input
+ * @returns {string}
  */
-export function normalizeKeyPrefix(input: string): string {
+export function normalizeKeyPrefix(input) {
   let value = input.trim();
   value = value.toUpperCase();
   value = value.replace(/[\s_]+/g, "-");
@@ -152,8 +152,11 @@ export function normalizeKeyPrefix(input: string): string {
  *     {@link MIN_CUSTOM_PREFIX_LENGTH} or longer than
  *     {@link MAX_CUSTOM_PREFIX_LENGTH} (Req 5.5);
  *   - `ok(<normalized>)` otherwise.
+ *
+ * @param {unknown} input
+ * @returns {{ ok: true, value: (string|undefined) } | { ok: false, error: string }}
  */
-export function validateKeyPrefix(input: unknown): Result<string | undefined> {
+export function validateKeyPrefix(input) {
   // Absent: omitted or explicitly null (Req 5.2).
   if (input === undefined || input === null) {
     return ok(undefined);
@@ -198,9 +201,13 @@ export function validateKeyPrefix(input: unknown): Result<string | undefined> {
  * Draw `n` bytes from the injected source, treating any throw or short read as
  * a {@link KeyGenerationError}. No fallback source is ever consulted (Req 6.1,
  * 6.8).
+ *
+ * @param {(n: number) => Uint8Array} random
+ * @param {number} n
+ * @returns {Uint8Array}
  */
-function drawBytes(random: RandomBytes, n: number): Uint8Array {
-  let bytes: Uint8Array;
+function drawBytes(random, n) {
+  let bytes;
   try {
     bytes = random(n);
   } catch (cause) {
@@ -224,11 +231,12 @@ function drawBytes(random: RandomBytes, n: number): Uint8Array {
  * at or above {@link ACCEPT_LIMIT} so the mapping is uniform with no remainder
  * reduction (Req 6.2, 6.3). A single `randomBytes(28)` call suffices in the
  * common case; the loop refills only if the rejection branch consumes values.
+ *
+ * @param {(n: number) => Uint8Array} [random]
+ * @returns {string}
  */
-export function generateSecretComponent(
-  random: RandomBytes = defaultRandomBytes
-): string {
-  const symbols: string[] = [];
+export function generateSecretComponent(random = defaultRandomBytes) {
+  const symbols = [];
 
   while (symbols.length < SECRET_LENGTH) {
     const bytes = drawBytes(random, SECRET_LENGTH - symbols.length);
@@ -243,7 +251,7 @@ export function generateSecretComponent(
     }
   }
 
-  const groups: string[] = [];
+  const groups = [];
   for (let g = 0; g < SECRET_GROUPS; g++) {
     const start = g * SECRET_GROUP_SIZE;
     groups.push(symbols.slice(start, start + SECRET_GROUP_SIZE).join(""));
@@ -264,11 +272,12 @@ export function generateSecretComponent(
  * The Key_Secret_Component is drawn from `random`, defaulting to `node:crypto`.
  * A source failure propagates as a {@link KeyGenerationError} and no key is
  * returned (Req 6.8).
+ *
+ * @param {string} [prefix]
+ * @param {(n: number) => Uint8Array} [random]
+ * @returns {string}
  */
-export function generateLicenseKey(
-  prefix?: string,
-  random?: RandomBytes
-): string {
+export function generateLicenseKey(prefix, random) {
   const secret = generateSecretComponent(random);
   if (prefix !== undefined && prefix !== "") {
     return `${LICENSE_KEY_PREFIX}-${prefix}-${secret}`;

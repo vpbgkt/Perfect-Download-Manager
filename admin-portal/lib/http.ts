@@ -51,9 +51,41 @@ export function authErrorResponse(error: AuthError): NextResponse {
   }
 }
 
+/**
+ * One offending field in a multi-field validation error (Req 4.9).
+ * Carried alongside the existing `field` / `reason` pair so current clients
+ * that read only those two keys continue to work unchanged (Req 10.6).
+ */
+export interface ValidationFieldEntry {
+  field: string;
+  reason: string;
+}
+
 /** A 400 validation-error body with an optional field/reason (Req 15.4). */
 export function validationErrorResponse(field: string, reason: string): NextResponse {
   return NextResponse.json({ error: "validation_error", field, reason }, { status: 400 });
+}
+
+/**
+ * A 400 validation-error body that names several offending fields at once
+ * (Req 4.9). The body carries both the original `field` / `reason` pair (first
+ * entry, for backward compatibility with clients that read a single field) and
+ * a `fields` array so all offending Customer_Fields are visible in one response
+ * without breaking existing consumers (Req 10.6).
+ */
+export function validationErrorResponseMulti(
+  entries: ValidationFieldEntry[]
+): NextResponse {
+  const first = entries[0] ?? { field: "input", reason: "Validation failed" };
+  return NextResponse.json(
+    {
+      error: "validation_error",
+      field: first.field,
+      reason: first.reason,
+      fields: entries,
+    },
+    { status: 400 }
+  );
 }
 
 /** A generic 400 for malformed request bodies. */
