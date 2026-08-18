@@ -1,4 +1,4 @@
-# Perfect Download Manager (PDM)
+# Perfect Download Manager (PDM)[PerfectDownloadManager.com]
 
 A high-performance, commercial-grade download manager for Windows 10/11 as an original
 alternative to Internet Download Manager. Built incrementally; each stage ships tested,
