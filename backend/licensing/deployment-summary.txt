@@ -1,0 +1,167 @@
+════════════════════════════════════════════════════════════════════════════════
+  PDM LICENSING — DEPLOYMENT SUMMARY
+════════════════════════════════════════════════════════════════════════════════
+
+Timestamp: 2026-08-15T09:01:21.682Z
+Outcome:   PARTIALLY VERIFIED
+Detail:    4 check(s) could not be verified (environment unreachable): 1. Portal health, 3. Prefixed key activation, 4. Legacy key activation, 5. Rate limit (429)
+
+────────────────────────────────────────────────────────────────────────────────
+  VERIFICATION RESULTS
+────────────────────────────────────────────────────────────────────────────────
+
+  [?] 1. Portal health: NOT_VERIFIED
+      GET https://admin.premiumvibe.in/api/health — network error
+  [✓] 2. Customer_Field round-trip: PASSED
+      Key PDM-VERIFY-TMBB-CZYG-4XKY-25YK-V5ZR-4H09-YW18 — all 6 Customer_Fields match
+  [?] 3. Prefixed key activation: NOT_VERIFIED
+      API_URL not configured
+  [?] 4. Legacy key activation: NOT_VERIFIED
+      API_URL not configured
+  [?] 5. Rate limit (429): NOT_VERIFIED
+      API_URL not configured
+  [✓] 6. Error log entries: PASSED
+      Log retrieval skipped (CloudWatch Logs SDK not available or access denied): Cannot find package '@aws-sdk/client-cloudwatch-logs' imported from C:\Users\CLOUD ENGINEER\Desktop\premium-vibe\PDM\backend\licensing\verify-deployment.mjs
+
+────────────────────────────────────────────────────────────────────────────────
+  CODE CHANGES
+────────────────────────────────────────────────────────────────────────────────
+
+- Rewrote admin-portal/lib/licenses/keygen.ts: 32-symbol Key_Alphabet, 7×4 secret groups (140-bit entropy), injectable byte source, prefix normalization/validation
+- Created admin-portal/lib/licenses/customer.ts: Customer_Field normalization, validation, and storage diff evaluation
+- Created admin-portal/lib/licenses/pagination.ts: structural continuation-token guard
+- Created admin-portal/lib/principal.ts: unified API-key/Firebase principal resolution
+- Extended admin-portal/lib/licenses/create.ts: keyPrefix + customer profile inputs, prefix-stable retry
+- Extended admin-portal/lib/licenses/attributes.ts: Customer_Field SET/REMOVE, RL# guard, audit entries
+- Extended admin-portal/lib/licenses/query.ts: customer search, RL# exclusion, term-length guard
+- Created backend/licensing/src/lib/attemptLimit.mjs: per-IP fixed-window Attempt_Counter
+- Updated backend/licensing/src/lib/rateLimit.mjs: delegates to attemptLimit
+- Updated backend/licensing/src/activate.mjs: total + unknown-key limiting
+- Updated backend/licensing/src/validate.mjs: total limiting
+- Created backend/licensing/admin/lib/keygen.mjs: CLI Key_Generator mirror
+- Updated backend/licensing/admin/create-license.mjs: --prefix argument support
+
+────────────────────────────────────────────────────────────────────────────────
+  LICENSE_RECORD ATTRIBUTE ADDITIONS
+────────────────────────────────────────────────────────────────────────────────
+
+- keyPrefix (S, optional): normalized Custom_Key_Prefix, 1–32 characters
+- customerEmail (S, optional): normalized lowercase, Email_Format
+- customerName (S, optional): ≤120 chars, single-spaced
+- customerPhone (S, optional): Phone_Format, single-spaced
+- customerCountry (S, optional): ISO 3166-1 alpha-2, uppercase
+- customerCompany (S, optional): ≤120 chars, single-spaced
+- customerNotes (S, optional): ≤1000 chars, trimmed
+
+All attributes are additive. No existing attribute was renamed, retyped, or removed.
+Absent means not present on the item — never null, never empty string.
+
+────────────────────────────────────────────────────────────────────────────────
+  API CHANGES
+────────────────────────────────────────────────────────────────────────────────
+
+- POST /api/licenses: accepts optional keyPrefix (admin-only) and 6 customer fields; returns keyPrefix and customer fields in 201 response
+- GET /api/licenses: search extended to customerEmail, customerName, customerCompany, customerPhone; RL# items excluded; continuation-token structurally validated
+- GET /api/licenses/{key}: returns keyPrefix and customer fields when present
+- PATCH /api/licenses/{key}: accepts customer field updates with SET/REMOVE semantics; RL# guard added
+- POST /activate: per-IP total limit (default 60/hour) and unknown-key limit (default 10/hour); uniform 429 body
+- POST /validate: per-IP total limit (default 60/hour); uniform 429 body
+
+All new request fields are optional. Existing request/response shapes unchanged.
+Error responses extended with fields[] array alongside existing field/reason pair.
+
+────────────────────────────────────────────────────────────────────────────────
+  PORTAL_FRONTEND CHANGES
+────────────────────────────────────────────────────────────────────────────────
+
+- Create license page: 6 customer inputs (optional, recommended), custom key prefix input (admin-only, maxLength=32)
+- License detail page: Customer information card with 6 editable controls, empty string sent for removal
+- License list page: search placeholder mentions customer fields, 'No customer info' badge when all 6 fields absent
+
+────────────────────────────────────────────────────────────────────────────────
+  SECURITY CHANGES
+────────────────────────────────────────────────────────────────────────────────
+
+- Key entropy raised from 64 bits (4×4 hex) to 140 bits (7×4 Key_Alphabet symbols)
+- Cryptographic byte source: node:crypto randomBytes only, no fallback
+- Uniform byte→symbol mapping: ALPHABET[b >>> 3] with rejection branch
+- Per-IP activation attempt limiting: total 60/hour, unknown-key 10/hour (configurable via CloudFormation parameters)
+- Per-IP validation attempt limiting: total 60/hour (configurable)
+- Uniform 429 body reveals no key existence information
+- Fail-open on counter failures (logged without key material)
+- Customer_Field values never appear in audit entries, logs, or tokens
+- RL# counter items unreachable through license API routes
+- MFA-enrollment gate remains firebase-only
+
+────────────────────────────────────────────────────────────────────────────────
+  TESTS PERFORMED
+────────────────────────────────────────────────────────────────────────────────
+
+- Property tests (fast-check, 100 runs each):
+  P1: Key grammar and length bounds
+  P2: Secret independence and uniqueness
+  P3: Byte-to-symbol mapping uniformity
+  P4: Prefix normalization idempotence
+  P5: Generator parity (portal ↔ CLI)
+  P6: Failing random source produces no write
+  P7: Customer_Profile round-trip
+  P8: All-or-nothing Customer_Field validation
+  P9: Absent/blank Customer_Fields leave no attribute
+  P10: Single-copy storage
+  P11: Search yields exactly viewable matches
+  P12: Unauthorized requests return/change nothing
+  P13: Audit entries name changed fields, no values
+  P14: Attempt_Counter independent fixed windows
+  P15: Rejection uniformity and no side effects
+  P16: Backward compatibility
+  P17: Environment-supplied limits clamped or defaulted
+  P18: No key/customer data leakage
+  P19: Malformed search parameters rejected
+  P20: Collision retry bounded at 5
+  P21: Non-unique email and credential-path equivalence
+
+- Unit tests:
+  Customer_Field normalization and predicates
+  Write-failure path (no partial write)
+  Fail-open limiter behaviour
+  CLI minter --prefix rejection and acceptance
+  Customer UI rendering
+  Deployment smoke tests (template, deploy script, nginx)
+
+- CI job: portal-test runs portal + licensing suites on every push (Node 22.x)
+
+────────────────────────────────────────────────────────────────────────────────
+  DEPLOYMENT OUTCOME
+────────────────────────────────────────────────────────────────────────────────
+
+Status: PARTIALLY VERIFIED
+Detail: 4 check(s) could not be verified (environment unreachable): 1. Portal health, 3. Prefixed key activation, 4. Legacy key activation, 5. Rate limit (429)
+
+Action: Some checks could not be completed. Manual verification recommended.
+Rollback: NOT performed. Deployed configuration remains in place.
+
+Verification source IP: caller (see rate-limit check for actual IP)
+Attempt window: 3600s
+
+────────────────────────────────────────────────────────────────────────────────
+  REMAINING LIMITATIONS & FOLLOW-UP RECOMMENDATIONS
+────────────────────────────────────────────────────────────────────────────────
+
+Remaining limitations:
+- Continuation-token guard is structural only; a valid-shaped token not issued by the server cannot be detected without server-side token state
+- Customer search uses DynamoDB Scan + FilterExpression; pages may be shorter than the requested page size while pagination continues (conformant per Req 3.4)
+- No secondary index added; search performance scales linearly with table size
+- customerEmail is deliberately non-unique; no deduplication or linking is performed
+- Rate limit counters use fixed windows; a burst at window boundaries can exceed the nominal limit by up to 2x
+- The .NET desktop client is unchanged; new key formats work because the client applies no format assertion
+- ECDSA token signing, client-embedded public key, trial-anchor flow remain out of scope
+
+Follow-up recommendations:
+- Monitor DynamoDB consumed capacity for Scan-heavy search workloads as the table grows
+- Consider a GSI on customerEmail if lookup-by-email becomes a frequent operation
+- Evaluate sliding-window or token-bucket rate limiting if window-boundary bursts become a concern
+- Periodically review TTL-expired RL# counter items are being cleaned up by DynamoDB
+- Add integration test coverage for the Reseller_API credential path once reseller onboarding is active
+- Consider adding a verification-record cleanup step (remove VERIFY-prefixed keys after confirmation)
+
+════════════════════════════════════════════════════════════════════════════════

@@ -27,6 +27,9 @@ yarn-error.log*
 # env files
 .env*.local
 .env
+# real filled-in copy of deploy/portal.env.example — never commit actual VPS secrets
+deploy/portal.env
+portal.env
 
 # secrets
 firebase-service-account.json

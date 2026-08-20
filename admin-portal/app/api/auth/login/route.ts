@@ -43,7 +43,12 @@ export async function POST(req: Request): Promise<NextResponse> {
   try {
     const verified = await tokenVerifier.verifyIdToken(idToken, true);
     uid = verified.uid;
-  } catch {
+  } catch (err) {
+    // TEMPORARY DIAGNOSTIC LOGGING — remove once the VPS sign-in issue is
+    // resolved. This surfaces the real cause (clock skew, bad credentials
+    // path/content, blocked egress to Google's APIs, etc.) in `journalctl -u
+    // pdm-portal`, which the uniform client-facing error deliberately hides.
+    console.error("[auth/login] verifyIdToken failed:", err);
     return authErrorResponse(AUTHENTICATION_FAILED);
   }
 
