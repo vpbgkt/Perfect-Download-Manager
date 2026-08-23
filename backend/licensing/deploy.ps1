@@ -38,7 +38,10 @@ function Assert-LastExit([string]$what) {
 }
 
 # --- 0. Gating steps: build portal, run portal tests, run licensing tests ----
-$repoRoot = (Resolve-Path (Join-Path $here ".." "..")).Path
+# PowerShell's Join-Path is binary (Path + ChildPath); the earlier three-argument form
+# silently returned $null on Windows PowerShell 5.x, which cascaded into "npm ci" and
+# "npm run build" running in the wrong directory and dying on a missing script.
+$repoRoot = (Resolve-Path (Join-Path (Join-Path $here "..") "..")).Path
 $portalDir = Join-Path $repoRoot "admin-portal"
 
 Write-Host "Installing admin-portal dependencies..."
