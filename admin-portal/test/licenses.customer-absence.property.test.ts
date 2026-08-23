@@ -166,8 +166,8 @@ describe("Property 9: Absent and blank Customer_Fields leave no attribute behind
   it("create: evaluateCustomerProfile produces no set entries and no errors for blank/absent fields (Req 4.13)", () => {
     // This tests the evaluation path that feeds create — blank fields normalize
     // to empty and land in `clear`, never in `set` or `errors`.
-    const { evaluateCustomerProfile } = require("../lib/licenses/customer.ts");
-
+    // (evaluateCustomerProfile is imported at the top; these files are ESM, so `require`
+    // is not available.)
     fc.assert(
       fc.property(allAbsentOrBlankBodyArb, (body) => {
         const outcome = evaluateCustomerProfile(body);

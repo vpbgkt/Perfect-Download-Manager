@@ -275,13 +275,96 @@ function simulateLogOutput(license: LicenseRecord, ip: string) {
 // ─── Assertions ───────────────────────────────────────────────────────────────
 
 /**
- * Asserts that a serialized string (JSON body or log line) does not contain
- * any Customer_Field value from the given record.
+ * Characters a License_Key ([A-Z0-9-]) or a base64url token ([A-Za-z0-9_-]) can be built from.
+ * A Customer_Field value made only of these can collide with such an identifier by chance.
  */
-function assertNoCustomerFieldValues(serialized: string, record: LicenseRecord, context: string) {
+const KEY_OR_TOKEN_CHARSET = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * True when a value is distinctive enough that finding it as a substring can only mean it was
+ * actually emitted. A value containing "@", ".", "+", a space, etc. cannot occur inside a
+ * License_Key or a base64url token, so a match is real rather than coincidental.
+ */
+function isDistinctiveValue(value: string): boolean {
+  return value.length >= 4 && !KEY_OR_TOKEN_CHARSET.test(value);
+}
+
+/** Recursively collect every property name and every string leaf of a parsed JSON value. */
+function collectJsonStrings(node: unknown, names: string[], leaves: string[]): void {
+  if (typeof node === "string") {
+    leaves.push(node);
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const item of node) collectJsonStrings(item, names, leaves);
+    return;
+  }
+  if (node !== null && typeof node === "object") {
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      names.push(key);
+      collectJsonStrings(value, names, leaves);
+    }
+  }
+}
+
+/**
+ * Asserts that a serialized string (JSON body or log line) does not carry any Customer_Field
+ * value from the given record.
+ *
+ * Two complementary checks, because a naive substring scan is unsound here: short values such as
+ * a two-letter Country_Code ("AA") or a three-letter name occur by chance inside almost any
+ * uppercase License_Key or base64url token that the payload legitimately contains.
+ *
+ *  1. Structural — no property may be *named* like a Customer_Field, and no string leaf may
+ *     *equal* a Customer_Field value. Exact leaf comparison is collision-proof, and a genuine leak
+ *     shows up exactly this way (the value carried as its own field).
+ *  2. Substring — additionally catches a value interpolated into a larger message, but only for
+ *     values distinctive enough that a chance match is impossible.
+ */
+function assertNoCustomerFieldValues(
+  serialized: string,
+  record: Partial<Record<(typeof CUSTOMER_FIELDS)[number], string | undefined>>,
+  context: string
+) {
+  const values = new Map<string, string>(); // value -> field name
   for (const field of CUSTOMER_FIELDS) {
     const value = record[field];
     if (typeof value === "string" && value.length > 0) {
+      values.set(value, field);
+    }
+  }
+
+  let parsed: unknown;
+  let isJson = true;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    isJson = false;
+  }
+
+  if (isJson) {
+    const names: string[] = [];
+    const leaves: string[] = [];
+    collectJsonStrings(parsed, names, leaves);
+
+    for (const name of names) {
+      assert.ok(
+        !CUSTOMER_FIELDS.includes(name as (typeof CUSTOMER_FIELDS)[number]),
+        `${context} must not carry a Customer_Field property ("${name}")`
+      );
+    }
+
+    for (const leaf of leaves) {
+      const field = values.get(leaf);
+      assert.ok(
+        field === undefined,
+        `${context} must not contain ${field} value "${leaf}"`
+      );
+    }
+  }
+
+  for (const [value, field] of values) {
+    if (isDistinctiveValue(value)) {
       assert.ok(
         !serialized.includes(value),
         `${context} must not contain ${field} value "${value}"`
@@ -425,16 +508,8 @@ describe("Property 18: Key material and customer data never reach tokens, licens
           for (const resp of portalErrors) {
             const bodyStr = JSON.stringify(resp.body);
 
-            // Must not contain any customer field value.
-            for (const field of CUSTOMER_FIELDS) {
-              const value = customer[field as keyof typeof customer];
-              if (typeof value === "string" && value.length > 0) {
-                assert.ok(
-                  !bodyStr.includes(value),
-                  `Portal error (${resp.status}) must not contain ${field} value`
-                );
-              }
-            }
+            // Must not contain any customer field value (collision-proof: see helper).
+            assertNoCustomerFieldValues(bodyStr, customer, `Portal error (${resp.status})`);
 
             // Must not contain private key or Api_Key secrets (Req 7.5).
             assertNoSecretMaterial(bodyStr, `Portal error (${resp.status})`);

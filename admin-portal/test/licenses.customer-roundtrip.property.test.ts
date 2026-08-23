@@ -1,4 +1,4 @@
-// Feature: license-key-management-enhancements
+﻿// Feature: license-key-management-enhancements
 // Property 7: Customer_Profile storage round-trips and normalization is a fixed point
 //
 // Validates: Requirements 2.4, 3.1, 4.2, 4.4, 4.8, 4.10, 4.11, 4.12, 7.9, 11.3
@@ -6,7 +6,7 @@
 // For any submitted Customer_Profile whose fields pass validation, reading the
 // same License_Record returns each Customer_Field character-for-character equal
 // to the normalized submitted value (Req 3.1, 4.10, 7.9), normalizing any
-// returned value again yields that same value (Req 4.8 — normalization is a
+// returned value again yields that same value (Req 4.8 â€” normalization is a
 // fixed point), and submitting the same profile a second time leaves the stored
 // Customer_Profile and every other attribute of the record equal to their state
 // after the first submission (Req 2.4).
@@ -40,15 +40,15 @@ import { FakeDynamoClient } from "../lib/dev/in-memory-dynamo.ts";
 
 const RUNS = 100;
 
-// ─── Arbitraries for valid Customer_Field values ─────────────────────────────
+// â”€â”€â”€ Arbitraries for valid Customer_Field values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Valid email: local@domain.tld, with possible surrounding whitespace/case. */
 const emailArb = fc
   .tuple(
-    fc.stringOf(fc.constantFrom(...("abcdefghijklmnopqrstuvwxyz0123456789._%+-".split(""))), { minLength: 1, maxLength: 20 }),
-    fc.stringOf(fc.constantFrom(...("abcdefghijklmnopqrstuvwxyz0123456789-".split(""))), { minLength: 1, maxLength: 10 }),
-    fc.stringOf(fc.constantFrom(...("abcdefghijklmnopqrstuvwxyz".split(""))), { minLength: 2, maxLength: 6 }),
-    fc.stringOf(fc.constantFrom(" ", "\t"), { minLength: 0, maxLength: 3 }),
+    fc.string({ unit: fc.constantFrom(...("abcdefghijklmnopqrstuvwxyz0123456789._%+-".split(""))), minLength: 1, maxLength: 20 }),
+    fc.string({ unit: fc.constantFrom(...("abcdefghijklmnopqrstuvwxyz0123456789-".split(""))), minLength: 1, maxLength: 10 }),
+    fc.string({ unit: fc.constantFrom(...("abcdefghijklmnopqrstuvwxyz".split(""))), minLength: 2, maxLength: 6 }),
+    fc.string({ unit: fc.constantFrom(" ", "\t"), minLength: 0, maxLength: 3 }),
     fc.boolean() // randomize casing
   )
   .map(([local, domainName, tld, ws, mixCase]) => {
@@ -76,7 +76,7 @@ const countryArb = fc
       "US", "GB", "IN", "DE", "FR", "JP", "AU", "CA", "BR", "ZA",
       "NZ", "IT", "ES", "NL", "SE", "NO", "DK", "FI", "PL", "MX"
     ),
-    fc.stringOf(fc.constantFrom(" ", "\t"), { minLength: 0, maxLength: 2 }),
+    fc.string({ unit: fc.constantFrom(" ", "\t"), minLength: 0, maxLength: 2 }),
     fc.boolean()
   )
   .map(([code, ws, lower]) => {
@@ -95,7 +95,7 @@ const phoneArb = fc
       ),
       { minLength: 7, maxLength: 18 }
     ),
-    fc.stringOf(fc.constantFrom(" ", "\t"), { minLength: 0, maxLength: 2 })
+    fc.string({ unit: fc.constantFrom(" ", "\t"), minLength: 0, maxLength: 2 })
   )
   .map(([hasPlus, chars, ws]) => {
     // Ensure at least 7 digits
@@ -122,12 +122,12 @@ const nameArb = fc
   .tuple(
     fc.array(
       fc.oneof(
-        fc.stringOf(fc.constantFrom(...("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".split(""))), { minLength: 1, maxLength: 15 }),
-        fc.stringOf(fc.constantFrom(" ", "\t", "  "), { minLength: 1, maxLength: 3 })
+        fc.string({ unit: fc.constantFrom(...("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".split(""))), minLength: 1, maxLength: 15 }),
+        fc.string({ unit: fc.constantFrom(" ", "\t", "  "), minLength: 1, maxLength: 3 })
       ),
       { minLength: 1, maxLength: 6 }
     ),
-    fc.stringOf(fc.constantFrom(" ", "\t"), { minLength: 0, maxLength: 2 })
+    fc.string({ unit: fc.constantFrom(" ", "\t"), minLength: 0, maxLength: 2 })
   )
   .map(([parts, ws]) => {
     const text = parts.join("");
@@ -142,7 +142,7 @@ const nameArb = fc
 const notesArb = fc
   .tuple(
     fc.string({ minLength: 1, maxLength: 200 }),
-    fc.stringOf(fc.constantFrom(" ", "\t", "\n"), { minLength: 0, maxLength: 3 })
+    fc.string({ unit: fc.constantFrom(" ", "\t", "\n"), minLength: 0, maxLength: 3 })
   )
   .map(([text, ws]) => `${ws}${text.slice(0, 995)}${ws}`)
   .filter((v) => {
@@ -176,7 +176,7 @@ const validProfileArb = fc
     return outcome.errors.length === 0 && Object.keys(outcome.set).length > 0;
   });
 
-// ─── Test helpers ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Test helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const actor = { actor: "admin-user", actorRole: "admin", sourceIp: "198.51.100.1" };
 const adminScope = { role: "admin" as const, resellerAccountId: null };
@@ -190,7 +190,7 @@ function buildDeps() {
   return { dynamo, creator, updater, query };
 }
 
-// ─── Property 7 ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Property 7 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe("Property 7: Customer_Profile storage round-trips and normalization is a fixed point", () => {
   it("reading a created License_Record returns each Customer_Field character-for-character equal to the normalized submitted value (Req 3.1, 4.10, 7.9)", async () => {
@@ -232,7 +232,7 @@ describe("Property 7: Customer_Profile storage round-trips and normalization is 
                 `${field}: viewed value must equal the normalized submitted value`
               );
             } else {
-              // Field was not in 'set' — it must be absent from the view (Req 3.1, 10.3).
+              // Field was not in 'set' â€” it must be absent from the view (Req 3.1, 10.3).
               assert.strictEqual(
                 viewed[field],
                 undefined,
@@ -246,7 +246,7 @@ describe("Property 7: Customer_Profile storage round-trips and normalization is 
     );
   });
 
-  it("normalizing any returned Customer_Field value again yields that same value — normalization is a fixed point (Req 4.8)", async () => {
+  it("normalizing any returned Customer_Field value again yields that same value â€” normalization is a fixed point (Req 4.8)", async () => {
     await fc.assert(
       fc.asyncProperty(
         validProfileArb,
@@ -318,7 +318,7 @@ describe("Property 7: Customer_Profile storage round-trips and normalization is 
           const afterCreate = await query.view(adminScope, licenseKey);
           assert.ok(afterCreate);
 
-          // Submit the same (normalized) profile through an update — the values
+          // Submit the same (normalized) profile through an update â€” the values
           // are already normalized because they came from evaluateCustomerProfile.
           const updateAttrs: Record<string, unknown> = {};
           for (const field of CUSTOMER_FIELDS) {
