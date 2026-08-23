@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.RegularExpressions;
 using FsCheck;
 using FsCheck.Fluent;
@@ -84,7 +84,7 @@ public sealed class DownloadPopupViewModelPropertyTests
         vm.ApplyProgress(progress);
 
         // ConnectionsText must reflect "active/total" from the snapshot.
-        bool connectionsOk = vm.ConnectionsText == $"{progress.ActiveConnections}/{progress.TotalConnections}";
+        bool connectionsOk = vm.ConnectionsText == $"{progress.ActiveConnections} / {progress.TotalConnections} active";
 
         // DownloadedText must contain the formatted downloaded bytes from the snapshot.
         string formattedDownloaded = Formatting.FormatBytes(progress.BytesDownloaded);
@@ -97,7 +97,7 @@ public sealed class DownloadPopupViewModelPropertyTests
         bool percentOk = vm.ProgressPercent >= 0.0 && vm.ProgressPercent <= 100.0;
 
         return Prop.And(
-            Prop.Label(connectionsOk, $"ConnectionsText: expected '{progress.ActiveConnections}/{progress.TotalConnections}', got '{vm.ConnectionsText}'"),
+            Prop.Label(connectionsOk, $"ConnectionsText: expected '{progress.ActiveConnections} / {progress.TotalConnections} active', got '{vm.ConnectionsText}'"),
             Prop.Label(downloadedOk, $"DownloadedText contains '{formattedDownloaded}': got '{vm.DownloadedText}'"))
             .And(Prop.Label(etaOk, $"EtaText: expected '{Formatting.FormatEta(progress.Eta)}', got '{vm.EtaText}'"))
             .And(Prop.Label(percentOk, $"ProgressPercent={vm.ProgressPercent} in [0,100]"));
@@ -126,7 +126,7 @@ public sealed class DownloadPopupViewModelPropertyTests
         vm.ApplyProgress(second);
 
         // All display values must reflect the SECOND snapshot.
-        bool connectionsOk = vm.ConnectionsText == $"{second.ActiveConnections}/{second.TotalConnections}";
+        bool connectionsOk = vm.ConnectionsText == $"{second.ActiveConnections} / {second.TotalConnections} active";
 
         string formattedDownloaded = Formatting.FormatBytes(second.BytesDownloaded);
         bool downloadedOk = vm.DownloadedText.Contains(formattedDownloaded);
@@ -134,7 +134,7 @@ public sealed class DownloadPopupViewModelPropertyTests
         bool etaOk = vm.EtaText == Formatting.FormatEta(second.Eta);
 
         return Prop.And(
-            Prop.Label(connectionsOk, $"ConnectionsText: expected '{second.ActiveConnections}/{second.TotalConnections}', got '{vm.ConnectionsText}'"),
+            Prop.Label(connectionsOk, $"ConnectionsText: expected '{second.ActiveConnections} / {second.TotalConnections} active', got '{vm.ConnectionsText}'"),
             Prop.Label(downloadedOk, $"DownloadedText contains '{formattedDownloaded}': got '{vm.DownloadedText}'"))
             .And(Prop.Label(etaOk, $"EtaText: expected '{Formatting.FormatEta(second.Eta)}', got '{vm.EtaText}'"));
     }
@@ -162,16 +162,16 @@ public sealed class DownloadPopupViewModelPropertyTests
             .GetProperty(nameof(ManagedDownload.LatestProgress))!
             .SetValue(managed, progress);
 
-        // Construct the VM after the snapshot is set — it should pick it up.
+        // Construct the VM after the snapshot is set â€” it should pick it up.
         var vm = new DownloadPopupViewModel(managed);
 
-        bool connectionsOk = vm.ConnectionsText == $"{progress.ActiveConnections}/{progress.TotalConnections}";
+        bool connectionsOk = vm.ConnectionsText == $"{progress.ActiveConnections} / {progress.TotalConnections} active";
         string formattedDownloaded = Formatting.FormatBytes(progress.BytesDownloaded);
         bool downloadedOk = vm.DownloadedText.Contains(formattedDownloaded);
         bool etaOk = vm.EtaText == Formatting.FormatEta(progress.Eta);
 
         return Prop.And(
-            Prop.Label(connectionsOk, $"ConnectionsText: expected '{progress.ActiveConnections}/{progress.TotalConnections}', got '{vm.ConnectionsText}'"),
+            Prop.Label(connectionsOk, $"ConnectionsText: expected '{progress.ActiveConnections} / {progress.TotalConnections} active', got '{vm.ConnectionsText}'"),
             Prop.Label(downloadedOk, $"DownloadedText contains '{formattedDownloaded}': got '{vm.DownloadedText}'"))
             .And(Prop.Label(etaOk, $"EtaText: expected '{Formatting.FormatEta(progress.Eta)}', got '{vm.EtaText}'"));
     }

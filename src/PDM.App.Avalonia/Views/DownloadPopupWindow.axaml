@@ -4,67 +4,83 @@
         xmlns:conv="using:PDM.App.Avalonia.Converters"
         x:Class="PDM.App.Avalonia.Views.DownloadPopupWindow"
         x:DataType="vm:DownloadPopupViewModel"
-        Title="{Binding FileNameDisplay}"
-        Width="700" Height="400"
-        MinWidth="600" MinHeight="360"
+        Title="PDM Download Status"
+        Width="660" Height="430"
+        MinWidth="600" MinHeight="410"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppWindowBackgroundBrush}">
+
+    <Window.Styles>
+        <!-- Compact tab strip. The Fluent default reserves a lot of vertical space for two short
+             labels, which pushed the actual download status down the window. -->
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Window.Styles>
 
     <!-- Root grid: main content + a full-cover shutdown-countdown overlay layered on top. -->
     <Grid>
 
-        <Border Classes="card" Margin="12">
+        <Border Classes="card" Margin="10">
 
             <!-- Tabs sit at the very top; the file identity lives inside the Download tab, below the
                  tab strip (so the tab buttons are above the file name). -->
-            <TabControl>
+            <TabControl Padding="0">
 
                 <!-- Main / Download tab -->
                 <TabItem Header="Download">
-                    <DockPanel Margin="0,10,0,0">
+                    <DockPanel Margin="0,8,0,0">
 
                         <!-- ===== Identity: real file icon + name + status pill ===== -->
                         <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*">
-                            <Border Grid.Column="0" Width="48" Height="48" CornerRadius="12"
+                            <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10"
                                     Background="{DynamicResource AppAccentSubtleBrush}">
                                 <Panel>
                                     <!-- Generic fallback glyph sits under the real icon; the icon
                                          covers it when the shell resolves one for this file. -->
-                                    <TextBlock Classes="glyph" Text="&#xE896;" FontSize="20"
+                                    <TextBlock Classes="glyph" Text="&#xE896;" FontSize="18"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                                Foreground="{DynamicResource AppAccentBrush}" />
-                                    <Image Width="28" Height="28"
+                                    <Image Width="24" Height="24"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
                                            Source="{Binding DestinationPath, Converter={x:Static conv:FileIconConverter.Instance}, ConverterParameter=large}" />
                                 </Panel>
                             </Border>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0" Spacing="6">
-                                <TextBlock Text="{Binding FileNameDisplay}" Classes="h2"
+                            <!-- File name and status pill share a row so the header stays two lines tall. -->
+                            <Grid Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"
+                                  ColumnDefinitions="*,Auto" RowDefinitions="Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding FileNameDisplay}" Classes="h2"
+                                           VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
-                                <Border Classes="badge" Background="{DynamicResource AppAccentSubtleBrush}"
-                                        HorizontalAlignment="Left">
+                                <Border Grid.Column="1" Classes="badge"
+                                        Background="{DynamicResource AppAccentSubtleBrush}"
+                                        VerticalAlignment="Center" Margin="10,0,0,0">
                                     <TextBlock Text="{Binding StatusLabel}" FontSize="11.5"
                                                Foreground="{DynamicResource AppAccentBrush}" />
                                 </Border>
-                            </StackPanel>
+                            </Grid>
                         </Grid>
 
                         <!-- Controls pinned to the bottom of the tab. Order (when complete):
-                             Open · Extract and open · Show in folder · Close. Each closes the popup. -->
+                             Open · Extract and open · Show in folder · Close. Each closes the popup.
+                             The old "Auto extract and open" button lived here too; it is now a
+                             checkbox beside the progress bar, next to the auto-open choice it is
+                             mutually exclusive with. -->
                         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
-                                    HorizontalAlignment="Right" Margin="0,12,0,0">
+                                    HorizontalAlignment="Right" Margin="0,10,0,0">
                             <Button Content="Open" Click="OnOpenAndClose"
                                     IsVisible="{Binding CanOpenFile}" Classes="brand" />
                             <Button Content="Extract and open" Click="OnExtractAndOpen"
                                     IsVisible="{Binding CanExtract}" Classes="brand" />
                             <Button Content="Show in folder" Click="OnShowFolderAndClose"
                                     IsVisible="{Binding CanOpenFolder}" />
-
-                            <!-- Running + archive: arm auto-extract (asks the password up front). -->
-                            <Button Content="Auto extract and open" Click="OnArmAutoExtract"
-                                    IsVisible="{Binding CanArmAutoExtract}"
-                                    ToolTip.Tip="Extract this archive and open the folder automatically when the download finishes" />
 
                             <!-- Paused: keep the download for later (closes without cancelling). -->
                             <Button Content="Download later" Click="OnCloseClick"
@@ -81,14 +97,15 @@
                                     IsVisible="{Binding IsTerminal}" />
                         </StackPanel>
 
-                        <StackPanel Spacing="12">
+                        <StackPanel Spacing="9">
 
                             <!-- Progress (smoothly animated) -->
-                            <StackPanel Spacing="6">
-                                <ProgressBar x:Name="ProgressIndicator" Minimum="0" Maximum="100"
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                                <ProgressBar Grid.Column="0" x:Name="ProgressIndicator"
+                                             Minimum="0" Maximum="100"
                                              Value="{Binding ProgressPercent}"
                                              IsIndeterminate="{Binding IsIndeterminate}"
-                                             MinHeight="8" CornerRadius="4">
+                                             MinHeight="8" CornerRadius="4" VerticalAlignment="Center">
                                     <ProgressBar.Transitions>
                                         <Transitions>
                                             <DoubleTransition Property="Value" Duration="0:0:0.45"
@@ -96,55 +113,68 @@
                                         </Transitions>
                                     </ProgressBar.Transitions>
                                 </ProgressBar>
-                                <TextBlock Text="{Binding ProgressPercent, StringFormat='{}{0:0}%'}"
-                                           Classes="secondary" FontSize="11" HorizontalAlignment="Right" />
-                            </StackPanel>
+                                <!-- Percentage sits beside the bar rather than under it, saving a row. -->
+                                <TextBlock Grid.Column="1" Margin="10,0,0,0"
+                                           Text="{Binding ProgressPercent, StringFormat='{}{0:0}%'}"
+                                           Classes="secondary" FontSize="11.5" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" MinWidth="34"
+                                           TextAlignment="Right" />
+                            </Grid>
 
                             <!-- Intelligent status message (explains stalls/slowdowns). -->
                             <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource AppTextPrimaryBrush}" />
 
-                            <!-- Armed auto-extract indicator. -->
-                            <Border IsVisible="{Binding AutoExtractWhenDone}"
-                                    Background="{DynamicResource AppAccentSubtleBrush}"
-                                    CornerRadius="7" Padding="9,6">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="glyph" Text="&#xE8B7;" FontSize="14"
-                                               Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Text="This archive will be extracted and opened automatically when the download finishes."
-                                               TextWrapping="Wrap" FontSize="11.5" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource AppTextSecondaryBrush}" />
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Live metrics (hidden once terminal). -->
-                            <!-- Live metrics (hidden once terminal). TRANSFERRED holds the longest
+                            <!-- Live metrics (hidden once terminal). Transferred holds the longest
                                  value ("1.2 GB / 100 GB"), so it gets extra star width, and an explicit
                                  ColumnSpacing guarantees a gap so 3-digit sizes can never run into the
-                                 SPEED column. Values wrap-free with ellipsis as a final guard. -->
-                            <Grid ColumnDefinitions="1.7*,*,*,0.8*" ColumnSpacing="16"
+                                 speed column. Values wrap-free with ellipsis as a final guard. -->
+                            <Grid ColumnDefinitions="1.5*,*,*,1.05*" ColumnSpacing="14"
                                   IsVisible="{Binding ShowLiveMetrics}">
-                                <StackPanel Grid.Column="0" Spacing="3">
-                                    <TextBlock Classes="section" Text="TRANSFERRED" />
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Classes="section" Text="Transferred" />
                                     <TextBlock Text="{Binding DownloadedText}" FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Spacing="3">
-                                    <TextBlock Classes="section" Text="SPEED" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Classes="section" Text="Current Speed" />
                                     <TextBlock Text="{Binding SpeedText}" FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Spacing="3">
-                                    <TextBlock Classes="section" Text="TIME LEFT" />
+                                <StackPanel Grid.Column="2" Spacing="2">
+                                    <TextBlock Classes="section" Text="Time Remaining" />
                                     <TextBlock Text="{Binding EtaText}" FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="3" Spacing="3">
-                                    <TextBlock Classes="section" Text="LINKS" />
+                                <StackPanel Grid.Column="3" Spacing="2">
+                                    <TextBlock Classes="section" Text="Connections" />
                                     <TextBlock Text="{Binding ConnectionsText}" FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                             </Grid>
+
+                            <!-- ===== When the download finishes =====
+                                 Promoted out of the Options tab: these are decisions users make while
+                                 watching the transfer, so they belong next to it. The two are mutually
+                                 exclusive (the view-model enforces it) because an archive cannot be
+                                 opened and extracted at the same moment. -->
+                            <Border IsVisible="{Binding ShowWhenDoneOptions}"
+                                    Background="{DynamicResource AppAccentSubtleBrush}"
+                                    CornerRadius="7" Padding="10,7">
+                                <StackPanel Spacing="5">
+                                    <TextBlock Text="When the download finishes" Classes="section" />
+                                    <CheckBox IsChecked="{Binding AutoOpenOnComplete}"
+                                              Content="Open the file automatically"
+                                              MinHeight="0" Padding="7,0,0,0" />
+                                    <CheckBox x:Name="AutoExtractCheck"
+                                              IsChecked="{Binding AutoExtractWhenDone}"
+                                              IsVisible="{Binding ShowAutoExtractOption}"
+                                              Content="Extract and open the folder automatically"
+                                              MinHeight="0" Padding="7,0,0,0"
+                                              IsCheckedChanged="OnAutoExtractCheckedChanged"
+                                              ToolTip.Tip="Extract this archive and open the folder automatically when the download finishes" />
+                                </StackPanel>
+                            </Border>
 
                             <!-- Free/limited-plan speed notice (only while unlicensed). -->
                             <Border IsVisible="{Binding IsLimitedPlan}"
@@ -164,14 +194,23 @@
 
                 <!-- Options tab -->
                 <TabItem Header="Options">
-                    <StackPanel Margin="0,12,0,0" Spacing="12">
+                    <StackPanel Margin="0,10,0,0" Spacing="10">
                         <TextBlock Text="When the download finishes" Classes="section" />
-                        <CheckBox IsChecked="{Binding AutoOpenOnComplete}"
-                                  Content="Open the file automatically" />
                         <CheckBox IsChecked="{Binding ShutdownWhenDone}"
-                                  Content="Shut down the PC (with a 10-second cancel window)" />
-                        <TextBlock Text="More options will appear here in future updates."
-                                   Classes="caption" Margin="0,6,0,0" />
+                                  Content="Shut down the PC (with a 10-second cancel window)"
+                                  MinHeight="0" Padding="7,0,0,0" />
+                        <TextBlock Classes="caption" Margin="0,-2,0,0"
+                                   Text="Open and extract choices are on the Download tab." />
+
+                        <Border Height="1" Margin="0,4,0,0"
+                                Background="{DynamicResource AppCardBorderBrush}" />
+
+                        <TextBlock Text="Feedback" Classes="section" />
+                        <TextBlock Classes="caption" TextWrapping="Wrap"
+                                   Text="While the file is downloading, write a suggestion or feedback — it takes a minute and shapes what we build next." />
+                        <Button Content="Open the feedback form" Click="OnOpenFeedbackForm"
+                                HorizontalAlignment="Left"
+                                ToolTip.Tip="https://forms.gle/V6H35fHA3ViKgsgU6" />
                     </StackPanel>
                 </TabItem>
             </TabControl>

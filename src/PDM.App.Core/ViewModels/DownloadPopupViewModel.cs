@@ -272,11 +272,15 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// </summary>
     public string EtaText => Formatting.FormatEta(_latestProgress?.Eta);
 
-    /// <summary>Active/total connection counts from the latest snapshot (Requirement 2.8).</summary>
+    /// <summary>
+    /// Active/total connection counts from the latest snapshot (Requirement 2.8), written as
+    /// "3 / 8 active" so the number is self-describing — a bare "3/8" under a heading left users
+    /// guessing what the two figures meant.
+    /// </summary>
     public string ConnectionsText =>
         _latestProgress is { } p
-            ? $"{p.ActiveConnections}/{p.TotalConnections}"
-            : $"0/{_managed.State.Segments.Count}";
+            ? $"{p.ActiveConnections} / {p.TotalConnections} active"
+            : $"0 / {_managed.State.Segments.Count} active";
 
     /// <summary>
     /// Stores the latest progress snapshot and raises <see cref="ObservableObject.PropertyChanged"/>
@@ -363,8 +367,41 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// </summary>
     public bool CanArmAutoExtract => !IsTerminal && IsArchive && !AutoExtractWhenDone;
 
-    partial void OnAutoExtractWhenDoneChanged(bool value) =>
+    /// <summary>
+    /// True while the post-download choices still matter, i.e. before the download reaches a terminal
+    /// state. Drives the inline "when the download finishes" options on the Download tab, which is
+    /// where users actually look for them (they were previously buried in the Options tab).
+    /// </summary>
+    public bool ShowWhenDoneOptions => !IsTerminal;
+
+    /// <summary>
+    /// True when the auto-extract choice is meaningful: the transfer is still running and the file is
+    /// an archive PDM can extract. A non-archive never shows the option at all.
+    /// </summary>
+    public bool ShowAutoExtractOption => !IsTerminal && IsArchive;
+
+    /// <summary>
+    /// Opening the finished file and extracting it are mutually exclusive intents — a .zip cannot be
+    /// launched and unpacked in the same instant — so arming one disarms the other. The guard on
+    /// <paramref name="value"/> stops the two handlers from bouncing off each other.
+    /// </summary>
+    partial void OnAutoOpenOnCompleteChanged(bool value)
+    {
+        if (value && AutoExtractWhenDone)
+        {
+            AutoExtractWhenDone = false;
+        }
+    }
+
+    partial void OnAutoExtractWhenDoneChanged(bool value)
+    {
+        if (value && AutoOpenOnComplete)
+        {
+            AutoOpenOnComplete = false;
+        }
+
         OnPropertyChanged(nameof(CanArmAutoExtract));
+    }
 
     /// <summary>
     /// Failure detail shown while the download is Failed: the recorded error message when one exists,
@@ -423,6 +460,8 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         OnPropertyChanged(nameof(IsArchive));
         OnPropertyChanged(nameof(CanExtract));
         OnPropertyChanged(nameof(CanArmAutoExtract));
+        OnPropertyChanged(nameof(ShowWhenDoneOptions));
+        OnPropertyChanged(nameof(ShowAutoExtractOption));
         OnPropertyChanged(nameof(FailureMessage));
         OnPropertyChanged(nameof(CanOpenFile));
         OnPropertyChanged(nameof(CanOpenFolder));

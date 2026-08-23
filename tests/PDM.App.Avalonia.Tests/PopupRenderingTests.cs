@@ -1,5 +1,7 @@
 using System.Reflection;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.LogicalTree;
 using PDM.App.Avalonia.Views;
 using PDM.App.ViewModels;
 using PDM.Core.Models;
@@ -33,8 +35,14 @@ public sealed class PopupRenderingTests
 
         Assert.True(window.IsVisible);
         Assert.Equal(state.Id, window.Id);
-        // The Title is a compiled binding to FileNameDisplay; matching it proves the binding resolved.
-        Assert.Equal(viewModel.FileNameDisplay, window.Title);
+
+        // The title is the product/window name rather than the file name, so the taskbar entry is
+        // recognisable as PDM. The file name is shown in the window body instead — finding it rendered
+        // there is what proves the compiled bindings resolved at runtime.
+        Assert.Equal("PDM Download Status", window.Title);
+        Assert.Contains(
+            window.GetLogicalDescendants().OfType<TextBlock>(),
+            text => text.Text == viewModel.FileNameDisplay);
 
         window.Close();
     }
@@ -44,11 +52,11 @@ public sealed class PopupRenderingTests
     {
         var window = new DownloadPopupWindow(CreateViewModel(DownloadStatus.Downloading), onClosed: null);
 
-        // The popup is deliberately landscape: the live-metrics row (TRANSFERRED / SPEED / TIME LEFT /
-        // LINKS) needs horizontal room so 3-digit sizes never collide.
+        // The popup is deliberately landscape: the live-metrics row (Transferred / Current Speed /
+        // Time Remaining / Connections) needs horizontal room so 3-digit sizes never collide.
         Assert.True(window.Width > window.Height,
             $"expected a rectangular (landscape) popup, got {window.Width}x{window.Height}");
-        Assert.True(window.Width >= 700, $"expected width >= 700, got {window.Width}");
+        Assert.True(window.Width >= 640, $"expected width >= 640, got {window.Width}");
         Assert.True(window.MinWidth >= 600, $"expected MinWidth >= 600, got {window.MinWidth}");
     }
 

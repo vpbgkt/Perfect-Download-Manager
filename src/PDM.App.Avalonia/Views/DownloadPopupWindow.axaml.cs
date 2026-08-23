@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using PDM.App.Avalonia.Services;
 using PDM.App.Services;
@@ -48,6 +49,7 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         _powerController = powerController ?? throw new ArgumentNullException(nameof(powerController));
         DataContext = _viewModel;
         InitializeComponent();
+        ApplyWindowIcon();
 
         // Run the "when done" options once the download finishes (auto-open/extract and/or shutdown).
         _viewModel.Completed += OnDownloadCompleted;
@@ -56,6 +58,23 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         // let it behave like a normal window — clicking another window brings that forward.
         Opened += OnPopupOpened;
         Deactivated += OnPopupDeactivated;
+    }
+
+    /// <summary>
+    /// Shows the PDM icon in the popup's title bar, taskbar button and Alt+Tab entry. Only the main
+    /// window used to set one, so download popups fell back to Avalonia's generic placeholder.
+    /// Best-effort: a missing asset must never stop a download popup from opening.
+    /// </summary>
+    private void ApplyWindowIcon()
+    {
+        try
+        {
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://PDM/Assets/pdm.ico")));
+        }
+        catch (Exception)
+        {
+            // Icon is cosmetic; carry on without it.
+        }
     }
 
     private void OnPopupOpened(object? sender, EventArgs e)
@@ -180,13 +199,40 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         Close();
     }
 
+    /// <summary>Feedback form users are invited to fill in while a download runs.</summary>
+    private const string FeedbackFormUrl = "https://forms.gle/V6H35fHA3ViKgsgU6";
+
+    /// <summary>True once the archive password prompt has been shown for this popup.</summary>
+    private bool _autoExtractPasswordAsked;
+
+    /// <summary>Guards against re-prompting when we programmatically clear the checkbox.</summary>
+    private bool _suppressAutoExtractPrompt;
+
     /// <summary>
-    /// Arms "auto extract and open when done" while the download is still running, capturing any
-    /// archive password up front (optional — leave blank if the archive isn't protected). If the
-    /// password turns out to be wrong, the completion flow shows an error and re-prompts.
+    /// Arms "extract and open when done" while the download is still running, capturing any archive
+    /// password up front (optional — leave blank if the archive isn't protected). If the password turns
+    /// out to be wrong, the completion flow shows an error and re-prompts.
+    /// <para>
+    /// This replaced a bottom-row button: as a checkbox it sits beside the mutually exclusive
+    /// "open the file automatically" choice, which makes the either/or relationship visible instead of
+    /// implicit. Only a user-driven transition to checked prompts — the view-model also clears this
+    /// flag when the auto-open option is selected, and that must stay silent.
+    /// </para>
     /// </summary>
-    private async void OnArmAutoExtract(object? sender, RoutedEventArgs e)
+    private async void OnAutoExtractCheckedChanged(object? sender, RoutedEventArgs e)
     {
+        if (_suppressAutoExtractPrompt || sender is not CheckBox { IsChecked: true })
+        {
+            return;
+        }
+
+        if (_autoExtractPasswordAsked)
+        {
+            return; // password already captured (or deliberately left blank) for this popup
+        }
+
+        _autoExtractPasswordAsked = true;
+
         string? password = await PasswordDialog
             .ShowAsync(this, System.IO.Path.GetFileName(_viewModel.DestinationPath),
                 errorMessage: null, passwordOptional: true)
@@ -194,11 +240,29 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
 
         if (password is null)
         {
-            return; // user cancelled — leave auto-extract off
+            // User backed out of the prompt: leave auto-extract disarmed, and allow a later retry.
+            _autoExtractPasswordAsked = false;
+            _suppressAutoExtractPrompt = true;
+            _viewModel.AutoExtractWhenDone = false;
+            _suppressAutoExtractPrompt = false;
+            return;
         }
 
         _viewModel.PendingExtractionPassword = string.IsNullOrEmpty(password) ? null : password;
-        _viewModel.AutoExtractWhenDone = true;
+    }
+
+    /// <summary>Opens the feedback form in the user's browser.</summary>
+    private void OnOpenFeedbackForm(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(FeedbackFormUrl) { UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            // No browser available / blocked: nothing actionable, and the URL is shown in the tooltip.
+        }
     }
 
     // ---- Post-download "when done" actions -------------------------------------------------------

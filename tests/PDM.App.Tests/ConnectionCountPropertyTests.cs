@@ -20,7 +20,8 @@ public sealed class ConnectionCountPropertyTests
     /// **Validates: Requirements 2.8**
     ///
     /// For any <see cref="DownloadProgress"/>, <c>ConnectionsText</c> reflects both the active
-    /// connection count and the total connection count from the snapshot formatted as "active/total".
+    /// connection count and the total connection count from the snapshot, formatted as
+    /// "active / total active" so the figures are self-describing in the popup.
     /// </summary>
     [Property(Arbitrary = new[] { typeof(Generators) })]
     public bool ConnectionsText_ReflectsActiveAndTotalFromSnapshot(DownloadProgress progress)
@@ -32,7 +33,7 @@ public sealed class ConnectionCountPropertyTests
         vm.ApplyProgress(progress);
 
         // Assert
-        string expected = $"{progress.ActiveConnections}/{progress.TotalConnections}";
+        string expected = $"{progress.ActiveConnections} / {progress.TotalConnections} active";
         return vm.ConnectionsText == expected;
     }
 
