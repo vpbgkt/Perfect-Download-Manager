@@ -51,13 +51,58 @@ public sealed class PopupRenderingTests
     public void DownloadPopupWindow_default_size_is_wide_and_rectangular()
     {
         var window = new DownloadPopupWindow(CreateViewModel(DownloadStatus.Downloading), onClosed: null);
+        window.Show();
+        window.UpdateLayout();
 
         // The popup is deliberately landscape: the live-metrics row (Transferred / Current Speed /
-        // Time Remaining / Connections) needs horizontal room so 3-digit sizes never collide.
-        Assert.True(window.Width > window.Height,
-            $"expected a rectangular (landscape) popup, got {window.Width}x{window.Height}");
-        Assert.True(window.Width >= 640, $"expected width >= 640, got {window.Width}");
+        // Time Remaining / Connections) needs horizontal room so 3-digit sizes never collide. Height
+        // comes from SizeToContent, so it is read off the realised client size rather than the
+        // (unset) Height property.
+        double height = window.ClientSize.Height;
+        Assert.True(window.Width > height,
+            $"expected a rectangular (landscape) popup, got {window.Width}x{height}");
+        Assert.True(window.Width >= 600, $"expected width >= 600, got {window.Width}");
         Assert.True(window.MinWidth >= 600, $"expected MinWidth >= 600, got {window.MinWidth}");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// The popup sizes itself to its content, so there is no dead space between the last row and the
+    /// button strip. A fixed height could not achieve this: the content height legitimately varies by
+    /// state (archive vs plain file, free vs licensed plan, running vs finished), so any single value
+    /// left tens of pixels of slack in most of those cases.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(@"C:\Downloads\installer.zip", DownloadStatus.Downloading)]
+    [InlineData(@"C:\Downloads\setup.exe", DownloadStatus.Downloading)]
+    [InlineData(@"C:\Downloads\installer.zip", DownloadStatus.Completed)]
+    [InlineData(@"C:\Downloads\installer.zip", DownloadStatus.Paused)]
+    public void DownloadPopupWindow_height_fits_its_content(string destinationPath, DownloadStatus status)
+    {
+        var viewModel = new DownloadPopupViewModel(CreateManagedDownload(new DownloadState
+        {
+            Id = Guid.NewGuid(),
+            SourceUrl = "https://example.com/installer.zip",
+            DestinationPath = destinationPath,
+            Status = status,
+            TotalBytes = 10_000
+        }));
+
+        var window = new DownloadPopupWindow(viewModel, onClosed: null);
+        window.Show();
+        window.UpdateLayout();
+
+        Border card = window.GetLogicalDescendants().OfType<Border>()
+            .First(border => border.Classes.Contains("card"));
+
+        // Allow a pixel of rounding, but nothing that would read as an empty band.
+        double slack = window.ClientSize.Height - card.DesiredSize.Height;
+        Assert.True(Math.Abs(slack) <= 2,
+            $"expected the window to fit its content, got {slack:0.#}px of slack " +
+            $"(client {window.ClientSize.Height:0.#}, content {card.DesiredSize.Height:0.#})");
+
+        window.Close();
     }
 
     [AvaloniaFact]
