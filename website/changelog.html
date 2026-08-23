@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Changelog — Perfect Download Manager (PDM) for Windows</title>
+    <title>Changelog ΓÇö Perfect Download Manager (PDM) for Windows</title>
     <meta name="description" content="Release notes and version history for Perfect Download Manager (PDM), the free multi-connection download manager for Windows 10 and 11." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
 
@@ -49,34 +49,11 @@
     <main class="doc-content">
         <h1>Changelog</h1>
         <p>
-            Release notes for Perfect Download Manager (PDM). PDM updates itself automatically —
+            Release notes for Perfect Download Manager (PDM). PDM updates itself automatically ΓÇö
             existing installs are offered each new stable release from inside the app
-            (toolbar menu → Check for Updates). You can also
+            (toolbar menu ΓåÆ Check for Updates). You can also
             <a href="/#download">download the latest version</a> any time.
         </p>
-
-                                <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.4</h2>
-            <p class="release-date">2026-08-05</p>
-            <ul>
-                <li>Wider download popup with clearer metric spacing.</li>
-                <li>Reliable bring-to-front for notification popups.</li>
-                <li>UI polish and layout fixes.</li>
-            </ul>
-        </section>
 
         <section>
             <h2>1.3.0</h2>
@@ -91,236 +68,73 @@
             </ul>
         </section>
 
-<section>
+        <section>
+            <h2>1.2.5</h2>
+            <p class="release-date">2026-08-19</p>
+            <ul>
+                <li>Faster downloads: parallel disk writes remove the write-path throughput ceiling.</li>
+                <li>Adaptive connection probing - PDM starts with fewer connections and adds more only when they actually help.</li>
+                <li>Quicker resume: the source link is only re-probed when it may have gone stale.</li>
+                <li>More accurate progress reporting, with stale status labels no longer shown.</li>
+                <li>Groundwork for customer details and custom key prefixes on license keys.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>1.2.4</h2>
+            <p class="release-date">2026-08-05</p>
+            <ul>
+                <li>Wider download popup with clearer metric spacing.</li>
+                <li>Reliable bring-to-front for notification popups.</li>
+                <li>UI polish and layout fixes.</li>
+            </ul>
+        </section>
+
+        <section>
             <h2>1.2.3</h2>
             <p class="release-date">2026-08-03</p>
             <ul>
                 <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
-            </ul>
-        </section>
-
-                <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.4</h2>
-            <p class="release-date">2026-08-05</p>
-            <ul>
-                <li>Wider download popup with clearer metric spacing.</li>
-                <li>Reliable bring-to-front for notification popups.</li>
-                <li>UI polish and layout fixes.</li>
+                <li>Release script now uses publish-aot-dist.ps1; removed the obsolete publish.ps1 and publish-avalonia-aot.ps1 so we cannot pick the wrong tree again.</li>
             </ul>
         </section>
 
         <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
+            <h2>1.2.2</h2>
+            <p class="release-date">2026-08-03</p>
             <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
+                <li>Download popup: cleaner card layout with tighter spacing.</li>
+                <li>Sidebar: clickable logo now opens perfectdownloadmanager.com.</li>
+                <li>Internal: added build/release.ps1 one-command release automation.</li>
             </ul>
         </section>
 
-<section>
+        <section>
             <h2>1.2.0</h2>
             <ul>
                 <li><strong>Rebuilt, modern interface.</strong> A faster, cleaner UI with polished light and dark themes, a collapsible sidebar, real per-file icons, and a redesigned download popup with a Download/Options layout.</li>
-                <li><strong>Smarter download status.</strong> The popup now explains stalls in plain language — no internet, waiting for the server, connection timed out, unstable network, or disk errors — instead of a silent "stuck" state.</li>
+                <li><strong>Smarter download status.</strong> The popup now explains stalls in plain language ΓÇö no internet, waiting for the server, connection timed out, unstable network, or disk errors ΓÇö instead of a silent "stuck" state.</li>
                 <li><strong>When-done actions.</strong> Optionally open the file automatically or shut down the PC after a download finishes (with a cancellable countdown).</li>
                 <li><strong>Cleaner toolbar &amp; quick access.</strong> Primary actions up top with an overflow menu, a one-click Downloads-folder button, remembered browser, and a merged Add/Bulk-add button.</li>
-                <li><strong>Self-contained &amp; lighter.</strong> The app now ships without a separate .NET runtime requirement — nothing extra to install.</li>
+                <li><strong>Self-contained &amp; lighter.</strong> The app now ships without a separate .NET runtime requirement ΓÇö nothing extra to install.</li>
                 <li>Numerous reliability and performance improvements throughout.</li>
             </ul>
         </section>
 
-                                <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.4</h2>
-            <p class="release-date">2026-08-05</p>
-            <ul>
-                <li>Wider download popup with clearer metric spacing.</li>
-                <li>Reliable bring-to-front for notification popups.</li>
-                <li>UI polish and layout fixes.</li>
-            </ul>
-        </section>
-
         <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.3</h2>
-            <p class="release-date">2026-08-03</p>
-            <ul>
-                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
-            </ul>
-        </section>
-
-                <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.4</h2>
-            <p class="release-date">2026-08-05</p>
-            <ul>
-                <li>Wider download popup with clearer metric spacing.</li>
-                <li>Reliable bring-to-front for notification popups.</li>
-                <li>UI polish and layout fixes.</li>
-            </ul>
-        </section>
-
-        <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
             <h2>1.0.26</h2>
             <ul>
                 <li><strong>Much faster resume.</strong> Paused downloads now re-spread the remaining data across all connections when resumed, so a resumed transfer runs at full speed instead of crawling on one connection.</li>
                 <li><strong>Refreshed links on resume.</strong> When a download is resumed, PDM re-resolves the source link, so expiring CDN and file-host links keep working.</li>
                 <li><strong>Smarter duplicate detection.</strong> Starting a download PDM already has now recognises the same file even when the link changes each time (Google Drive, signed links), and offers to continue the existing partial download, open the finished file, or start a fresh copy.</li>
                 <li><strong>Change or refresh a download's link.</strong> Right-click a download to paste a new link, or re-capture a fresh one from your browser, and continue where you left off.</li>
-                <li><strong>Smaller, self-setup installer.</strong> The new installer is about 41&nbsp;MB and installs the .NET 10 runtime automatically if it's missing — no separate download.</li>
+                <li><strong>Smaller, self-setup installer.</strong> The new installer is about 41&nbsp;MB and installs the .NET 10 runtime automatically if it's missing ΓÇö no separate download.</li>
                 <li><strong>Support & contact.</strong> Reach the team for help or license renewals from the toolbar menu and the <a href="/support">support page</a>.</li>
                 <li>Lower memory usage while idle, and a refreshed green installer.</li>
             </ul>
         </section>
 
-                                <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.4</h2>
-            <p class="release-date">2026-08-05</p>
-            <ul>
-                <li>Wider download popup with clearer metric spacing.</li>
-                <li>Reliable bring-to-front for notification popups.</li>
-                <li>UI polish and layout fixes.</li>
-            </ul>
-        </section>
-
         <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.3</h2>
-            <p class="release-date">2026-08-03</p>
-            <ul>
-                <li>Rebuilt on the tested NativeAOT Avalonia head (fixes accidental WPF build in 1.2.2).</li>
-            </ul>
-        </section>
-
-                <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
-            <h2>1.2.4</h2>
-            <p class="release-date">2026-08-05</p>
-            <ul>
-                <li>Wider download popup with clearer metric spacing.</li>
-                <li>Reliable bring-to-front for notification popups.</li>
-                <li>UI polish and layout fixes.</li>
-            </ul>
-        </section>
-
-        <section>
-            <h2>1.3.0</h2>
-            <p class="release-date">2026-08-23</p>
-            <p><em>Latest stable</em></p>
-            <ul>
-                <li>Fixed the license expiry countdown - it showed the 14-day re-validation window instead of your real subscription end date.</li>
-                <li>Download status window: clearer statistics (Transferred, Current Speed, Time Remaining, and Connections with an active count).</li>
-                <li>Open-the-file-automatically and a new archive-only extract-and-open option now sit next to the progress bar.</li>
-                <li>More compact download window that sizes itself to its content, with the wasted space removed.</li>
-                <li>Added a feedback form link to the download window options.</li>
-            </ul>
-        </section>
-
-<section>
             <h2>1.0.18</h2>
             <ul>
                 <li>Reliability and UX improvements to the download engine and browser capture.</li>
@@ -351,7 +165,7 @@
                 <a href="/privacy.html">Privacy</a>
                 <a href="/support">Support</a>
             </nav>
-            <p class="footer-copy">© <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
+            <p class="footer-copy">┬⌐ <span id="year"></span> Perfect Download Manager. Made for Windows.</p>
         </div>
     </footer>
 

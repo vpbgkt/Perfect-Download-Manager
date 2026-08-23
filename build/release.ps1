@@ -210,10 +210,27 @@ if (-not $SkipWebsite -and $Channel -eq "Stable") {
             $section += '        </section>' + $nl + $nl
 
             # Drop the "Latest stable" marker from the previous top section so we don't have two.
-            $cl = [regex]::Replace($cl, '<p><em>Latest stable</em></p>\s*', '', 1)
-            $inserted = [regex]::Replace($cl, '(<section>)', ($section + '$1'), 1)
-            if ($inserted -eq $cl) {
+            #
+            # NOTE: use the *instance* Replace to limit the count. [regex]::Replace has no
+            # (input, pattern, replacement, count) static overload — a trailing `1` binds to
+            # RegexOptions instead (value 1 = IgnoreCase), so the call silently replaced EVERY
+            # match. That is what duplicated the new section ahead of every existing <section>
+            # on each release from 1.2.2 through 1.3.0, compounding the changelog every time.
+            $cl = [regex]::new('<p><em>Latest stable</em></p>\s*').Replace($cl, '', 1)
+
+            # Splice the new section in front of the first existing one with a plain string insert:
+            # no regex replacement semantics, so `$` inside the release notes cannot be
+            # misinterpreted as a substitution token either.
+            $anchor = $cl.IndexOf('<section>')
+            if ($anchor -lt 0) {
                 Warn "Could not find an insertion point in changelog.html; skipped."
+                $inserted = $cl
+            } else {
+                $inserted = $cl.Substring(0, $anchor) + $section + $cl.Substring($anchor)
+            }
+
+            if ($inserted -eq $cl) {
+                Warn "changelog.html unchanged."
             } else {
                 [System.IO.File]::WriteAllText($changelog, $inserted, [System.Text.UTF8Encoding]::new($false))
                 Ok ("changelog.html: added section for " + $Version)
@@ -314,7 +331,11 @@ if (-not $SkipUpload) {
             portableSizeBytes = $zipBytes
         }
         $downloadsPath = Join-Path $dist "downloads.json"
-        $downloads | ConvertTo-Json | Set-Content $downloadsPath -NoNewline -Encoding utf8
+        # UTF-8 *without* BOM. Windows PowerShell 5.1's `-Encoding utf8` emits a BOM, which ends up
+        # as a literal U+FEFF at the start of the JSON. Browsers survive it (fetch's res.json()
+        # strips it during UTF-8 decode) but anything doing text()+JSON.parse, or an older jq, chokes.
+        [System.IO.File]::WriteAllText(
+            $downloadsPath, ($downloads | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
         aws s3 cp $downloadsPath "s3://$Bucket/stable/downloads.json" `
             --content-type "application/json" --cache-control "public, max-age=300" --region $Region | Out-Null
         Check-Exit "aws s3 cp downloads.json"
