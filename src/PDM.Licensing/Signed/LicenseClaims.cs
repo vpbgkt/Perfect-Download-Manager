@@ -42,8 +42,22 @@ public sealed class LicenseClaims
     [JsonPropertyName("issuedAt")]
     public DateTimeOffset IssuedAt { get; init; }
 
+    /// <summary>
+    /// When this <b>token</b> stops being accepted offline — the re-validation deadline, at most
+    /// the server's token TTL away (currently 14 days). This is deliberately short so revocation
+    /// takes effect promptly; it is <b>not</b> the customer's subscription end date and must never
+    /// be shown as "time left on your licence".
+    /// </summary>
     [JsonPropertyName("expiresAt")]
     public DateTimeOffset ExpiresAt { get; init; }
+
+    /// <summary>
+    /// When the customer's entitlement actually ends. <see langword="null"/> means a perpetual
+    /// licence. Present from payload <see cref="Version"/> 3 onwards; older tokens carry only
+    /// <see cref="ExpiresAt"/>, so treat null-on-v2 as "unknown" rather than perpetual.
+    /// </summary>
+    [JsonPropertyName("subscriptionExpiresAt")]
+    public DateTimeOffset? SubscriptionExpiresAt { get; init; }
 
     [JsonPropertyName("nonce")]
     public string Nonce { get; init; } = string.Empty;

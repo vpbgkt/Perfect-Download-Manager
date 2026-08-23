@@ -25,8 +25,20 @@ public sealed class LicenseRecord
     /// <summary>UTC timestamp of the last successful server validation.</summary>
     public DateTimeOffset? LastValidatedUtc { get; set; }
 
-    /// <summary>UTC expiry reported by the server (subscription cutoff), if any.</summary>
+    /// <summary>
+    /// UTC expiry reported by the server (subscription cutoff), if any. Null means either
+    /// unlicensed or a perpetual licence — check <see cref="SignedToken"/> to tell them apart.
+    /// This is the customer-facing end date, NOT the token's re-validation deadline.
+    /// </summary>
     public DateTimeOffset? ExpiresUtc { get; set; }
+
+    /// <summary>
+    /// UTC expiry of the currently stored <see cref="SignedToken"/> — the offline re-validation
+    /// deadline (at most the server's token TTL away). Kept separate from
+    /// <see cref="ExpiresUtc"/> so a short token lifetime is never mistaken for the licence
+    /// running out.
+    /// </summary>
+    public DateTimeOffset? TokenExpiresUtc { get; set; }
 
     /// <summary>Human-friendly account name returned by the server, if any.</summary>
     public string? Owner { get; set; }

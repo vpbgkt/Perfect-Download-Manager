@@ -18,17 +18,28 @@ internal sealed class TestTokenIssuer : IDisposable
 
     public string PublicKeyBase64 => Convert.ToBase64String(PublicKeySpki);
 
+    /// <param name="expiresAt">Token expiry — the offline re-validation deadline.</param>
+    /// <param name="subscriptionExpiresAt">
+    /// Subscription cutoff, emitted only when <paramref name="version"/> is 3 or higher (null then
+    /// means a perpetual licence, exactly as the server encodes it).
+    /// </param>
+    /// <param name="version">
+    /// Payload version. Defaults to 1 so legacy-token behaviour stays covered; pass 3 to emit the
+    /// current server payload that separates subscription expiry from token expiry.
+    /// </param>
     public string Issue(
         string licenseKey,
         string fingerprint,
         DateTimeOffset expiresAt,
         string[]? features = null,
         string? owner = "Test Owner",
-        string plan = "standard")
+        string plan = "standard",
+        DateTimeOffset? subscriptionExpiresAt = null,
+        int version = 1)
     {
         var payload = new Dictionary<string, object?>
         {
-            ["v"] = 1,
+            ["v"] = version,
             ["licenseKey"] = licenseKey,
             ["fingerprint"] = fingerprint,
             ["plan"] = plan,
@@ -38,6 +49,11 @@ internal sealed class TestTokenIssuer : IDisposable
             ["expiresAt"] = expiresAt.ToString("O"),
             ["nonce"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(16))
         };
+
+        if (version >= 3)
+        {
+            payload["subscriptionExpiresAt"] = subscriptionExpiresAt?.ToString("O");
+        }
 
         byte[] payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
         byte[] signature = _ecdsa.SignData(payloadBytes, HashAlgorithmName.SHA256,

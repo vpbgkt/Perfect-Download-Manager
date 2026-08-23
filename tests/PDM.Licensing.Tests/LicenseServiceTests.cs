@@ -326,5 +326,181 @@ public sealed class LicenseServiceTests : IDisposable
         Assert.False(string.IsNullOrEmpty(snap.Message));
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Subscription expiry vs token expiry (regression: "14 days left" on a 3-month licence)
+    //
+    // The server issues SHORT-lived tokens (TOKEN_TTL_DAYS, currently 14) so revocation lands
+    // promptly, and separately signs the real subscription cutoff. Reporting the token expiry as
+    // the remaining licence time made a licence valid until 2026-11-19 count down "14 days left,
+    // 13 days left, ..." and then raise the expiry-warning banner.
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Activated_RemainingReflectsSubscription_NotShortTokenTtl()
+    {
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset tokenExpiry = now.AddDays(14);          // re-validation deadline
+        DateTimeOffset subscriptionEnd = new(2026, 11, 19, 0, 0, 0, TimeSpan.Zero); // real cutoff
+
+        string token = _issuer.Issue("K", Fingerprint, tokenExpiry,
+            subscriptionExpiresAt: subscriptionEnd, version: 3);
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, subscriptionEnd) }
+        };
+
+        var snapshot = await CreateService(store, transport, now: now).ActivateAsync("K");
+
+        Assert.Equal(LicenseStatus.Activated, snapshot.Status);
+        // 91 days, not 14.
+        Assert.Equal(subscriptionEnd - now, snapshot.Remaining);
+        Assert.Equal(91, (int)Math.Ceiling(snapshot.Remaining.TotalDays));
+    }
+
+    [Fact]
+    public async Task Activated_RemainingDoesNotShrinkWithTokenAge()
+    {
+        // The reported figure must track the subscription, so a day later it drops by exactly one
+        // day toward the real cutoff — it must not walk down the 14-day token TTL.
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset subscriptionEnd = new(2026, 11, 19, 0, 0, 0, TimeSpan.Zero);
+
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14),
+            subscriptionExpiresAt: subscriptionEnd, version: 3);
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, subscriptionEnd) }
+        };
+
+        await CreateService(store, transport, now: now).ActivateAsync("K");
+
+        var later = await CreateService(store, transport, now: now.AddDays(1)).GetSnapshotAsync();
+
+        Assert.Equal(LicenseStatus.Activated, later.Status);
+        Assert.Equal(90, (int)Math.Ceiling(later.Remaining.TotalDays));
+    }
+
+    [Fact]
+    public async Task Activated_PerpetualLicence_ReportsMaxValue()
+    {
+        // v3 with a null subscription cutoff means perpetual; the UI renders TimeSpan.MaxValue as
+        // "Perpetual license" instead of a countdown.
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14),
+            subscriptionExpiresAt: null, version: 3);
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token) }
+        };
+
+        var snapshot = await CreateService(store, transport, now: now).ActivateAsync("K");
+
+        Assert.Equal(LicenseStatus.Activated, snapshot.Status);
+        Assert.Equal(TimeSpan.MaxValue, snapshot.Remaining);
+    }
+
+    [Fact]
+    public async Task SubscriptionEnded_IsExpired_EvenWhileTokenStillValid()
+    {
+        // Guard the other direction: a still-valid token must not keep a lapsed subscription alive.
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset subscriptionEnd = now.AddDays(3);
+
+        string token = _issuer.Issue("K", Fingerprint, now.AddDays(14),
+            subscriptionExpiresAt: subscriptionEnd, version: 3);
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, subscriptionEnd) }
+        };
+
+        await CreateService(store, transport, now: now).ActivateAsync("K");
+
+        var after = await CreateService(store, transport, now: subscriptionEnd.AddHours(1))
+            .GetSnapshotAsync();
+
+        Assert.Equal(LicenseStatus.Expired, after.Status);
+        Assert.Equal(TimeSpan.Zero, after.Remaining);
+        Assert.Equal(LicenseEntitlements.Free, after.Entitlements);
+    }
+
+    [Fact]
+    public async Task LegacyTokenWithoutSubscriptionClaim_KeepsTokenExpiryBehaviour()
+    {
+        // A pre-v3 token carries no subscription cutoff, so there is nothing better to show and it
+        // must NOT be mistaken for a perpetual licence.
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset tokenExpiry = now.AddDays(14);
+
+        string legacy = _issuer.Issue("K", Fingerprint, tokenExpiry); // version defaults to 1
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(legacy, tokenExpiry) }
+        };
+
+        var snapshot = await CreateService(store, transport, now: now).ActivateAsync("K");
+
+        Assert.Equal(LicenseStatus.Activated, snapshot.Status);
+        Assert.NotEqual(TimeSpan.MaxValue, snapshot.Remaining);
+        Assert.Equal(tokenExpiry - now, snapshot.Remaining);
+    }
+
+    [Fact]
+    public async Task Activated_StoresSubscriptionAndTokenExpirySeparately()
+    {
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset tokenExpiry = now.AddDays(14);
+        DateTimeOffset subscriptionEnd = new(2026, 11, 19, 0, 0, 0, TimeSpan.Zero);
+
+        string token = _issuer.Issue("K", Fingerprint, tokenExpiry,
+            subscriptionExpiresAt: subscriptionEnd, version: 3);
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, subscriptionEnd) }
+        };
+
+        await CreateService(store, transport, now: now).ActivateAsync("K");
+
+        LicenseRecord persisted = (await store.LoadAsync())!;
+        Assert.Equal(subscriptionEnd, persisted.ExpiresUtc);
+        Assert.Equal(tokenExpiry, persisted.TokenExpiresUtc);
+    }
+
+    [Fact]
+    public async Task ExpiredToken_StillEntersGrace_WhenSubscriptionHasTimeLeft()
+    {
+        // Grace is about re-validation, so it must keep working off the TOKEN expiry even though the
+        // displayed remaining time now comes from the subscription.
+        var store = new InMemoryLicenseStore();
+        DateTimeOffset now = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset tokenExpiry = now.AddDays(14);
+        DateTimeOffset subscriptionEnd = new(2026, 11, 19, 0, 0, 0, TimeSpan.Zero);
+
+        string token = _issuer.Issue("K", Fingerprint, tokenExpiry,
+            subscriptionExpiresAt: subscriptionEnd, version: 3);
+        var transport = new FakeLicenseTransport
+        {
+            ActivateResponses = { ["K"] = LicenseValidationResult.Success(token, subscriptionEnd) }
+        };
+
+        await CreateService(store, transport, now: now, grace: TimeSpan.FromDays(5)).ActivateAsync("K");
+
+        // Token lapsed, subscription still has ~76 days: offline tolerance applies.
+        var grace = await CreateService(store, transport, now: tokenExpiry.AddDays(1),
+            grace: TimeSpan.FromDays(5)).GetSnapshotAsync();
+        Assert.Equal(LicenseStatus.Grace, grace.Status);
+
+        // Beyond grace it locks until the client can re-validate.
+        var expired = await CreateService(store, transport, now: tokenExpiry.AddDays(10),
+            grace: TimeSpan.FromDays(5)).GetSnapshotAsync();
+        Assert.Equal(LicenseStatus.Expired, expired.Status);
+    }
+
     public void Dispose() => _issuer.Dispose();
 }

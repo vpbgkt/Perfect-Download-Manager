@@ -45,7 +45,7 @@ public sealed partial class LicenseViewModel : ObservableObject
             LicenseStatus.Trial => $"Trial — {FormatRemaining(Snapshot.Remaining)} left",
             LicenseStatus.Grace => $"Grace period — {FormatRemaining(Snapshot.Remaining)} remaining",
             LicenseStatus.Activated when Snapshot.Remaining == TimeSpan.MaxValue => "Activated (perpetual license)",
-            LicenseStatus.Activated => $"Activated — renews in {FormatRemaining(Snapshot.Remaining)}",
+            LicenseStatus.Activated => $"Activated — expires in {FormatRemaining(Snapshot.Remaining)}",
             LicenseStatus.Expired => "Expired",
             LicenseStatus.Invalid => "License invalid",
             _ => Snapshot.Status.ToString()

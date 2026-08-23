@@ -120,7 +120,9 @@ public sealed partial class LicenseBannerViewModel : ObservableObject, IDisposab
                         else
                         {
                             StatusText = "Licensed" + owner;
-                            DetailText = $"Renews / re-validates in {days} day{(days == 1 ? "" : "s")}";
+                            // Remaining is the licence's own cutoff (not the token re-validation
+                            // window), so word it as the licence period.
+                            DetailText = $"License valid for another {days} day{(days == 1 ? "" : "s")}";
                         }
 
                         IsWarning = expiringSoon;

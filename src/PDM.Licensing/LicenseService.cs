@@ -346,7 +346,10 @@ public sealed class LicenseService
         record.LicenseKey = claims.LicenseKey;
         record.BoundFingerprint = claims.Fingerprint;
         record.SignedToken = token;
-        record.ExpiresUtc = claims.ExpiresAt;
+        // ExpiresUtc is documented as the subscription cutoff, so keep it that way: v3 tokens carry
+        // it explicitly (null = perpetual), while v2 tokens only ever had the token expiry.
+        record.ExpiresUtc = claims.Version >= 3 ? claims.SubscriptionExpiresAt : claims.ExpiresAt;
+        record.TokenExpiresUtc = claims.ExpiresAt;
         record.Owner = claims.Owner;
         record.Features = claims.Features;
         DateTimeOffset now = _clock();
@@ -363,6 +366,7 @@ public sealed class LicenseService
         record.BoundFingerprint = null;
         record.SignedToken = null;
         record.ExpiresUtc = null;
+        record.TokenExpiresUtc = null;
         record.Owner = null;
         record.Features = null;
         record.LastValidatedUtc = null;
@@ -448,9 +452,22 @@ public sealed class LicenseService
 
         LicenseEntitlements entitlements = EntitlementsFromClaims(claims);
 
+        // The subscription genuinely ending outranks everything else: once the paid period is over
+        // the install drops to the reduced tier even if the last token is still within its TTL.
+        if (claims.SubscriptionExpiresAt is { } subscriptionEnd && now >= subscriptionEnd)
+        {
+            return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, claims.Owner,
+                "Your license has expired. Please renew to continue.", LicenseEntitlements.Free);
+        }
+
         if (now < claims.ExpiresAt)
         {
-            return new LicenseSnapshot(LicenseStatus.Activated, claims.ExpiresAt - now, claims.Owner, null, entitlements);
+            // Report the time left on the LICENCE, not on the token. claims.ExpiresAt is only the
+            // re-validation deadline (<= token TTL, currently 14 days); using it here made a licence
+            // with months remaining count down "14 days left, 13 days left, ..." and then trip the
+            // expiry warning banner.
+            return new LicenseSnapshot(LicenseStatus.Activated, ResolveLicensedRemaining(claims, now),
+                claims.Owner, null, entitlements);
         }
 
         // Token has expired: the client must re-validate online. Allow a grace window offline.
@@ -463,6 +480,32 @@ public sealed class LicenseService
 
         return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, claims.Owner,
             "Your license could not be re-validated. Please connect and re-activate.", LicenseEntitlements.Free);
+    }
+
+    /// <summary>
+    /// How long the <b>licence</b> still has to run, for display purposes.
+    ///
+    /// <para>Payload v3+ carries <see cref="LicenseClaims.SubscriptionExpiresAt"/>: a value means a
+    /// dated subscription, and null means perpetual (reported as <see cref="TimeSpan.MaxValue"/>,
+    /// which the UI renders as "Perpetual license").</para>
+    ///
+    /// <para>Pre-v3 tokens carry only the token expiry, so there is nothing better to show; those
+    /// keep the historical behaviour and self-correct on the next successful re-validation, which
+    /// returns a v3 token.</para>
+    /// </summary>
+    private static TimeSpan ResolveLicensedRemaining(LicenseClaims claims, DateTimeOffset now)
+    {
+        if (claims.Version < 3)
+        {
+            return claims.ExpiresAt > now ? claims.ExpiresAt - now : TimeSpan.Zero;
+        }
+
+        if (claims.SubscriptionExpiresAt is not { } end)
+        {
+            return TimeSpan.MaxValue; // perpetual licence
+        }
+
+        return end > now ? end - now : TimeSpan.Zero;
     }
 
     private static bool ContainsRevocation(string message)

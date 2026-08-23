@@ -86,6 +86,9 @@ export const handler = async (event) => {
     licenseKey,
     fingerprint,
     expiresAt: tokenExpiry,
+    // Signed entitlement cutoff (null = perpetual) so the client's "time left" tracks the
+    // real licence, not the short re-validation window.
+    subscriptionExpiresAt: license.expiresAt ?? null,
     features: license.features ?? [],
     plan: license.plan ?? "standard",
     owner: license.owner ?? null,

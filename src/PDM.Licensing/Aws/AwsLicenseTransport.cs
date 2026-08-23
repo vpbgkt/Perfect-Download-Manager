@@ -115,7 +115,10 @@ public sealed class AwsLicenseTransport : ILicenseTransport
         {
             return LicenseValidationResult.Success(
                 body.Token!,
-                expiresUtc: body.TokenExpiresAt,
+                // ExpiresUtc means the subscription cutoff, so report that — not the short token
+                // TTL. Authoritative expiry always comes from the signed token claims; these
+                // response fields are conveniences only.
+                expiresUtc: body.SubscriptionExpiresAt ?? body.TokenExpiresAt,
                 owner: body.Owner,
                 features: body.Features);
         }
@@ -183,6 +186,11 @@ internal sealed class LicenseResponse
     [JsonPropertyName("revoked")]
     public bool Revoked { get; init; }
 
+    /// <summary>Re-validation deadline for the issued token (at most the server's token TTL).</summary>
     [JsonPropertyName("tokenExpiresAt")]
     public DateTimeOffset? TokenExpiresAt { get; init; }
+
+    /// <summary>Subscription cutoff; null for a perpetual licence.</summary>
+    [JsonPropertyName("subscriptionExpiresAt")]
+    public DateTimeOffset? SubscriptionExpiresAt { get; init; }
 }

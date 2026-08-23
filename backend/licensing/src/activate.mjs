@@ -112,6 +112,9 @@ export const handler = async (event) => {
     licenseKey,
     fingerprint,
     expiresAt: tokenExpiry,
+    // The real entitlement cutoff, signed so the client can display "time left" from it
+    // instead of from the short token TTL. null = perpetual licence.
+    subscriptionExpiresAt: license.expiresAt ?? null,
     features: license.features ?? [],
     plan: license.plan ?? "standard",
     owner: license.owner ?? null,

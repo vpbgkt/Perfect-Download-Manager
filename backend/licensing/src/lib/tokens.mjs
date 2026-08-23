@@ -20,7 +20,10 @@ function b64url(input) {
  * Builds the canonical JSON payload string. Property order is fixed so the client and server
  * agree byte-for-byte on what was signed.
  */
-export function buildPayload({ licenseKey, fingerprint, expiresAt, features, plan, owner, maxConn, maxParallel }) {
+export function buildPayload({
+  licenseKey, fingerprint, expiresAt, subscriptionExpiresAt,
+  features, plan, owner, maxConn, maxParallel
+}) {
   // Deterministic key order — do not reorder.
   //
   // maxConn / maxParallel are SIGNED numeric entitlements. The client derives its
@@ -28,8 +31,18 @@ export function buildPayload({ licenseKey, fingerprint, expiresAt, features, pla
   // than from a local boolean, so patching an "isLicensed" flag no longer unlocks premium
   // throughput — the numbers themselves only exist inside a token signed by this server.
   // A value <= 0 means "no client-imposed cap" (full speed) for a licensed install.
+  //
+  // v3 adds `subscriptionExpiresAt`: the real license cutoff, distinct from `expiresAt`
+  // (the SHORT token lifetime that forces periodic re-validation so revocation lands
+  // promptly). Both must be signed: the client shows "time left" from the subscription
+  // date, so an unsigned response field would let a proxy fake an unlimited license.
+  //   expiresAt             -> re-validation deadline (<= TOKEN_TTL_DAYS away)
+  //   subscriptionExpiresAt -> when the customer's entitlement actually ends; null = perpetual
+  // Before v3 only `expiresAt` existed, so clients displayed the token TTL (e.g. "14 days
+  // left") for a licence with months remaining. v2 tokens keep working — the client falls
+  // back to the old behaviour when the version is below 3.
   const payload = {
-    v: 2,
+    v: 3,
     licenseKey,
     fingerprint,
     plan: plan ?? "standard",
@@ -38,7 +51,8 @@ export function buildPayload({ licenseKey, fingerprint, expiresAt, features, pla
     maxConn: Number.isFinite(maxConn) ? Number(maxConn) : 0,
     maxParallel: Number.isFinite(maxParallel) ? Number(maxParallel) : 0,
     issuedAt: new Date().toISOString(),
-    expiresAt, // ISO string
+    expiresAt, // ISO string — token expiry (re-validation deadline)
+    subscriptionExpiresAt: subscriptionExpiresAt ?? null, // ISO string or null (perpetual)
     nonce: crypto.randomBytes(16).toString("hex")
   };
   return JSON.stringify(payload);

@@ -40,6 +40,7 @@ public sealed class InMemoryLicenseStore : ILicenseStore
             BoundFingerprint = source.BoundFingerprint,
             LastValidatedUtc = source.LastValidatedUtc,
             ExpiresUtc = source.ExpiresUtc,
+            TokenExpiresUtc = source.TokenExpiresUtc,
             Owner = source.Owner,
             SignedToken = source.SignedToken,
             Features = source.Features is null ? null : (string[])source.Features.Clone(),
