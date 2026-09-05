@@ -362,6 +362,7 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         Opened -= OnPopupOpened;
         Deactivated -= OnPopupDeactivated;
         StopShutdownTimer();
+        _viewModel.Dispose(); // Stop the interpolation timer and clean up resources.
         _onClosed?.Invoke(_viewModel.Id);
         base.OnClosed(e);
     }

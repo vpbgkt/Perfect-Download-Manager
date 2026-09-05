@@ -112,7 +112,8 @@ public partial class App : Application
                 managed,
                 host.DownloadManager,
                 confirmCancel: message => window!.ConfirmCancelAsync(message),
-                showError: message => notifier.ShowError("Download", message))
+                showError: message => notifier.ShowError("Download", message),
+                uiDispatcher: action => global::Avalonia.Threading.Dispatcher.UIThread.Post(action))
             {
                 IsLimitedPlan = host.IsLimitedMode
             };

@@ -41,7 +41,7 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
     /// Validates: Requirement 8.6
     /// When OpenFile is invoked but the destination file no longer exists on disk,
     /// the showError delegate is called with the expected message and the completed
-    /// indication (IsCompleted) remains true — the status is not mutated.
+    /// indication (IsCompleted) remains true ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the status is not mutated.
     /// </summary>
     [Fact]
     public void OpenFile_WhenFileMissing_ShowsErrorAndRetainsCompletedIndication()
@@ -60,18 +60,17 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
         var vm = new DownloadPopupViewModel(
             managed,
             manager: null,
-            confirmCancel: null,
-            showError: msg => capturedError = msg);
+            confirmCancel: null, showError: msg => capturedError = msg, uiDispatcher: null);
 
         // Act
         vm.OpenFileCommand.Execute(null);
 
-        // Assert — error shown with expected message content
+        // Assert ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â error shown with expected message content
         Assert.NotNull(capturedError);
         Assert.Contains("could not be opened", capturedError);
         Assert.Contains("file no longer exists", capturedError);
 
-        // Assert — completed indication retained (status unchanged)
+        // Assert ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â completed indication retained (status unchanged)
         Assert.True(vm.IsCompleted);
         Assert.Equal(DownloadStatus.Completed, vm.Status);
     }
@@ -99,18 +98,17 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
         var vm = new DownloadPopupViewModel(
             managed,
             manager: null,
-            confirmCancel: null,
-            showError: msg => capturedError = msg);
+            confirmCancel: null, showError: msg => capturedError = msg, uiDispatcher: null);
 
         // Act
         vm.OpenFolderCommand.Execute(null);
 
-        // Assert — error shown with expected message content
+        // Assert ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â error shown with expected message content
         Assert.NotNull(capturedError);
         Assert.Contains("could not be opened", capturedError);
         Assert.Contains("folder no longer exists", capturedError);
 
-        // Assert — completed indication retained (status unchanged)
+        // Assert ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â completed indication retained (status unchanged)
         Assert.True(vm.IsCompleted);
         Assert.Equal(DownloadStatus.Completed, vm.Status);
     }
@@ -129,7 +127,7 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
     [Fact]
     public async Task PauseCommand_WhenManagerReturnsNormally_NoErrorShown()
     {
-        // Arrange: use a download ID not tracked by the manager → PauseAsync is a no-op
+        // Arrange: use a download ID not tracked by the manager ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ PauseAsync is a no-op
         var state = new DownloadState
         {
             Id = Guid.NewGuid(),
@@ -144,12 +142,12 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
             managed,
             manager: _downloadManager,
             confirmCancel: null,
-            showError: msg => capturedError = msg);
+            showError: msg => capturedError = msg, uiDispatcher: null);
 
         // Act
         await vm.PauseCommand.ExecuteAsync(null);
 
-        // Assert — no error surfaced, status unchanged
+        // Assert ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no error surfaced, status unchanged
         Assert.Null(capturedError);
         Assert.Equal(DownloadStatus.Downloading, vm.Status);
     }
@@ -162,7 +160,7 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
     [Fact]
     public async Task ResumeCommand_WhenManagerReturnsNormally_NoErrorShown()
     {
-        // Arrange: use a download ID not tracked by the manager → ResumeAsync is a no-op
+        // Arrange: use a download ID not tracked by the manager ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ResumeAsync is a no-op
         var state = new DownloadState
         {
             Id = Guid.NewGuid(),
@@ -177,12 +175,12 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
             managed,
             manager: _downloadManager,
             confirmCancel: null,
-            showError: msg => capturedError = msg);
+            showError: msg => capturedError = msg, uiDispatcher: null);
 
         // Act
         await vm.ResumeCommand.ExecuteAsync(null);
 
-        // Assert — no error surfaced, status unchanged
+        // Assert ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no error surfaced, status unchanged
         Assert.Null(capturedError);
         Assert.Equal(DownloadStatus.Paused, vm.Status);
     }
@@ -210,12 +208,13 @@ public sealed class CommandErrorHandlingTests : IAsyncLifetime
             managed,
             manager: _downloadManager,
             confirmCancel: _ => Task.FromResult(false),
-            showError: msg => capturedError = msg);
+            showError: msg => capturedError = msg,
+            uiDispatcher: null);
 
         // Act
         await vm.CancelCommand.ExecuteAsync(null);
 
-        // Assert — no error surfaced, status unchanged
+        // Assert ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no error surfaced, status unchanged
         Assert.Null(capturedError);
         Assert.Equal(DownloadStatus.Downloading, vm.Status);
     }

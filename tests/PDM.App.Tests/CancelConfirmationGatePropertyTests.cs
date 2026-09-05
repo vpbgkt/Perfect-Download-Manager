@@ -80,8 +80,7 @@ public sealed class CancelConfirmationGatePropertyTests : IAsyncLifetime
                 confirmWasInvoked = true;
                 capturedPrompt = msg;
                 return Task.FromResult(userConfirms);
-            },
-            showError: null);
+            }, showError: null, uiDispatcher: null);
 
         // Act
         vm.CancelCommand.Execute(null);
@@ -105,7 +104,7 @@ public sealed class CancelConfirmationGatePropertyTests : IAsyncLifetime
         // Since the download is not tracked in _downloadManager._downloads, it's a no-op
         // (manager returns early when ID not found), but crucially the gate was passed.
         // The status stays unchanged because manager can't find the download to cancel.
-        // This is fine — we're testing the GATE logic, not the manager's cancel behavior.
+        // This is fine Ã¢â‚¬â€ we're testing the GATE logic, not the manager's cancel behavior.
 
         return true;
     }
@@ -114,7 +113,7 @@ public sealed class CancelConfirmationGatePropertyTests : IAsyncLifetime
     /// **Validates: Requirements 3.7, 3.8, 3.9**
     ///
     /// When confirmCancel is absent (null), the Cancel command treats it as declined and
-    /// does not request cancellation — the status display remains unchanged for any status.
+    /// does not request cancellation Ã¢â‚¬â€ the status display remains unchanged for any status.
     /// </summary>
     [Property(Arbitrary = new[] { typeof(Generators) })]
     public bool CancelCommand_WithNullConfirmCancel_NeverCancels(DownloadStatus status)
@@ -134,12 +133,11 @@ public sealed class CancelConfirmationGatePropertyTests : IAsyncLifetime
         var managed = CreateManagedDownload(state);
         var originalStatus = managed.State.Status;
 
-        // No confirmCancel delegate — gate defaults to false
+        // No confirmCancel delegate Ã¢â‚¬â€ gate defaults to false
         var vm = new DownloadPopupViewModel(
             managed,
             manager: _downloadManager,
-            confirmCancel: null,
-            showError: null);
+            confirmCancel: null, showError: null, uiDispatcher: null);
 
         // Act
         vm.CancelCommand.Execute(null);
@@ -175,7 +173,8 @@ public sealed class CancelConfirmationGatePropertyTests : IAsyncLifetime
             managed,
             manager: _downloadManager,
             confirmCancel: _ => Task.FromResult(false), // always decline
-            showError: null);
+            showError: null,
+            uiDispatcher: null);
 
         // Capture before
         var statusBefore = vm.Status;

@@ -16,7 +16,7 @@ namespace PDM.App.ViewModels;
 /// enablement / terminal-state affordances, and Pause/Resume/Cancel/Open commands to the same class.
 /// </para>
 /// </summary>
-public sealed partial class DownloadPopupViewModel : ObservableObject
+public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposable
 {
     /// <summary>Placeholder shown when the file name is unavailable (Requirement 1.5).</summary>
     private const string FileNamePlaceholder = "(unknown file)";
@@ -53,13 +53,48 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// </summary>
     private DownloadProgress? _latestProgress;
 
+    // -----------------------------------------------------------------------------------------
+    // UI-level smoothing state for visual continuity between 500ms progress snapshots.
+    // Without interpolation, the UI shows abrupt jumps: Transferred hops in 500ms chunks, Speed
+    // changes suddenly, and ETA swings wildly (40s → 25s → 35s) because it's recomputed fresh
+    // each time. Interpolating between snapshots produces IDM-like smooth visual updates while
+    // preserving accurate underlying values.
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>Bytes downloaded at the time of the previous snapshot (for interpolation base).</summary>
+    private long _prevBytes;
+
+    /// <summary>Bytes downloaded at the time of the latest snapshot (interpolation target).</summary>
+    private long _currentBytes;
+
+    /// <summary>When the latest snapshot arrived (local ticks), used to compute interpolation progress.</summary>
+    private long _snapshotTicks;
+
+    /// <summary>Expected interval between snapshots in ticks (default 500ms = ProgressInterval).</summary>
+    private long _intervalTicks = TimeSpan.FromMilliseconds(500).Ticks;
+
+    /// <summary>Smoothed speed for display (EMA applied at the UI level for extra stability).</summary>
+    private double _smoothedSpeed;
+
+    /// <summary>Smoothed ETA in seconds (dampened to avoid wild swings).</summary>
+    private double? _smoothedEtaSeconds;
+
+    /// <summary>Timer that drives smooth interpolation between discrete snapshots.</summary>
+    private System.Threading.Timer? _interpolationTimer;
+
+    /// <summary>
+    /// Dispatcher action used to marshal interpolation ticks from the thread pool to the UI thread.
+    /// Injected by the concrete popup window (WPF or Avalonia), which knows its own dispatcher.
+    /// </summary>
+    private readonly Action<Action>? _uiDispatcher;
+
     /// <summary>
     /// Derivation-only constructor. Wires just the managed download so the pure projection layer can
     /// be exercised without a manager or view-layer delegates; the Pause/Resume/Cancel commands are
     /// inert under this constructor.
     /// </summary>
     public DownloadPopupViewModel(ManagedDownload managed)
-        : this(managed, manager: null, confirmCancel: null, showError: null)
+        : this(managed, manager: null, confirmCancel: null, showError: null, uiDispatcher: null)
     {
     }
 
@@ -67,20 +102,41 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// Full constructor used by the popup window factory (design task 8.3). Injects the
     /// <see cref="DownloadManager"/> that backs the Pause/Resume/Cancel commands, a
     /// <paramref name="confirmCancel"/> delegate that the Cancel command consults before requesting
-    /// cancellation (Requirements 3.7-3.9), and a <paramref name="showError"/> delegate invoked when a
-    /// manager control call fails (Requirement 3.10).
+    /// cancellation (Requirements 3.7-3.9), a <paramref name="showError"/> delegate invoked when a
+    /// manager control call fails (Requirement 3.10), and a <paramref name="uiDispatcher"/> that
+    /// marshals interpolation ticks to the UI thread.
     /// </summary>
     public DownloadPopupViewModel(
         ManagedDownload managed,
         DownloadManager? manager,
         Func<string, Task<bool>>? confirmCancel,
-        Action<string>? showError)
+        Action<string>? showError,
+        Action<Action>? uiDispatcher)
     {
         _managed = managed ?? throw new ArgumentNullException(nameof(managed));
         _manager = manager;
         _confirmCancel = confirmCancel;
         _showError = showError;
+        _uiDispatcher = uiDispatcher;
         _latestProgress = managed.LatestProgress;
+
+        // Seed smoothing state from the initial snapshot (if available).
+        if (_latestProgress is { } initial)
+        {
+            _prevBytes = initial.BytesDownloaded;
+            _currentBytes = initial.BytesDownloaded;
+            _smoothedSpeed = initial.BytesPerSecond;
+            _smoothedEtaSeconds = initial.Eta?.TotalSeconds;
+        }
+        _snapshotTicks = Environment.TickCount64;
+
+        // Start the interpolation timer at 60 FPS (~16ms) for smooth visual updates between the 500ms
+        // progress snapshots. Interpolation ticks are marshalled to the UI thread via the injected dispatcher.
+        _interpolationTimer = new System.Threading.Timer(
+            _ => InterpolateProgress(),
+            state: null,
+            dueTime: TimeSpan.FromMilliseconds(16),
+            period: TimeSpan.FromMilliseconds(16));
     }
 
     /// <summary>Underlying managed download this popup is bound to.</summary>
@@ -186,16 +242,53 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     // Live-metric projections (Requirements 2.1-2.8, 4.3, 4.4, 5.6).
     // All values are pure functions of the latest applied snapshot, falling
     // back to the persisted download state when no snapshot has arrived yet.
+    //
+    // Smoothing interpolates between discrete 500ms snapshots to produce
+    // continuous visual updates similar to IDM's behavior.
     // ---------------------------------------------------------------------
 
-    /// <summary>Bytes transferred, taken from the latest snapshot or the persisted state.</summary>
-    private long BytesDownloaded => _latestProgress?.BytesDownloaded ?? _managed.State.BytesDownloaded;
+    /// <summary>
+    /// Interpolated bytes downloaded, advancing smoothly between snapshots rather than jumping
+    /// once every 500ms. When actively downloading, this increments continuously based on the
+    /// current transfer rate.
+    /// </summary>
+    private long BytesDownloaded
+    {
+        get
+        {
+            // When not actively transferring, show the exact persisted/snapshot value with no interpolation.
+            if (!IsActiveTransfer(EffectiveStatus))
+            {
+                return _latestProgress?.BytesDownloaded ?? _managed.State.BytesDownloaded;
+            }
+
+            // Interpolate between the last and current snapshot based on elapsed time since the snapshot
+            // arrived. This produces continuous visual advancement instead of 500ms jumps.
+            long now = Environment.TickCount64;
+            long elapsed = now - _snapshotTicks;
+            if (elapsed >= _intervalTicks)
+            {
+                // Past the expected interval → return the target (the next snapshot is late or this is
+                // the first tick after receiving one).
+                return _currentBytes;
+            }
+
+            double t = Math.Clamp((double)elapsed / _intervalTicks, 0, 1);
+            return _prevBytes + (long)((_currentBytes - _prevBytes) * t);
+        }
+    }
 
     /// <summary>Total bytes, taken from the latest snapshot or the persisted state; null when unknown.</summary>
     private long? TotalBytes => _latestProgress is { } p ? p.TotalBytes : _managed.State.TotalBytes;
 
-    /// <summary>Instantaneous transfer rate from the latest snapshot (0 when none).</summary>
-    private double BytesPerSecond => _latestProgress?.BytesPerSecond ?? 0d;
+    /// <summary>Smoothed transfer rate for display (EMA applied at the UI level).</summary>
+    private double BytesPerSecond => _smoothedSpeed;
+
+    /// <summary>Smoothed ETA for display (dampened to prevent wild swings).</summary>
+    private TimeSpan? Eta =>
+        _smoothedEtaSeconds is { } seconds && seconds >= 0
+            ? TimeSpan.FromSeconds(Math.Min(seconds, TimeSpan.MaxValue.TotalSeconds))
+            : null;
 
     /// <summary>
     /// Effective status for control-enablement and status-driven display.
@@ -270,7 +363,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// Estimated time remaining formatted as hh:mm:ss, or the unknown-time token ("—") when no
     /// estimate is available (Requirements 2.5, 2.6).
     /// </summary>
-    public string EtaText => Formatting.FormatEta(_latestProgress?.Eta);
+    public string EtaText => Formatting.FormatEta(Eta);
 
     /// <summary>
     /// Active/total connection counts from the latest snapshot (Requirement 2.8), written as
@@ -286,10 +379,56 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
     /// Stores the latest progress snapshot and raises <see cref="ObservableObject.PropertyChanged"/>
     /// for every formatted live-metric property (Requirements 2.1, 4.3, 4.4, 5.6). Callers marshal
     /// this onto the UI thread (the <c>PopupManager</c> is the single dispatch choke point).
+    /// <para>
+    /// This captures the snapshot boundaries for smooth interpolation: Transferred advances
+    /// continuously between _prevBytes and _currentBytes, Speed and ETA are dampened with EMA.
+    /// </para>
     /// </summary>
     public void ApplyProgress(DownloadProgress progress)
     {
         _latestProgress = progress;
+
+        // Capture the snapshot boundary for interpolation. The prev/current pair defines the range
+        // the BytesDownloaded getter interpolates across until the next snapshot arrives.
+        _prevBytes = _currentBytes;
+        _currentBytes = progress.BytesDownloaded;
+        _snapshotTicks = Environment.TickCount64;
+
+        // Apply EMA to speed at the UI level for additional visual stability. The worker already
+        // smooths it (0.6 * instant + 0.4 * prev), but we apply a second, gentler pass here so sudden
+        // spikes (e.g. 5.44 Mbps → 8.99 Mbps) are visually dampened instead of displayed raw.
+        double rawSpeed = progress.BytesPerSecond;
+        if (_smoothedSpeed <= 0)
+        {
+            _smoothedSpeed = rawSpeed; // First sample: no history to blend.
+        }
+        else if (rawSpeed > 0)
+        {
+            // Blend 70% current + 30% previous for stable display while staying responsive to real changes.
+            _smoothedSpeed = (0.7 * rawSpeed) + (0.3 * _smoothedSpeed);
+        }
+        else
+        {
+            // Speed dropped to zero (stalled or paused) → reset immediately so "Stalled" shows without delay.
+            _smoothedSpeed = 0;
+        }
+
+        // Apply dampening to ETA to prevent wild swings (40s → 25s → 35s). Use a 50/50 blend so
+        // changes are visible but not jarring. ETA recalculates fresh each time from current speed
+        // and remaining bytes, which causes instability; smoothing it at the UI gives IDM-like stability.
+        double? rawEtaSeconds = progress.Eta?.TotalSeconds;
+        if (rawEtaSeconds is { } eta && eta >= 0)
+        {
+            _smoothedEtaSeconds = _smoothedEtaSeconds is { } prev && prev >= 0
+                ? (0.5 * eta) + (0.5 * prev)
+                : eta; // First valid ETA: use it directly.
+        }
+        else if (rawEtaSeconds is null)
+        {
+            // ETA became unavailable (size unknown or speed zero) → clear the smoothed value immediately.
+            _smoothedEtaSeconds = null;
+        }
+
         OnPropertyChanged(nameof(ProgressPercent));
         OnPropertyChanged(nameof(IsIndeterminate));
         OnPropertyChanged(nameof(DownloadedText));
@@ -305,6 +444,48 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
         // the status-derived control state here too. This keeps Pause/Resume/Cancel enablement and the
         // status label in lock-step with the live transfer, not just with discrete status events.
         NotifyStatusChanged();
+    }
+
+    /// <summary>
+    /// Interpolation tick called at ~60 FPS by the timer. Raises property-changed notifications for
+    /// live metrics so the UI continuously updates between the discrete 500ms snapshots. This is what
+    /// produces smooth, IDM-like visual progression instead of once-per-second jumps.
+    /// <para>
+    /// Runs on the thread pool and marshals property notifications to the UI thread using the
+    /// injected dispatcher.
+    /// </para>
+    /// </summary>
+    private void InterpolateProgress()
+    {
+        // Only interpolate while actively transferring; when paused/failed/completed the displayed
+        // values are static and do not need continuous updates.
+        if (!IsActiveTransfer(EffectiveStatus))
+        {
+            return;
+        }
+
+        // Marshal to the UI thread if a dispatcher was injected (production path); otherwise run
+        // directly (unit tests with no data-binding).
+        if (_uiDispatcher is not null)
+        {
+            _uiDispatcher(RaiseInterpolatedPropertyChanges);
+        }
+        else
+        {
+            RaiseInterpolatedPropertyChanges();
+        }
+    }
+
+    /// <summary>
+    /// Raises property-changed notifications for interpolated metrics. Must run on the UI thread.
+    /// </summary>
+    private void RaiseInterpolatedPropertyChanges()
+    {
+        OnPropertyChanged(nameof(DownloadedText));
+        OnPropertyChanged(nameof(ProgressPercent));
+        // Speed and ETA are already smoothed in ApplyProgress; they only need refreshing if their
+        // formatting depends on the interpolated byte count (it doesn't currently, but this keeps
+        // the display in sync if that changes).
     }
 
     // ---------------------------------------------------------------------
@@ -653,4 +834,18 @@ public sealed partial class DownloadPopupViewModel : ObservableObject
             or DownloadStatus.Downloading
             or DownloadStatus.Assembling
             or DownloadStatus.Verifying;
+
+    // ---------------------------------------------------------------------
+    // Disposal
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Stops the interpolation timer and releases resources. Called by the popup window when it
+    /// closes, ensuring the timer no longer fires after the ViewModel is no longer in use.
+    /// </summary>
+    public void Dispose()
+    {
+        _interpolationTimer?.Dispose();
+        _interpolationTimer = null;
+    }
 }

@@ -105,6 +105,7 @@ public partial class DownloadPopupWindow : FluentWindow, IDownloadPopup
     /// </summary>
     protected override void OnClosing(CancelEventArgs e)
     {
+        _viewModel.Dispose(); // Stop the interpolation timer and clean up resources.
         _onClosed?.Invoke(_viewModel.Id);
         base.OnClosing(e);
     }

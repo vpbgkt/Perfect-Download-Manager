@@ -83,7 +83,8 @@ public partial class App : Application
                     managed,
                     Host!.DownloadManager,
                     confirmCancel: message => Task.FromResult(window!.ConfirmCancel(message)),
-                    showError: message => Host!.Notifications.ShowError("Download", message));
+                    showError: message => Host!.Notifications.ShowError("Download", message),
+                    uiDispatcher: action => Dispatcher.InvokeAsync(action, System.Windows.Threading.DispatcherPriority.DataBind));
 
                 window = new DownloadPopupWindow(viewModel, id => popupManager!.NotifyPopupClosed(id));
                 window.Show();
