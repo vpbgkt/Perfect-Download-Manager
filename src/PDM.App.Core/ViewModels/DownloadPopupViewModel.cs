@@ -248,9 +248,9 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// Interpolated bytes downloaded, advancing smoothly between snapshots rather than jumping
-    /// once every 500ms. When actively downloading, this increments continuously based on the
-    /// current transfer rate.
+    /// Interpolated bytes downloaded, advancing smoothly between snapshots with speed-adaptive
+    /// step size. Slow downloads increment in small steps; fast downloads in larger steps.
+    /// This ensures smooth visual progression without skipping displayed values at any speed.
     /// </summary>
     private long BytesDownloaded
     {
@@ -262,19 +262,66 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
                 return _latestProgress?.BytesDownloaded ?? _managed.State.BytesDownloaded;
             }
 
-            // Interpolate between the last and current snapshot based on elapsed time since the snapshot
-            // arrived. This produces continuous visual advancement instead of 500ms jumps.
+            // SPEED-ADAPTIVE INTERPOLATION:
+            // The key insight: at 60 FPS, we want the displayed value (formatted to 2 decimals)
+            // to increment smoothly without skipping visible values.
+            //
+            // Problem with linear interpolation:
+            //   - At 2 Mbps: 500ms snapshot delta = ~125 KB, spread over 30 frames = ~4 KB/frame
+            //     Display: 15.23 MB → 15.23 MB (hidden, <10 KB) → 15.24 MB (visible)
+            //     Result: Appears to skip values
+            //
+            //   - At 100 Mbps: 500ms delta = ~6.25 MB, spread over 30 frames = ~208 KB/frame
+            //     Display: 234.56 MB → 234.76 MB → 234.97 MB (each frame jumps ~0.2 MB)
+            //     Result: Also skips visible values
+            //
+            // Solution: Adjust interpolation to match the target display increment (~0.01 MB minimum)
+            // based on current speed, so every frame shows a visible change.
+
             long now = Environment.TickCount64;
             long elapsed = now - _snapshotTicks;
+            
             if (elapsed >= _intervalTicks)
             {
-                // Past the expected interval → return the target (the next snapshot is late or this is
-                // the first tick after receiving one).
+                // Past the expected interval → return the target (next snapshot is late)
                 return _currentBytes;
             }
 
+            // Linear interpolation progress (0.0 to 1.0)
             double t = Math.Clamp((double)elapsed / _intervalTicks, 0, 1);
-            return _prevBytes + (long)((_currentBytes - _prevBytes) * t);
+
+            // Calculate how much to interpolate based on speed
+            long byteDelta = _currentBytes - _prevBytes;
+            double currentSpeedMBps = _smoothedSpeed / (1024.0 * 1024.0); // Convert bytes/sec to MB/sec
+
+            // SPEED-ADAPTIVE SMOOTHING:
+            // - Slow speed (<5 MB/s): Use fine-grained steps (~10 KB minimum per frame at 60 FPS)
+            //   so display increments by 0.01 MB visibly
+            // - Fast speed (>5 MB/s): Allow larger steps proportional to speed
+            //   so the counter "spins" faster but still smoothly
+            
+            const double minDisplayIncrementMB = 0.01; // Minimum visible change (2 decimals)
+            const int framesPerSecond = 60;
+            
+            // Calculate ideal bytes per frame for smooth display
+            double idealBytesPerFrame = (minDisplayIncrementMB * 1024 * 1024) / framesPerSecond;
+            
+            // At high speeds, allow natural interpolation; at low speeds, ensure minimum increment
+            if (currentSpeedMBps < 5.0 && byteDelta > 0)
+            {
+                // Slow download: ensure each frame advances by at least the minimum display increment
+                double naturalBytesPerFrame = byteDelta / (double)(_intervalTicks / TimeSpan.TicksPerMillisecond * framesPerSecond / 1000.0);
+                
+                if (naturalBytesPerFrame < idealBytesPerFrame)
+                {
+                    // Slow speed: clamp to minimum increment so display doesn't appear frozen
+                    long minIncrement = (long)(idealBytesPerFrame * elapsed / (1000.0 / framesPerSecond));
+                    return Math.Min(_prevBytes + minIncrement, _currentBytes);
+                }
+            }
+
+            // Normal/fast speed: use linear interpolation
+            return _prevBytes + (long)(byteDelta * t);
         }
     }
 
