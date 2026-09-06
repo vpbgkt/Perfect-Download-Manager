@@ -4,55 +4,52 @@ using Xunit;
 namespace PDM.App.Tests;
 
 /// <summary>
-/// Validates that FormatBytes produces smooth, incremental visual progression
-/// instead of jumping in large steps (2.00 MB → 5.00 MB → 7.00 MB).
+/// Validates that FormatBytes produces IDM-style counter display with 3 decimals,
+/// creating smooth, continuous visual feedback like an odometer.
 /// </summary>
 public sealed class FormattingTests
 {
     [Theory]
-    [InlineData(2_097_152, "2 MB")]          // Exactly 2.00 MB - shows as "2 MB"
-    [InlineData(2_411_724, "2.3 MB")]        // 2.30 MB - shows 1 decimal
-    [InlineData(2_621_440, "2.5 MB")]        // 2.50 MB - smooth increment
-    [InlineData(2_831_155, "2.7 MB")]        // 2.70 MB
-    [InlineData(3_145_728, "3 MB")]          // 3.00 MB
-    [InlineData(3_670_016, "3.5 MB")]        // 3.50 MB
-    [InlineData(4_194_304, "4 MB")]          // 4.00 MB
-    [InlineData(5_242_880, "5 MB")]          // 5.00 MB
-    [InlineData(6_291_456, "6 MB")]          // 6.00 MB
-    [InlineData(7_340_032, "7 MB")]          // 7.00 MB
-    [InlineData(9_437_184, "9 MB")]          // 9.00 MB
-    public void FormatBytes_SmallValues_ShowsTwoDecimals(long bytes, string expected)
+    [InlineData(2_097_152, "2.000 MB")]          // Exactly 2.00 MB
+    [InlineData(2_098_176, "2.001 MB")]          // +1 KB increment
+    [InlineData(2_099_200, "2.002 MB")]          // Counter effect: 2.001 → 2.002
+    [InlineData(2_306_867, "2.200 MB")]          // 2.20 MB
+    [InlineData(2_516_582, "2.400 MB")]          // 2.40 MB
+    [InlineData(3_145_728, "3.000 MB")]          // 3.00 MB
+    [InlineData(5_242_880, "5.000 MB")]          // 5.00 MB
+    [InlineData(9_437_184, "9.000 MB")]          // 9.00 MB
+    [InlineData(9_438_208, "9.001 MB")]          // Counter: 9.000 → 9.001
+    public void FormatBytes_ShowsThreeDecimals_CounterStyle(long bytes, string expected)
     {
         // Act
         string result = Formatting.FormatBytes(bytes);
 
-        // Assert - should show incremental progression, not large jumps
+        // Assert - should show 3 decimals for counter/odometer effect
         Assert.Equal(expected, result);
     }
 
     [Theory]
-    [InlineData(10_485_760, "10 MB")]        // 10.0 MB - switches to 1 decimal
-    [InlineData(15_728_640, "15 MB")]        // 15.0 MB
-    [InlineData(26_214_400, "25 MB")]        // 25.0 MB
-    [InlineData(52_428_800, "50 MB")]        // 50.0 MB
-    [InlineData(78_643_200, "75 MB")]        // 75.0 MB
-    [InlineData(99_614_720, "95 MB")]        // 95.0 MB
-    public void FormatBytes_MediumValues_ShowsOneDecimal(long bytes, string expected)
+    [InlineData(10_485_760, "10.000 MB")]        // 10.0 MB - still 3 decimals
+    [InlineData(15_728_640, "15.000 MB")]        // 15.0 MB
+    [InlineData(52_428_800, "50.000 MB")]        // 50.0 MB
+    [InlineData(104_857_600, "100.000 MB")]      // 100.0 MB
+    [InlineData(234_881_024, "224.000 MB")]      // 224.0 MB
+    [InlineData(524_288_000, "500.000 MB")]      // 500.0 MB
+    public void FormatBytes_LargeValues_StillShowsThreeDecimals(long bytes, string expected)
     {
         // Act
         string result = Formatting.FormatBytes(bytes);
 
-        // Assert
+        // Assert - even large values show 3 decimals for consistency
         Assert.Equal(expected, result);
     }
 
     [Theory]
-    [InlineData(104_857_600, "100 MB")]      // 100 MB - switches to no decimals
-    [InlineData(209_715_200, "200 MB")]      // 200 MB
-    [InlineData(524_288_000, "500 MB")]      // 500 MB
-    [InlineData(1_073_741_824, "1 GB")]      // 1.0 GB
-    [InlineData(2_147_483_648, "2 GB")]      // 2.0 GB
-    public void FormatBytes_LargeValues_ShowsNoDecimals(long bytes, string expected)
+    [InlineData(1_073_741_824, "1.000 GB")]      // 1.0 GB
+    [InlineData(1_074_790_400, "1.001 GB")]      // 1.001 GB (counter)
+    [InlineData(2_147_483_648, "2.000 GB")]      // 2.0 GB
+    [InlineData(5_368_709_120, "5.000 GB")]      // 5.0 GB
+    public void FormatBytes_Gigabytes_ShowsThreeDecimals(long bytes, string expected)
     {
         // Act
         string result = Formatting.FormatBytes(bytes);
@@ -87,60 +84,108 @@ public sealed class FormattingTests
         // Act
         string result = Formatting.FormatBytes(523);
 
-        // Assert
+        // Assert - bytes unit never shows decimals
         Assert.Equal("523 B", result);
     }
 
     /// <summary>
-    /// Validates smooth progression across a realistic download sequence.
-    /// The formatted values should increment smoothly (2.3 → 2.5 → 2.7 → 3.0)
-    /// instead of jumping (2 → 5 → 7).
+    /// Validates IDM-style counter progression: each byte increment produces a visible
+    /// change in the 3rd decimal place, creating smooth odometer-like feedback.
     /// </summary>
     [Fact]
-    public void FormatBytes_SmoothProgression_ShowsIncrementalChanges()
+    public void FormatBytes_CounterProgression_ShowsContinuousIncrements()
     {
-        // Arrange - simulate interpolated byte values during a download
-        long[] interpolatedBytes = new long[]
+        // Arrange - simulate very fine-grained interpolated byte values (1 KB increments)
+        long baseMB = 5_242_880; // 5.000 MB
+        var incrementalBytes = new long[11];
+        for (int i = 0; i < 11; i++)
         {
-            2_097_152,   // 2.00 MB
-            2_306_867,   // 2.20 MB
-            2_516_582,   // 2.40 MB
-            2_726_297,   // 2.60 MB
-            2_936_012,   // 2.80 MB
-            3_145_728,   // 3.00 MB
-            3_355_443,   // 3.20 MB
-            3_565_158,   // 3.40 MB
-            3_774_873,   // 3.60 MB
-            3_984_588,   // 3.80 MB
-            4_194_304    // 4.00 MB
-        };
+            incrementalBytes[i] = baseMB + (i * 1024); // +1 KB per step
+        }
 
         // Act
         var formatted = new List<string>();
-        foreach (var bytes in interpolatedBytes)
+        foreach (var bytes in incrementalBytes)
         {
             formatted.Add(Formatting.FormatBytes(bytes));
         }
 
-        // Assert - should show smooth progression, not large jumps
-        Assert.Equal("2 MB", formatted[0]);
-        Assert.Equal("2.2 MB", formatted[1]);
-        Assert.Equal("2.4 MB", formatted[2]);
-        Assert.Equal("2.6 MB", formatted[3]);
-        Assert.Equal("2.8 MB", formatted[4]);
-        Assert.Equal("3 MB", formatted[5]);
-        Assert.Equal("3.2 MB", formatted[6]);
-        Assert.Equal("3.4 MB", formatted[7]);
-        Assert.Equal("3.6 MB", formatted[8]);
-        Assert.Equal("3.8 MB", formatted[9]);
-        Assert.Equal("4 MB", formatted[10]);
+        // Assert - should show smooth counter progression
+        Assert.Equal("5.000 MB", formatted[0]);
+        Assert.Equal("5.001 MB", formatted[1]);  // +1 KB visible
+        Assert.Equal("5.002 MB", formatted[2]);  // Counter increments
+        Assert.Equal("5.003 MB", formatted[3]);
+        Assert.Equal("5.004 MB", formatted[4]);
+        Assert.Equal("5.005 MB", formatted[5]);
+        Assert.Equal("5.006 MB", formatted[6]);
+        Assert.Equal("5.007 MB", formatted[7]);
+        Assert.Equal("5.008 MB", formatted[8]);
+        Assert.Equal("5.009 MB", formatted[9]);
+        Assert.Equal("5.010 MB", formatted[10]);
 
-        // Verify no large jumps (all changes should be <= 0.2 MB when parsed)
-        for (int i = 1; i < interpolatedBytes.Length; i++)
+        // Verify every single KB increment is visible (no hidden progress)
+        for (int i = 1; i < incrementalBytes.Length; i++)
         {
-            long delta = interpolatedBytes[i] - interpolatedBytes[i - 1];
-            double deltaMB = delta / (1024.0 * 1024.0);
-            Assert.True(deltaMB <= 0.21, $"Jump too large: {formatted[i - 1]} → {formatted[i]} ({deltaMB:F2} MB)");
+            bool isDifferent = formatted[i - 1] != formatted[i];
+            Assert.True(isDifferent, 
+                $"Counter should increment visibly: {formatted[i - 1]} → {formatted[i]}");
         }
+    }
+
+    /// <summary>
+    /// Validates that even at high speeds (multiple MB per frame), the counter
+    /// shows continuous progression without jumping.
+    /// </summary>
+    [Fact]
+    public void FormatBytes_HighSpeed_ShowsSmoothProgression()
+    {
+        // Arrange - simulate 60 FPS at 50 MB/s = ~830 KB per frame
+        long baseBytes = 100_000_000; // ~95.37 MB
+        int framesPerSecond = 60;
+        long bytesPerSecond = 50 * 1024 * 1024; // 50 MB/s
+        long bytesPerFrame = bytesPerSecond / framesPerSecond; // ~850 KB per frame
+
+        var frames = new long[10];
+        for (int i = 0; i < 10; i++)
+        {
+            frames[i] = baseBytes + (i * bytesPerFrame);
+        }
+
+        // Act
+        var formatted = new List<string>();
+        foreach (var bytes in frames)
+        {
+            formatted.Add(Formatting.FormatBytes(bytes));
+        }
+
+        // Assert - even with large per-frame increments, no value should repeat
+        // (every frame should show visible progress with 3 decimals)
+        for (int i = 1; i < frames.Length; i++)
+        {
+            bool isDifferent = formatted[i - 1] != formatted[i];
+            Assert.True(isDifferent,
+                $"High-speed counter should show continuous progression: {formatted[i - 1]} → {formatted[i]}");
+        }
+
+        // First and last should show meaningful difference
+        Assert.NotEqual(formatted[0], formatted[^1]);
+    }
+
+    /// <summary>
+    /// Validates consistent 3-decimal precision across all unit boundaries.
+    /// </summary>
+    [Theory]
+    [InlineData(1023, "1023 B")]                 // Bytes: no decimals
+    [InlineData(1024, "1.000 KB")]               // KB boundary: 3 decimals
+    [InlineData(1_048_576, "1.000 MB")]          // MB boundary: 3 decimals
+    [InlineData(1_073_741_824, "1.000 GB")]      // GB boundary: 3 decimals
+    [InlineData(1_099_511_627_776, "1.000 TB")]  // TB boundary: 3 decimals
+    public void FormatBytes_UnitBoundaries_ConsistentPrecision(long bytes, string expected)
+    {
+        // Act
+        string result = Formatting.FormatBytes(bytes);
+
+        // Assert - all units except bytes should use 3 decimals
+        Assert.Equal(expected, result);
     }
 }
