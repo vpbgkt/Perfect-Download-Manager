@@ -8,10 +8,10 @@ public static class Formatting
     private static readonly string[] Units = { "B", "KB", "MB", "GB", "TB" };
 
     /// <summary>
-    /// Formats a byte count with IDM-style counter precision (3 decimals for smooth real-time updates).
+    /// Formats a byte count with 2-decimal precision for clean, readable display.
     /// <para>
-    /// Shows values like: 1.100 MB, 1.101 MB, 1.102 MB... creating a counter/odometer effect
-    /// that continuously increments, providing the most professional real-time visual feedback.
+    /// Shows values like: 15.23 MB, 234.56 MB
+    /// The 60 FPS interpolation layer ensures smooth visual progression between values.
     /// </para>
     /// </summary>
     public static string FormatBytes(long? bytes)
@@ -29,15 +29,14 @@ public static class Formatting
             unit++;
         }
 
-        // IDM-STYLE COUNTER: 3 decimals for smooth, continuous increments
+        // SIMPLE 2-DECIMAL DISPLAY: Clean and readable
         // Examples:
-        //   1.100 MB → 1.101 MB → 1.102 MB → 1.103 MB (counter effect)
-        //   15.234 MB → 15.235 MB → 15.236 MB
-        //   234.567 MB → 234.568 MB → 234.569 MB
+        //   15.23 MB → 15.24 MB → 15.25 MB (smooth with 60 FPS interpolation)
+        //   234.56 MB → 234.67 MB → 234.78 MB
         //
-        // This creates the most professional, real-time feel - like watching
-        // an odometer increment smoothly as bytes flow in.
-        string format = unit == 0 ? "0" : "0.000"; // Bytes: no decimals, everything else: 3 decimals
+        // The existing 60 FPS interpolation (~0.05% CPU per popup) handles smoothness.
+        // Format is simple and lightweight - no extra processing needed.
+        string format = unit == 0 ? "0" : "0.00"; // Bytes: no decimals, everything else: 2 decimals
 
         return string.Create(CultureInfo.InvariantCulture, $"{size.ToString(format, CultureInfo.InvariantCulture)} {Units[unit]}");
     }
@@ -46,10 +45,11 @@ public static class Formatting
     // LEGACY: Previous implementations preserved for rollback
     // ===============================================================================
     
-    // SPEED-ADAPTIVE 2-DECIMAL (Commit 3accd88)
-    // Issue: Complex interpolation logic, still had edge cases with value skipping
+    // IDM-STYLE 3-DECIMAL COUNTER (Commit 33499ed / fed5473)
+    // Shows: 1.100 MB, 1.101 MB, 1.102 MB
+    // Note: More precision but can feel cluttered on screen
     //
-    // public static string FormatBytesSpeedAdaptive(long? bytes)
+    // public static string FormatBytesIDM(long? bytes)
     // {
     //     if (bytes is not { } value || value < 0)
     //     {
@@ -64,48 +64,21 @@ public static class Formatting
     //         unit++;
     //     }
     //
-    //     string format = unit == 0 ? "0" : "0.00";
+    //     string format = unit == 0 ? "0" : "0.000";
     //     return string.Create(CultureInfo.InvariantCulture, $"{size.ToString(format, CultureInfo.InvariantCulture)} {Units[unit]}");
     // }
     
+    // SPEED-ADAPTIVE 2-DECIMAL (Commit 3accd88)
+    // Complex interpolation logic that adjusted step size based on speed
+    // Note: More complex, higher CPU usage, didn't solve core issues
+    //
+    // public static string FormatBytesSpeedAdaptive(long? bytes) { ... }
+    
     // ADAPTIVE PRECISION (Commit 5aeaf1d)
-    // Issue: Precision switches (2 decimals → 1 decimal → 0 decimals) create inconsistency
+    // Switched between 2 decimals → 1 decimal → 0 decimals based on size
+    // Note: Inconsistent precision created visual confusion
     //
-    // public static string FormatBytesAdaptive(long? bytes)
-    // {
-    //     if (bytes is not { } value || value < 0)
-    //     {
-    //         return "—";
-    //     }
-    //
-    //     double size = value;
-    //     int unit = 0;
-    //     while (size >= 1024 && unit < Units.Length - 1)
-    //     {
-    //         size /= 1024;
-    //         unit++;
-    //     }
-    //
-    //     string format;
-    //     if (unit == 0)
-    //     {
-    //         format = "0";
-    //     }
-    //     else if (size < 10)
-    //     {
-    //         format = "0.##";
-    //     }
-    //     else if (size < 100)
-    //     {
-    //         format = "0.#";
-    //     }
-    //     else
-    //     {
-    //         format = "0";
-    //     }
-    //
-    //     return string.Create(CultureInfo.InvariantCulture, $"{size.ToString(format, CultureInfo.InvariantCulture)} {Units[unit]}");
-    // }
+    // public static string FormatBytesAdaptive(long? bytes) { ... }
     // ===============================================================================
 
     /// <summary>Formats a byte rate, e.g. 3.2 MB/s.</summary>
