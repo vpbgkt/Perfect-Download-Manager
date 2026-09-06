@@ -284,6 +284,13 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
     /// <summary>Smoothed transfer rate for display (EMA applied at the UI level).</summary>
     private double BytesPerSecond => _smoothedSpeed;
 
+    /// <summary>
+    /// Average transfer rate since the download started, used for ETA calculation.
+    /// This is the key to IDM-style stable ETA: using the overall average instead of
+    /// instantaneous speed produces estimates that are both stable AND accurate.
+    /// </summary>
+    private double AverageBytesPerSecond => _latestProgress?.AverageBytesPerSecond ?? 0d;
+
     /// <summary>Smoothed ETA for display (dampened to prevent wild swings).</summary>
     private TimeSpan? Eta =>
         _smoothedEtaSeconds is { } seconds && seconds >= 0
@@ -413,47 +420,33 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
             _smoothedSpeed = 0;
         }
 
-        // Apply STRONG dampening to ETA to prevent wild swings (50s → 25s → 35s).
-        // ETA recalculates fresh each time from current speed and remaining bytes, making it extremely
-        // volatile. Use aggressive 85/15 blend (85% previous, 15% new) so the displayed value changes
-        // gradually and predictably instead of jumping around.
+        // Remove the over-aggressive 85/15 EMA smoothing on ETA that was causing it to lag.
+        // Instead, the ETA now uses AverageBytesPerSecond (calculated at the worker level)
+        // which is inherently stable because it's computed over the entire download duration.
+        // This matches IDM's approach and gives accurate, stable estimates without artificial dampening.
         //
-        // Why 85/15? Testing shows this produces smooth, predictable countdown similar to IDM:
-        // - 50/50 blend: still too jumpy (50s → 37s is visible and jarring)
-        // - 70/30 blend: better but still noticeable jumps
-        // - 85/15 blend: smooth, stable countdown that only changes ~1 second per update
-        //
-        // The strong dampening is intentional: users prefer a stable, slightly conservative ETA
-        // over an accurate but wildly fluctuating one.
+        // We still apply very light smoothing (70/30) just to prevent sub-second jitter in the display,
+        // but this is minimal compared to the previous 85/15 which was causing 25-minute estimates
+        // to persist even when the download was nearly complete.
         double? rawEtaSeconds = progress.Eta?.TotalSeconds;
         if (rawEtaSeconds is { } eta && eta >= 0)
         {
             if (_smoothedEtaSeconds is { } prev && prev >= 0)
             {
-                // Blend 15% new + 85% previous for maximum stability.
-                double blended = (0.15 * eta) + (0.85 * prev);
-                
-                // Clamp the rate of change to prevent even smoothed values from jumping too fast.
-                // Limit change to ±5 seconds per snapshot (±10 seconds/sec effective rate).
-                // This catches cases where speed doubles/halves suddenly.
-                double maxDelta = 5.0;
-                double delta = blended - prev;
-                if (Math.Abs(delta) > maxDelta)
-                {
-                    blended = prev + Math.Sign(delta) * maxDelta;
-                }
-                
-                _smoothedEtaSeconds = blended;
+                // Very light smoothing (70% new, 30% old) to prevent sub-second jitter only.
+                // This is NOT for stability (the average speed already provides that), just
+                // to smooth out display updates between frames.
+                _smoothedEtaSeconds = (0.7 * eta) + (0.3 * prev);
             }
             else
             {
-                // First valid ETA: use it directly (no history to blend with).
+                // First valid ETA: use it directly.
                 _smoothedEtaSeconds = eta;
             }
         }
         else if (rawEtaSeconds is null)
         {
-            // ETA became unavailable (size unknown or speed zero) → clear the smoothed value immediately.
+            // ETA became unavailable (size unknown or speed zero) → clear immediately.
             _smoothedEtaSeconds = null;
         }
 

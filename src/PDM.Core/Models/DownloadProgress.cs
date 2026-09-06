@@ -47,7 +47,20 @@ public readonly record struct DownloadProgress
     {
         get
         {
-            if (TotalBytes is not > 0 || BytesPerSecond <= 0)
+            // IDM-style ETA: use AVERAGE speed over the entire download, not instantaneous speed.
+            // This produces stable, accurate estimates that don't swing wildly with momentary
+            // speed fluctuations. The average naturally smooths out variations while remaining
+            // responsive to sustained speed changes.
+            //
+            // Why this works:
+            // - Start of download: average speed increases gradually as connection stabilizes
+            // - Mid-download: average reflects actual sustained throughput, ignoring brief spikes/dips
+            // - Near completion: average is well-established, giving accurate final countdown
+            //
+            // This is exactly how IDM and other professional download managers calculate ETA.
+            double speedForEta = AverageBytesPerSecond;
+            
+            if (TotalBytes is not > 0 || speedForEta <= 0)
             {
                 return null;
             }
@@ -58,7 +71,7 @@ public readonly record struct DownloadProgress
                 return TimeSpan.Zero;
             }
 
-            double seconds = remaining / BytesPerSecond;
+            double seconds = remaining / speedForEta;
             // Guard against overflow when the rate is extremely small.
             return seconds > TimeSpan.MaxValue.TotalSeconds
                 ? null
