@@ -13,6 +13,17 @@ public partial class AddDownloadDialog : FluentWindow
         Loaded += (_, _) => UrlBox.Focus();
     }
 
+    /// <summary>
+    /// Creates an Add Download dialog with a pre-filled URL.
+    /// Useful for "Download Again" flow where the URL is already known.
+    /// </summary>
+    public AddDownloadDialog(string initialUrl) : this()
+    {
+        UrlBox.Text = initialUrl;
+        // Select all text so user can easily replace if needed
+        UrlBox.SelectAll();
+    }
+
     /// <summary>The URL the user submitted; empty when the dialog was cancelled.</summary>
     public string Url => UrlBox.Text.Trim();
 

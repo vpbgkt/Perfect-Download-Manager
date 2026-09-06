@@ -305,6 +305,8 @@
                             <MenuItem Header="Refresh from browser" Click="OnRefreshFromBrowser"
                                       IsVisible="{Binding SelectedItem.CanRefreshLink}" />
                             <Separator IsVisible="{Binding SelectedItem.CanRefreshLink}" />
+                            <MenuItem Header="Download again..." Click="OnDownloadAgain" />
+                            <Separator />
                             <MenuItem Header="Open" Command="{Binding OpenFileCommand}"
                                       CommandParameter="{Binding SelectedItem}" />
                             <MenuItem Header="Extract and open" Click="OnExtractAndOpen"

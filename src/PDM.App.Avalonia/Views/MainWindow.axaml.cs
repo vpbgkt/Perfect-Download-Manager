@@ -514,6 +514,39 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Opens the Add Download dialog with the URL from the selected download pre-filled.
+    /// Useful for re-downloading a file (e.g., to get the latest version, retry with different
+    /// settings, or download to a different location). Uses the same duplicate-detection flow
+    /// as a regular add, allowing the user to resume existing or start fresh.
+    /// </summary>
+    private async void OnDownloadAgain(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedItem is not { } item)
+        {
+            _notifier.ShowInfo("Download Again", "Select a download first.");
+            return;
+        }
+
+        string url = _viewModel.GetDownloadUrl(item) ?? string.Empty;
+        if (string.IsNullOrEmpty(url))
+        {
+            _notifier.ShowError("Download Again", "Could not retrieve the download URL.");
+            return;
+        }
+
+        // Show the Add Download dialog with the URL pre-filled
+        var dialog = new AddDownloadDialog(url);
+        string? enteredUrl = await dialog.ShowDialog<string?>(this).ConfigureAwait(true);
+        if (enteredUrl is null)
+        {
+            return;
+        }
+
+        // Use the standard add flow which handles duplicates, web page detection, etc.
+        await AddOneAsync(enteredUrl).ConfigureAwait(true);
+    }
+
+    /// <summary>
     /// Double-clicking a download <em>row</em> opens the file (matches everyday desktop behaviour).
     /// Guarded so double-clicking the column-header bar (or a row's checkbox) never opens anything:
     /// the gesture only counts when it originates inside a <see cref="DataGridRow"/> and not on a

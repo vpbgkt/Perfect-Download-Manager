@@ -307,6 +307,8 @@
                                       CommandParameter="{Binding PlacementTarget.SelectedItem,
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             <Separator />
+                            <MenuItem Header="Download again..." Click="OnDownloadAgain" />
+                            <Separator />
                             <MenuItem Header="Open"
                                       Command="{Binding PlacementTarget.DataContext.OpenFileCommand,
                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"

@@ -184,6 +184,40 @@ public partial class MainWindow : FluentWindow
     }
 
     /// <summary>
+    /// Opens the Add Download dialog with the URL from the selected download pre-filled.
+    /// Useful for re-downloading a file (e.g., to get the latest version, retry with different
+    /// settings, or download to a different location). Uses the same duplicate-detection flow
+    /// as a regular add, allowing the user to resume existing or start fresh.
+    /// </summary>
+    private async void OnDownloadAgain(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedItem is not { } item)
+        {
+            MessageBox.Show(this, "Select a download first.", "Download Again",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        string url = _viewModel.GetDownloadUrl(item) ?? string.Empty;
+        if (string.IsNullOrEmpty(url))
+        {
+            MessageBox.Show(this, "Could not retrieve the download URL.", "Download Again",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // Show the Add Download dialog with the URL pre-filled
+        var dialog = new AddDownloadDialog(url) { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        // Use the standard add flow which handles duplicates, web page detection, etc.
+        await AddOneAsync(dialog.Url).ConfigureAwait(true);
+    }
+
+    /// <summary>
     /// Opens the "change download link" dialog for the selected download. Completed downloads
     /// have nothing to refresh, so they are rejected up front. The dialog itself drives the
     /// probe/resume/restart handshake through <see cref="MainViewModel.ChangeUrlAsync"/>.

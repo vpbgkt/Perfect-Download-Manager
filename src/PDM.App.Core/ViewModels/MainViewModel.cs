@@ -457,6 +457,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return _host.DownloadManager.ChangeUrlAsync(id, uri, referrer, mode);
     }
 
+    /// <summary>
+    /// Exposes the URL of a download so the UI can trigger "Download Again" flow.
+    /// This allows re-downloading the same file (useful for getting latest version, retry with different settings, etc.)
+    /// </summary>
+    public string? GetDownloadUrl(DownloadItemViewModel? item) => item?.SourceUrl;
+
     [RelayCommand]
     private void OpenFile(DownloadItemViewModel? item)
     {

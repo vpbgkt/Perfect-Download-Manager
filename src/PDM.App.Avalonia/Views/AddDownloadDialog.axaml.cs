@@ -18,6 +18,24 @@ public partial class AddDownloadDialog : Window
         Opened += OnOpened;
     }
 
+    /// <summary>
+    /// Creates an Add Download dialog with a pre-filled URL.
+    /// Useful for "Download Again" flow where the URL is already known.
+    /// Skips clipboard detection when a URL is provided.
+    /// </summary>
+    public AddDownloadDialog(string initialUrl) : this()
+    {
+        // Set URL before the window opens to avoid clipboard override
+        UrlBox.Text = initialUrl;
+        // Don't check clipboard when URL is pre-filled
+        Opened -= OnOpened;
+        Opened += (_, _) =>
+        {
+            UrlBox.Focus();
+            UrlBox.SelectAll();
+        };
+    }
+
     private async void OnOpened(object? sender, EventArgs e)
     {
         IClipboard? clipboard = GetTopLevel(this)?.Clipboard;
