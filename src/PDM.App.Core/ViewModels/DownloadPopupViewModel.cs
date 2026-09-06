@@ -76,6 +76,13 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
     /// <summary>Smoothed speed for display (EMA applied at the UI level for extra stability).</summary>
     private double _smoothedSpeed;
 
+    /// <summary>
+    /// Ultra-smoothed speed specifically for ETA calculation (much heavier than display speed).
+    /// This uses aggressive 90/10 EMA to produce rock-solid ETAs that count down predictably
+    /// without wild swings, while the displayed speed remains responsive showing current conditions.
+    /// </summary>
+    private double _etaSpeed;
+
     /// <summary>Smoothed ETA in seconds (dampened to avoid wild swings).</summary>
     private double? _smoothedEtaSeconds;
 
@@ -126,6 +133,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
             _prevBytes = initial.BytesDownloaded;
             _currentBytes = initial.BytesDownloaded;
             _smoothedSpeed = initial.BytesPerSecond;
+            _etaSpeed = initial.BytesPerSecond; // Seed ETA speed to match
             _smoothedEtaSeconds = initial.Eta?.TotalSeconds;
         }
         _snapshotTicks = Environment.TickCount64;
@@ -401,49 +409,60 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
         if (_smoothedSpeed <= 0)
         {
             _smoothedSpeed = rawSpeed; // First sample: no history to blend.
+            _etaSpeed = rawSpeed; // ETA speed starts at same point.
         }
         else if (rawSpeed > 0)
         {
-            // Blend 70% current + 30% previous for stable display while staying responsive to real changes.
+            // DISPLAY SPEED: Blend 70% current + 30% previous for stable display while staying responsive.
             _smoothedSpeed = (0.7 * rawSpeed) + (0.3 * _smoothedSpeed);
+            
+            // ETA SPEED: Much more aggressive smoothing (90% previous + 10% current) for rock-solid ETAs.
+            // This produces extremely stable time estimates that count down predictably without wild swings.
+            // The display speed and ETA speed are INTENTIONALLY DIFFERENT:
+            // - Display speed (70/30): responsive, shows current conditions
+            // - ETA speed (90/10): ultra-stable, predictable countdown
+            _etaSpeed = (0.1 * rawSpeed) + (0.9 * _etaSpeed);
         }
         else
         {
             // Speed dropped to zero (stalled or paused) → reset immediately so "Stalled" shows without delay.
             _smoothedSpeed = 0;
+            // Keep ETA speed at last known value (don't reset to zero) so ETA remains available
+            // during brief stalls. It will reset naturally on next valid speed sample.
         }
 
-        // Professional ETA smoothing (final layer):
-        // The worker already smooths the instantaneous speed (0.6*instant + 0.4*prev).
-        // We apply ONE MORE gentle pass (70/30) at the UI level for visual continuity.
-        //
-        // This multi-layer approach (worker EMA → UI EMA) produces the smooth, stable
-        // ETAs you see in IDM while remaining responsive to real speed changes.
-        //
-        // Why 70/30?
-        // - Worker's 60/40 handles network fluctuations
-        // - UI's 70/30 smooths visual display between frames
-        // - Combined: stable countdown with minimal lag
-        //
-        // This is the industry-standard approach: smooth at multiple levels, each layer
-        // gentle enough to avoid lag while strong enough to filter noise.
-        double? rawEtaSeconds = progress.Eta?.TotalSeconds;
-        if (rawEtaSeconds is { } eta && eta >= 0)
+        // Calculate ETA using the ultra-smoothed speed for maximum stability.
+        // This is the key to IDM-style predictable countdown: while the displayed speed shows
+        // responsive feedback, the ETA calculation uses a heavily smoothed speed that barely
+        // moves even when the connection fluctuates. Result: ETA counts down smoothly and steadily.
+        double? rawEtaSeconds = null;
+        if (_etaSpeed > 0 && TotalBytes is > 0)
+        {
+            long remaining = TotalBytes.Value - _currentBytes;
+            if (remaining > 0)
+            {
+                rawEtaSeconds = remaining / _etaSpeed;
+            }
+        }
+
+        // Apply minimal visual smoothing (85/15) to the already-ultra-smoothed ETA for sub-second continuity.
+        // Since the underlying speed is already heavily smoothed (90/10), we only need light display smoothing here.
+        if (rawEtaSeconds is { } eta && eta >= 0 && eta < 86400) // Ignore ETAs > 24 hours (likely bogus)
         {
             if (_smoothedEtaSeconds is { } prev && prev >= 0)
             {
-                // Gentle 70/30 blend for visual smoothness.
-                _smoothedEtaSeconds = (0.7 * eta) + (0.3 * prev);
+                // Very light smoothing (85% new, 15% old) since the underlying speed is already ultra-smooth.
+                _smoothedEtaSeconds = (0.85 * eta) + (0.15 * prev);
             }
             else
             {
-                // First valid ETA or resuming: use directly to avoid lag.
+                // First valid ETA or resuming: use directly.
                 _smoothedEtaSeconds = eta;
             }
         }
-        else if (rawEtaSeconds is null)
+        else if (rawEtaSeconds is null || rawEtaSeconds >= 86400)
         {
-            // ETA became unavailable (size unknown or speed zero) → clear immediately.
+            // ETA became unavailable or unreasonably large → clear immediately.
             _smoothedEtaSeconds = null;
         }
 
