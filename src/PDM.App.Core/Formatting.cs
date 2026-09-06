@@ -8,10 +8,10 @@ public static class Formatting
     private static readonly string[] Units = { "B", "KB", "MB", "GB", "TB" };
 
     /// <summary>
-    /// Formats a byte count with speed-adaptive precision for smooth visual progression.
+    /// Formats a byte count with IDM-style counter precision (3 decimals for smooth real-time updates).
     /// <para>
-    /// Uses 2 decimals consistently, but the interpolation layer adjusts increment size
-    /// based on download speed to ensure smooth, continuous counting at any speed.
+    /// Shows values like: 1.100 MB, 1.101 MB, 1.102 MB... creating a counter/odometer effect
+    /// that continuously increments, providing the most professional real-time visual feedback.
     /// </para>
     /// </summary>
     public static string FormatBytes(long? bytes)
@@ -29,13 +29,15 @@ public static class Formatting
             unit++;
         }
 
-        // SPEED-ADAPTIVE DISPLAY: Always 2 decimals for readability
-        // The interpolation layer (60 FPS) adjusts its step size based on download speed:
-        //   - Slow speed (2 Mbps): small steps → 15.23 → 15.24 → 15.25
-        //   - Fast speed (100 Mbps): larger steps → 234.5 → 235.2 → 235.9
+        // IDM-STYLE COUNTER: 3 decimals for smooth, continuous increments
+        // Examples:
+        //   1.100 MB → 1.101 MB → 1.102 MB → 1.103 MB (counter effect)
+        //   15.234 MB → 15.235 MB → 15.236 MB
+        //   234.567 MB → 234.568 MB → 234.569 MB
         //
-        // This creates smooth visual progression without skipping values, regardless of speed.
-        string format = unit == 0 ? "0" : "0.00"; // Bytes: no decimals, everything else: 2 decimals
+        // This creates the most professional, real-time feel - like watching
+        // an odometer increment smoothly as bytes flow in.
+        string format = unit == 0 ? "0" : "0.000"; // Bytes: no decimals, everything else: 3 decimals
 
         return string.Create(CultureInfo.InvariantCulture, $"{size.ToString(format, CultureInfo.InvariantCulture)} {Units[unit]}");
     }
@@ -44,11 +46,10 @@ public static class Formatting
     // LEGACY: Previous implementations preserved for rollback
     // ===============================================================================
     
-    // IDM-STYLE 3-DECIMAL COUNTER (Commit fed5473)
-    // Issue: Shows 3 decimals but still skips values because interpolation doesn't
-    // match display granularity. Values jump: 1.100 → 1.103 → 1.106 (skips 1.101, 1.102)
+    // SPEED-ADAPTIVE 2-DECIMAL (Commit 3accd88)
+    // Issue: Complex interpolation logic, still had edge cases with value skipping
     //
-    // public static string FormatBytesIDMCounter(long? bytes)
+    // public static string FormatBytesSpeedAdaptive(long? bytes)
     // {
     //     if (bytes is not { } value || value < 0)
     //     {
@@ -63,7 +64,7 @@ public static class Formatting
     //         unit++;
     //     }
     //
-    //     string format = unit == 0 ? "0" : "0.000";
+    //     string format = unit == 0 ? "0" : "0.00";
     //     return string.Create(CultureInfo.InvariantCulture, $"{size.ToString(format, CultureInfo.InvariantCulture)} {Units[unit]}");
     // }
     
