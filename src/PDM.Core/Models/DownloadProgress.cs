@@ -47,18 +47,19 @@ public readonly record struct DownloadProgress
     {
         get
         {
-            // IDM-style ETA: use AVERAGE speed over the entire download, not instantaneous speed.
-            // This produces stable, accurate estimates that don't swing wildly with momentary
-            // speed fluctuations. The average naturally smooths out variations while remaining
-            // responsive to sustained speed changes.
+            // Professional ETA calculation (IDM-style):
+            // Use the smoothed instantaneous speed (BytesPerSecond), NOT the rolling average.
             //
-            // Why this works:
-            // - Start of download: average speed increases gradually as connection stabilizes
-            // - Mid-download: average reflects actual sustained throughput, ignoring brief spikes/dips
-            // - Near completion: average is well-established, giving accurate final countdown
+            // Why? The instantaneous speed (already smoothed by EMA at the worker level) reflects
+            // current network conditions accurately. The rolling average includes the entire session
+            // which can be misleading after a resume (very low average = wrong ETA).
             //
-            // This is exactly how IDM and other professional download managers calculate ETA.
-            double speedForEta = AverageBytesPerSecond;
+            // The smoothed instantaneous speed gives responsive, accurate ETAs:
+            // - Reflects current download rate
+            // - Already smoothed at worker level (0.6*instant + 0.4*prev)
+            // - UI adds light smoothing (70/30) for visual continuity
+            // - Result: stable yet responsive, just like IDM
+            double speedForEta = BytesPerSecond;
             
             if (TotalBytes is not > 0 || speedForEta <= 0)
             {

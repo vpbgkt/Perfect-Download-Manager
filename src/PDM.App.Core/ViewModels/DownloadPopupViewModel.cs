@@ -284,13 +284,6 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
     /// <summary>Smoothed transfer rate for display (EMA applied at the UI level).</summary>
     private double BytesPerSecond => _smoothedSpeed;
 
-    /// <summary>
-    /// Average transfer rate since the download started, used for ETA calculation.
-    /// This is the key to IDM-style stable ETA: using the overall average instead of
-    /// instantaneous speed produces estimates that are both stable AND accurate.
-    /// </summary>
-    private double AverageBytesPerSecond => _latestProgress?.AverageBytesPerSecond ?? 0d;
-
     /// <summary>Smoothed ETA for display (dampened to prevent wild swings).</summary>
     private TimeSpan? Eta =>
         _smoothedEtaSeconds is { } seconds && seconds >= 0
@@ -420,27 +413,31 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
             _smoothedSpeed = 0;
         }
 
-        // Remove the over-aggressive 85/15 EMA smoothing on ETA that was causing it to lag.
-        // Instead, the ETA now uses AverageBytesPerSecond (calculated at the worker level)
-        // which is inherently stable because it's computed over the entire download duration.
-        // This matches IDM's approach and gives accurate, stable estimates without artificial dampening.
+        // Professional ETA smoothing (final layer):
+        // The worker already smooths the instantaneous speed (0.6*instant + 0.4*prev).
+        // We apply ONE MORE gentle pass (70/30) at the UI level for visual continuity.
         //
-        // We still apply very light smoothing (70/30) just to prevent sub-second jitter in the display,
-        // but this is minimal compared to the previous 85/15 which was causing 25-minute estimates
-        // to persist even when the download was nearly complete.
+        // This multi-layer approach (worker EMA → UI EMA) produces the smooth, stable
+        // ETAs you see in IDM while remaining responsive to real speed changes.
+        //
+        // Why 70/30?
+        // - Worker's 60/40 handles network fluctuations
+        // - UI's 70/30 smooths visual display between frames
+        // - Combined: stable countdown with minimal lag
+        //
+        // This is the industry-standard approach: smooth at multiple levels, each layer
+        // gentle enough to avoid lag while strong enough to filter noise.
         double? rawEtaSeconds = progress.Eta?.TotalSeconds;
         if (rawEtaSeconds is { } eta && eta >= 0)
         {
             if (_smoothedEtaSeconds is { } prev && prev >= 0)
             {
-                // Very light smoothing (70% new, 30% old) to prevent sub-second jitter only.
-                // This is NOT for stability (the average speed already provides that), just
-                // to smooth out display updates between frames.
+                // Gentle 70/30 blend for visual smoothness.
                 _smoothedEtaSeconds = (0.7 * eta) + (0.3 * prev);
             }
             else
             {
-                // First valid ETA: use it directly.
+                // First valid ETA or resuming: use directly to avoid lag.
                 _smoothedEtaSeconds = eta;
             }
         }

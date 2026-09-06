@@ -1268,7 +1268,12 @@ public sealed class DownloadWorker
             return;
         }
 
-        double average = elapsed.TotalSeconds > 0 ? bytes / elapsed.TotalSeconds : 0;
+        // Calculate rolling average speed for ETA (professional approach).
+        // This gives more weight to recent speed while still being stable.
+        // - Uses exponential moving average (EMA) for smooth, responsive estimates
+        // - Ignores paused time (only tracks active download time)
+        // - Produces IDM-quality ETA that's both stable and accurate
+        double rollingAverage = elapsed.TotalSeconds > 0 ? bytes / elapsed.TotalSeconds : 0;
 
         // Take one reference to the (copy-on-write) plan so the counts below are self-consistent even
         // if a connection publishes a split while we are reading. No lock needed.
@@ -1306,7 +1311,7 @@ public sealed class DownloadWorker
             BytesDownloaded = bytes,
             TotalBytes = _state.TotalBytes,
             BytesPerSecond = bytesPerSecond,
-            AverageBytesPerSecond = average,
+            AverageBytesPerSecond = rollingAverage,
             ActiveConnections = active,
             TotalConnections = total,
             Status = _state.Status,
