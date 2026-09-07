@@ -117,6 +117,34 @@ public sealed class JsonSettingsStore
             changed = true;
         }
 
+        // v3: remove PDM subfolder from default download directory, rename General to Others.
+        //
+        // The old default was Downloads\PDM, which created an extra nesting level users didn't expect.
+        // The new default is just Downloads (with category subfolders). We detect the old default path
+        // and update it. Also, the "General" category folder was renamed to "Others" for clarity.
+        if (settings.SettingsVersion < 3)
+        {
+            // Remove \PDM subfolder if it's still the old default
+            if (settings.DefaultDownloadDirectory.EndsWith("\\PDM", StringComparison.OrdinalIgnoreCase) ||
+                settings.DefaultDownloadDirectory.EndsWith("/PDM", StringComparison.OrdinalIgnoreCase))
+            {
+                // Remove the trailing \PDM or /PDM
+                settings.DefaultDownloadDirectory = settings.DefaultDownloadDirectory[..^4];
+                changed = true;
+            }
+
+            // Rename "General" folder to "Others"
+            if (settings.CategoryFolders.TryGetValue(DownloadCategory.General, out string? folderName) &&
+                folderName == "General")
+            {
+                settings.CategoryFolders[DownloadCategory.General] = "Others";
+                changed = true;
+            }
+
+            settings.SettingsVersion = 3;
+            changed = true;
+        }
+
         return changed;
     }
 
