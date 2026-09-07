@@ -32,7 +32,7 @@ public sealed class CategoryFilterItem
 
     private static string LabelFor(DownloadCategory category) => category switch
     {
-        DownloadCategory.General => "General",
+        DownloadCategory.General => "Others",
         DownloadCategory.Documents => "Documents",
         DownloadCategory.Compressed => "Compressed",
         DownloadCategory.Music => "Music",

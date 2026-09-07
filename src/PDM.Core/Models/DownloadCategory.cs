@@ -9,6 +9,9 @@ public enum DownloadCategory
 {
     /// <summary>Everything not classified elsewhere.</summary>
     General = 0,
+    
+    /// <summary>Alias for General - Everything not classified elsewhere (renamed for UI clarity).</summary>
+    Others = 0,
 
     /// <summary>Documents (pdf, docx, xlsx, txt, ...).</summary>
     Documents = 1,

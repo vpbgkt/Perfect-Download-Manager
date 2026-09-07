@@ -97,12 +97,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<CategoryFilterItem> Categories { get; } = new[]
     {
         CategoryFilterItem.All,
-        CategoryFilterItem.For(DownloadCategory.General),
-        CategoryFilterItem.For(DownloadCategory.Documents),
-        CategoryFilterItem.For(DownloadCategory.Compressed),
         CategoryFilterItem.For(DownloadCategory.Music),
         CategoryFilterItem.For(DownloadCategory.Video),
-        CategoryFilterItem.For(DownloadCategory.Programs)
+        CategoryFilterItem.For(DownloadCategory.Programs),
+        CategoryFilterItem.For(DownloadCategory.Documents),
+        CategoryFilterItem.For(DownloadCategory.Compressed),
+        CategoryFilterItem.For(DownloadCategory.General)
     };
 
     /// <summary>License banner shown at the top of the main window.</summary>

@@ -19,7 +19,7 @@ public sealed class AppSettings
     /// <summary>Per-category folders (relative to <see cref="DefaultDownloadDirectory"/> or absolute).</summary>
     public Dictionary<DownloadCategory, string> CategoryFolders { get; set; } = new()
     {
-        [DownloadCategory.General] = "General",
+        [DownloadCategory.General] = "Others",
         [DownloadCategory.Documents] = "Documents",
         [DownloadCategory.Compressed] = "Compressed",
         [DownloadCategory.Music] = "Music",

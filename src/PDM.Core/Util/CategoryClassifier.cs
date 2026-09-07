@@ -4,7 +4,7 @@ namespace PDM.Core.Util;
 
 /// <summary>
 /// Maps a file name (or URL) to a <see cref="DownloadCategory"/> using its extension.
-/// The classification is best-effort: unknown extensions fall back to <see cref="DownloadCategory.General"/>.
+/// The classification is best-effort: unknown extensions fall back to <see cref="DownloadCategory.General"/> (Others).
 /// </summary>
 public static class CategoryClassifier
 {
