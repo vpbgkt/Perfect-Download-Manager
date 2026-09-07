@@ -353,7 +353,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Opens the folder where PDM saves downloads (Settings.DefaultDownloadDirectory, e.g.
-    /// %UserProfile%\Downloads\PDM) in Explorer. Creates it first so the very first click always
+    /// %UserProfile%\Downloads with category subfolders) in Explorer. Creates it first so the very first click always
     /// works even before anything has been downloaded.
     /// </summary>
     private void OnOpenDownloadsFolder(object? sender, RoutedEventArgs e)

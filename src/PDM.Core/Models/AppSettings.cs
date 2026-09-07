@@ -14,7 +14,7 @@ public sealed class AppSettings
 
     /// <summary>Directory used when a download does not specify one.</summary>
     public string DefaultDownloadDirectory { get; set; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "PDM");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
 
     /// <summary>Per-category folders (relative to <see cref="DefaultDownloadDirectory"/> or absolute).</summary>
     public Dictionary<DownloadCategory, string> CategoryFolders { get; set; } = new()
