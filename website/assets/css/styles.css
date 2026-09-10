@@ -1014,7 +1014,7 @@ code {
     background: linear-gradient(180deg, #f8f9fb 0%, #f0f3f7 100%);
     color: var(--fg);
     font-weight: 700;
-    padding: 18px 24px;
+    padding: 16px 24px;
     text-align: left;
     border-bottom: 2px solid var(--border);
     font-size: 1rem;
@@ -1045,7 +1045,7 @@ code {
 }
 
 .comparison-table tbody td {
-    padding: 24px 24px;
+    padding: 18px 24px;
     border-bottom: 1px solid var(--border);
     vertical-align: top;
 }
@@ -1053,7 +1053,7 @@ code {
 .comparison-table tbody td:first-child {
     font-weight: 600;
     color: var(--fg);
-    font-size: 0.98rem;
+    font-size: 0.96rem;
     background: var(--bg-alt);
 }
 
@@ -1064,65 +1064,29 @@ code {
 .comparison-table .check {
     display: inline-block;
     color: var(--success);
-    font-size: 1.6rem;
+    font-size: 1.5rem;
     font-weight: 700;
     line-height: 1;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .comparison-table .cross {
     display: inline-block;
     color: #d84545;
-    font-size: 1.6rem;
+    font-size: 1.5rem;
     font-weight: 700;
     line-height: 1;
-    margin-bottom: 10px;
-}
-
-.comparison-table .feature-title {
-    font-weight: 600;
-    color: var(--fg);
-    font-size: 1rem;
-    margin-bottom: 6px;
-    line-height: 1.4;
+    margin-bottom: 8px;
 }
 
 .comparison-table .feature-desc {
     color: var(--fg-muted);
     font-size: 0.94rem;
-    line-height: 1.7;
+    line-height: 1.6;
 }
 
 .comparison-table .pdm-col .feature-desc {
     color: rgba(27, 33, 48, 0.85);
-}
-
-/* Trust badges below comparison table */
-.trust-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    justify-content: center;
-    margin-top: 36px;
-    padding-top: 32px;
-    border-top: 1px solid var(--border);
-}
-
-.trust-badge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 18px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
-    color: var(--fg);
-    font-weight: 500;
-}
-
-.trust-text {
-    white-space: nowrap;
 }
 
 @media (max-width: 900px) {
@@ -1134,15 +1098,11 @@ code {
     
     .comparison-table thead th,
     .comparison-table tbody td {
-        padding: 16px 18px;
+        padding: 14px 18px;
     }
     
     .comparison-table {
         font-size: 0.9rem;
-    }
-    
-    .comparison-table .feature-title {
-        font-size: 0.96rem;
     }
     
     .comparison-table .feature-desc {
@@ -1153,15 +1113,11 @@ code {
 @media (max-width: 720px) {
     .comparison-table thead th,
     .comparison-table tbody td {
-        padding: 14px 14px;
+        padding: 12px 14px;
     }
     
     .comparison-table {
         font-size: 0.85rem;
-    }
-    
-    .comparison-table .feature-title {
-        font-size: 0.92rem;
     }
     
     .comparison-table .feature-desc {
@@ -1176,14 +1132,5 @@ code {
     .pdm-header img {
         width: 16px;
         height: 16px;
-    }
-    
-    .trust-badges {
-        gap: 10px;
-    }
-    
-    .trust-badge {
-        padding: 8px 14px;
-        font-size: 0.82rem;
     }
 }
