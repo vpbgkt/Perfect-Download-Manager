@@ -999,7 +999,7 @@ code {
     margin: 0 auto;
     overflow-x: auto;
     border-radius: var(--radius);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
     background: var(--card);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
@@ -1016,12 +1016,17 @@ code {
     font-weight: 700;
     padding: 16px 24px;
     text-align: left;
-    border-bottom: 2px solid var(--border);
+    border: 1px solid var(--border);
     font-size: 1rem;
 }
 
 .comparison-table thead th:first-child {
     width: 18%;
+    border-left: none;
+}
+
+.comparison-table thead th:last-child {
+    border-right: none;
 }
 
 .comparison-table thead th:nth-child(2) {
@@ -1030,7 +1035,8 @@ code {
 
 .comparison-table .pdm-col {
     background: linear-gradient(135deg, rgba(37, 99, 235, 0.03) 0%, rgba(37, 99, 235, 0.06) 100%);
-    border-left: 3px solid rgba(37, 99, 235, 0.4);
+    border-left: 3px solid var(--accent) !important;
+    border-right: 3px solid var(--accent) !important;
 }
 
 .pdm-header {
@@ -1046,7 +1052,7 @@ code {
 
 .comparison-table tbody td {
     padding: 18px 24px;
-    border-bottom: 1px solid var(--border);
+    border: 1px solid var(--border);
     vertical-align: top;
 }
 
@@ -1055,6 +1061,11 @@ code {
     color: var(--fg);
     font-size: 0.96rem;
     background: var(--bg-alt);
+    border-left: none;
+}
+
+.comparison-table tbody td:last-child {
+    border-right: none;
 }
 
 .comparison-table tbody tr:last-child td {
@@ -1091,8 +1102,8 @@ code {
 
 @media (max-width: 900px) {
     .comparison-table-wrapper {
-        border-left: none;
-        border-right: none;
+        border-left: 2px solid var(--border);
+        border-right: 2px solid var(--border);
         border-radius: 0;
     }
     
