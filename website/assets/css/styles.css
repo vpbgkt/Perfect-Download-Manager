@@ -1090,6 +1090,15 @@ code {
     margin-bottom: 8px;
 }
 
+.comparison-table .partial {
+    display: inline-block;
+    color: #e38b00;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
 .comparison-table .feature-desc {
     color: var(--fg-muted);
     font-size: 0.94rem;

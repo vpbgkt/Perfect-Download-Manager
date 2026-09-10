@@ -117,61 +117,130 @@
         </p>
 
         <h2>PDM vs Internet Download Manager: feature comparison</h2>
-        <div class="compare-wrap">
-            <table class="compare-table">
-                <caption>How Perfect Download Manager compares to Internet Download Manager, feature by feature.</caption>
+        <div class="comparison-table-wrapper">
+            <table class="comparison-table">
                 <thead>
                     <tr>
-                        <th scope="col">Feature</th>
-                        <th scope="col">Perfect Download Manager (PDM)</th>
-                        <th scope="col">Internet Download Manager (IDM)</th>
+                        <th>Feature</th>
+                        <th class="pdm-col">
+                            <div class="pdm-header">
+                                <img src="/assets/img/logo-48.png" alt="" width="20" height="20" />
+                                Perfect Download Manager
+                            </div>
+                        </th>
+                        <th>Internet Download Manager</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <th scope="row">Parallel connections</th>
-                        <td class="col-pdm">Up to 32 connections per download</td>
-                        <td>Multi-connection (segmented downloading)</td>
+                        <td><strong>Parallel Connections</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Up to 32 connections per download</div>
+                        </td>
+                        <td>
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Multi-connection (segmented downloading)</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Resume broken downloads</th>
-                        <td class="col-pdm">Yes — continuous disk checkpointing, survives crash, reboot, or lost Wi-Fi</td>
-                        <td>Yes</td>
+                        <td><strong>Resume Downloads</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Continuous disk checkpointing — survives crash, reboot, or lost Wi-Fi</div>
+                        </td>
+                        <td>
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Resume support available</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Browser integration</th>
-                        <td class="col-pdm">Chrome, Edge, Brave (Manifest V3 extension)</td>
-                        <td>Chrome, Edge, Firefox, Opera</td>
+                        <td><strong>Auto Extract &amp; Actions</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc"><strong>Fast auto-extract (unzip), open files directly after download, auto-shutdown PC for late-night downloads</strong></div>
+                        </td>
+                        <td>
+                            <span class="partial">~</span>
+                            <div class="feature-desc">Limited automation features</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Firefox support</th>
-                        <td class="col-pdm">Planned — not yet available</td>
-                        <td>Yes</td>
+                        <td><strong>After Trial Expires</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc"><strong>Continue downloading with 2 connections (still 2× faster than browser downloads which use only 1 connection)</strong></div>
+                        </td>
+                        <td>
+                            <span class="cross">✗</span>
+                            <div class="feature-desc">Stops working — requires purchase to continue</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Price</th>
-                        <td class="col-pdm">Free (personal + commercial) during early access</td>
-                        <td>Paid — one-time license with a free trial</td>
+                        <td><strong>Browser Integration</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Chrome, Edge, Brave (Manifest V3 extension)</div>
+                        </td>
+                        <td>
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Chrome, Edge, Firefox, Opera</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Telemetry &amp; ads</th>
-                        <td class="col-pdm">None — no telemetry, no analytics, no ads, no sign-in</td>
-                        <td>Proprietary, closed-source; data practices not publicly documented</td>
+                        <td><strong>Firefox Support</strong></td>
+                        <td class="pdm-col">
+                            <span class="partial">~</span>
+                            <div class="feature-desc">Planned — not yet available</div>
+                        </td>
+                        <td>
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Fully supported</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Platform support</th>
-                        <td class="col-pdm">Windows 10 (build 1809+) &amp; Windows 11, 64-bit</td>
-                        <td>Windows only</td>
+                        <td><strong>Price</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc"><strong>Free</strong> for personal &amp; commercial use</div>
+                        </td>
+                        <td>
+                            <span class="cross">✗</span>
+                            <div class="feature-desc">Paid — one-time license with limited free trial</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Installer code signing</th>
-                        <td class="col-pdm">Not yet — SmartScreen prompt on first run (code signing planned). Updates are ECDSA-signed &amp; SHA-256 verified</td>
-                        <td>Signed installer</td>
+                        <td><strong>Telemetry &amp; Ads</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc">None — no telemetry, no analytics, no ads, no sign-in</div>
+                        </td>
+                        <td>
+                            <span class="partial">~</span>
+                            <div class="feature-desc">Closed-source; data practices not publicly documented</div>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">Interface</th>
-                        <td class="col-pdm">Modern Fluent-styled WPF, dark/light themes, Mica title bar</td>
-                        <td>Long-established classic Windows interface</td>
+                        <td><strong>Platform</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Windows 10 (build 1809+) &amp; 11, 64-bit</div>
+                        </td>
+                        <td>
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Windows only</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Interface</strong></td>
+                        <td class="pdm-col">
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Modern Fluent-styled WPF, dark/light themes, Mica title bar</div>
+                        </td>
+                        <td>
+                            <span class="check">✓</span>
+                            <div class="feature-desc">Classic Windows interface</div>
+                        </td>
                     </tr>
                 </tbody>
             </table>
