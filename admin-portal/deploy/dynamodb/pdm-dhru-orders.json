@@ -1,0 +1,59 @@
+{
+  "TableName": "pdm-dhru-orders",
+  "KeySchema": [
+    {
+      "AttributeName": "orderId",
+      "KeyType": "HASH"
+    }
+  ],
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "orderId",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "resellerAccountId",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "createdAt",
+      "AttributeType": "S"
+    }
+  ],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "resellerAccountId-createdAt-index",
+      "KeySchema": [
+        {
+          "AttributeName": "resellerAccountId",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "createdAt",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      }
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST",
+  "StreamSpecification": {
+    "StreamEnabled": false
+  },
+  "SSESpecification": {
+    "Enabled": true,
+    "SSEType": "KMS"
+  },
+  "Tags": [
+    {
+      "Key": "Application",
+      "Value": "PDM-Portal"
+    },
+    {
+      "Key": "Component",
+      "Value": "Dhru-API"
+    }
+  ]
+}

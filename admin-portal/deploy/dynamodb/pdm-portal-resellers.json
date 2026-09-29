@@ -1,10 +1,44 @@
 {
   "TableName": "pdm-portal-resellers",
   "AttributeDefinitions": [
-    { "AttributeName": "resellerAccountId", "AttributeType": "S" }
+    { "AttributeName": "resellerAccountId", "AttributeType": "S" },
+    { "AttributeName": "accountType", "AttributeType": "S" },
+    { "AttributeName": "parentAccountId", "AttributeType": "S" },
+    { "AttributeName": "contactEmail", "AttributeType": "S" },
+    { "AttributeName": "dhruApiUsername", "AttributeType": "S" }
   ],
   "KeySchema": [
     { "AttributeName": "resellerAccountId", "KeyType": "HASH" }
+  ],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "accountType-index",
+      "KeySchema": [
+        { "AttributeName": "accountType", "KeyType": "HASH" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "parentAccountId-index",
+      "KeySchema": [
+        { "AttributeName": "parentAccountId", "KeyType": "HASH" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "contactEmail-index",
+      "KeySchema": [
+        { "AttributeName": "contactEmail", "KeyType": "HASH" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "dhruApiUsername-index",
+      "KeySchema": [
+        { "AttributeName": "dhruApiUsername", "KeyType": "HASH" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    }
   ],
   "BillingMode": "PAY_PER_REQUEST",
   "SSESpecification": { "Enabled": true }
