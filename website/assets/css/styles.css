@@ -1154,3 +1154,115 @@ code {
         height: 16px;
     }
 }
+
+
+/* ============================================
+   Pricing Section
+   ============================================ */
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2rem;
+    margin-top: 3rem;
+}
+
+.pricing-card {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 2rem;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pricing-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+}
+
+.pricing-pro {
+    border-color: #2563eb;
+    box-shadow: 0 4px 12px rgba(37,99,235,0.1);
+}
+
+.pricing-badge {
+    display: inline-block;
+    background: #10b981;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.pricing-badge-popular {
+    background: #2563eb;
+}
+
+.pricing-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #1f2937;
+}
+
+.pricing-price {
+    margin-bottom: 1.5rem;
+}
+
+.price-amount {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1;
+}
+
+.price-period {
+    color: #6b7280;
+    font-size: 1rem;
+    margin-left: 0.25rem;
+}
+
+.pricing-features {
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0 2rem 0;
+    min-height: 280px;
+}
+
+.pricing-features li {
+    padding: 0.5rem 0;
+    color: #4b5563;
+    font-size: 0.95rem;
+}
+
+.pricing-note {
+    text-align: center;
+    margin-top: 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e5e7eb;
+    color: #6b7280;
+    font-size: 0.9rem;
+}
+
+.pricing-note a {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
+.nav-github {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+@media (max-width: 768px) {
+    .pricing-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    .pricing-features {
+        min-height: auto;
+    }
+}

@@ -1,8 +1,59 @@
-# Perfect Download Manager (PDM)[PerfectDownloadManager.com]
+# Perfect Download Manager (PDM)
 
-A high-performance, commercial-grade download manager for Windows 10/11 as an original
-alternative to Internet Download Manager. Built incrementally; each stage ships tested,
-production-quality code before the next.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-10-purple.svg)](https://dotnet.microsoft.com/)
+[![Tests](https://img.shields.io/badge/tests-81%20passing-brightgreen.svg)](tests)
+
+A high-performance, open source download manager for Windows 10/11 — a modern alternative to Internet Download Manager. Built with .NET 10 and designed for speed, reliability, and extensibility.
+
+🌟 **[PerfectDownloadManager.com](https://PerfectDownloadManager.com)** | 📚 **[Documentation](docs/)** | 💬 **[Community](https://github.com/yourusername/PDM/discussions)** | 🐛 **[Issues](https://github.com/yourusername/PDM/issues)**
+
+---
+
+## 🌍 Our Mission
+
+**Making efficient, reliable downloading accessible to everyone — for free.**
+
+PDM serves users worldwide, especially those in:
+- 🌐 Bandwidth-constrained regions where every byte counts
+- 📚 Educational institutions and research communities managing large datasets
+- 💰 Users with metered connections who need intelligent download management
+- 🚀 Developers and power users who demand speed and reliability
+
+**Goal:** Serve 100,000+ users globally by end of 2027, with AI-powered features free for all Community Edition users.
+
+## 🎯 Community Edition vs Premium Support
+
+### 🆓 Community Edition (Free & Open Source)
+Perfect Download Manager Community Edition is **100% free and open source** under the MIT License. It includes:
+- ✅ All core download features (multi-connection, resume, queue management)
+- ✅ Modern WPF UI with Fluent Design and Mica effects
+- ✅ Browser integration (Chrome, Edge, Brave)
+- ✅ Automatic updates
+- ✅ Categories, scheduling, and notifications
+- ✅ Community support via GitHub Discussions
+
+### 💎 Premium Support Plans
+Help sustain development and get priority assistance:
+
+#### **Professional Plan** - $29/year
+- ✅ All Community Edition features
+- 🎫 Priority email support (24-hour response time)
+- 📧 Direct access to the core development team
+- 🎁 Early access to new features
+- ⭐ Support open source development
+
+#### **Enterprise Plan** - $199/year
+- ✅ Everything in Professional
+- 📞 Priority support (4-hour response time)
+- 🔧 Custom integration assistance
+- 📊 Dedicated Slack/Discord channel
+- 🛡️ Extended security updates
+- 📝 Service Level Agreement (SLA)
+
+**[Get Premium Support →](https://perfectdownloadmanager.com/pricing)**
+
+> **Note:** All features are available in the free Community Edition. Premium plans only unlock priority support and direct assistance from maintainers.
 
 ## Tech stack
 
@@ -15,18 +66,42 @@ production-quality code before the next.
 - **PDM.Cli** — thin command-line front end used to exercise the engine.
 - **xUnit** — **81 tests**, all passing.
 
-## Documentation
+## 🤖 AI-Powered Features (Coming Soon)
 
-- **[docs/USER-GUIDE.md](docs/USER-GUIDE.md)** — end-user manual (install, download, activate, settings).
-- **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)** — Chrome/Edge/Brave extension install + use.
-- **[docs/API-REFERENCE.md](docs/API-REFERENCE.md)** — licensing endpoints (`/trial`, `/activate`, `/validate`) with examples.
-- **[docs/COMMANDS.md](docs/COMMANDS.md)** — cheat sheet for build/test/publish/install and operator tasks.
-- **[docs/SECURITY.md](docs/SECURITY.md)** — anti-tamper / anti-crack threat model.
-- **[docs/REMAINING-WORK.md](docs/REMAINING-WORK.md)** — what's left before public launch.
+Thanks to support from AI partners, we're building intelligent features powered by Claude API:
 
-## Build, run, and test — trial mode
+- 🧠 **Smart Categorization** — AI automatically organizes downloads by analyzing URLs and content
+- 🛡️ **Safety Analysis** — Claude flags suspicious downloads with explanations
+- 💬 **Natural Language Interface** — "Download the latest Python 3.12 for Windows" → done
+- 📊 **Intelligent Scheduling** — AI learns your patterns and optimizes download timing
+- 📝 **Document Summaries** — Get AI summaries of downloaded PDFs (opt-in)
 
-The app runs in **trial mode out of the box** — a 14-day free trial. First launch anchors the trial to your machine's fingerprint on the licensing server so reinstalling can't reset it.
+**All AI features will be free in the Community Edition.** See **[docs/AI_ROADMAP.md](docs/AI_ROADMAP.md)** for details.
+
+---
+
+## 📚 Documentation
+
+### User Documentation
+- **[docs/USER-GUIDE.md](docs/USER-GUIDE.md)** — end-user manual (install, download, settings)
+- **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)** — Chrome/Edge/Brave extension setup
+
+### Developer Documentation
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — system design, modules, data flow
+- **[docs/AI_ROADMAP.md](docs/AI_ROADMAP.md)** — Claude API integration roadmap
+- **[docs/API-REFERENCE.md](docs/API-REFERENCE.md)** — licensing API endpoints
+- **[docs/COMMANDS.md](docs/COMMANDS.md)** — build/test/publish commands
+- **[docs/SECURITY.md](docs/SECURITY.md)** — security model and threat analysis
+
+### Project Management
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — quarterly goals and milestones
+- **[CHANGELOG.md](CHANGELOG.md)** — version history
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to contribute
+- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — community standards
+
+## 🚀 Quick Start
+
+The Community Edition is **fully functional without any trial limitations or license keys**. Simply build and run!
 
 ### Prerequisites
 
@@ -55,7 +130,7 @@ Expected: **81 passed, 0 failed** across four test projects (`PDM.Core.Tests`, `
 dotnet run --project src/PDM.App
 ```
 
-You should see the main window with the Fluent/Mica look and a **license banner** at the top showing "Free trial — 14 days left". On first launch a fresh trial record is created (encrypted with Windows DPAPI) at `%LOCALAPPDATA%\PerfectDownloadManager\license.dat`.
+You should see the main window with the beautiful Fluent/Mica design. The Community Edition runs without any trial limitations or license prompts.
 
 Try:
 - **Add Download** → paste a URL and hit Enter.
@@ -63,8 +138,7 @@ Try:
 - **Drag a link** from any browser onto the window.
 - Right-click a download for pause/resume/open/show-in-folder/remove.
 - **Settings** → adjust connections, speed cap, overwrite policy, quiet-hours schedule, notifications, theme.
-- **License** → view your trial status and machine fingerprint (activation is available but not required).
-- **Check for Updates** → will say "not configured for this build" until an update manifest URL and public key are provided.
+- **Check for Updates** → automatic update checking keeps you on the latest version.
 
 ### Run the CLI (optional)
 
@@ -116,13 +190,13 @@ Press Ctrl+C to pause; re-run the same command to resume from persisted state.
 
 ### Licensing (Stage 6)
 
-- **Trial** — 30 days from first launch, followed by a 7-day grace period, then expired.
-- **Hardware binding** — machine fingerprint from Windows machine GUID + system volume serial, SHA-256'd.
-- **DPAPI store** — license record encrypted at rest with per-user Windows DPAPI + static entropy.
-- **`ILicenseTransport`** — the seam where a Keygen (self-hosted or cloud) client plugs in later.
-- **Revocation** — periodic `RefreshAsync` clears the local key if the server explicitly says "revoked/suspended/banned"; transient failures do not lock the user out.
+The Community Edition is free and open source without any licensing restrictions. For those who want to support the project and receive priority support:
 
-**Server decision still open.** See `docs/licensing-decision.md` (this README) for the cost analysis. Meanwhile the trial + local activation UI is fully working; no server is required to build or run.
+- **Premium Support Plans** — optional paid plans that provide priority email/chat support, early access to features, and help sustain development.
+- **Hardware binding & activation** — infrastructure exists for enterprise deployments that need centralized license management (optional).
+- **Self-hosted licensing server** — the admin portal in `admin-portal/` allows organizations to run their own license server if desired.
+
+**For most users:** Just use the free Community Edition without any activation or license keys!
 
 ### Auto-update (Stage 7)
 
@@ -150,3 +224,70 @@ Press Ctrl+C to pause; re-run the same command to resume from persisted state.
 - Update manifests are ECDSA-signed; a compromised update host cannot force malicious payloads unless the private signing key is also compromised.
 - HTTPS is required for update fetch; the `HttpClient` uses the OS trust store.
 - CVE-2025-6965 (native SQLite advisory) is unreachable in our threat model; suppression documented inline in `PDM.Infrastructure.csproj`.
+
+## 🤝 Contributing
+
+We welcome contributions from the community! Whether you're fixing bugs, adding features, or improving documentation, your help is appreciated.
+
+### How to Contribute
+1. **Fork the repository** and clone it locally
+2. **Create a branch** for your feature: `git checkout -b feature/amazing-feature`
+3. **Make your changes** and add tests if applicable
+4. **Run the test suite**: `dotnet test` (ensure all 81 tests pass)
+5. **Commit your changes**: `git commit -m 'Add amazing feature'`
+6. **Push to your fork**: `git push origin feature/amazing-feature`
+7. **Open a Pull Request** with a clear description
+
+### Development Guidelines
+- Follow the existing code style and conventions
+- Add tests for new functionality
+- Update documentation as needed
+- Keep commits atomic and well-described
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+## 📄 License
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+You are free to:
+- ✅ Use commercially
+- ✅ Modify
+- ✅ Distribute
+- ✅ Use privately
+
+## 🙏 Support the Project
+
+Perfect Download Manager is free and open source. If you find it useful, consider:
+
+- ⭐ **Star this repository** to help others discover it
+- 💬 **Join discussions** and help other users
+- 🐛 **Report bugs** and suggest features
+- 🔧 **Contribute code** or documentation
+- 💎 **Get Premium Support** to help sustain development
+
+**[Become a Sponsor →](https://perfectdownloadmanager.com/pricing)**
+
+## 📧 Contact & Community
+
+- **Website**: [PerfectDownloadManager.com](https://PerfectDownloadManager.com)
+- **GitHub Discussions**: [Community Forum](https://github.com/yourusername/PDM/discussions)
+- **Issues**: [Bug Reports & Feature Requests](https://github.com/yourusername/PDM/issues)
+- **Email**: support@perfectdownloadmanager.com
+- **Premium Support**: [Get Priority Help](https://perfectdownloadmanager.com/pricing)
+
+## 🌟 Acknowledgments
+
+Built with:
+- [.NET 10](https://dotnet.microsoft.com/) - Microsoft's modern development platform
+- [WPF-UI](https://wpfui.lepo.co/) - Modern Fluent Design controls
+- [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) - MVVM helpers
+- [Serilog](https://serilog.net/) - Structured logging
+
+Special thanks to all contributors who help make PDM better!
+
+---
+
+<p align="center">
+  Made with ❤️ by the PDM Community | <a href="https://perfectdownloadmanager.com">PerfectDownloadManager.com</a>
+</p>
