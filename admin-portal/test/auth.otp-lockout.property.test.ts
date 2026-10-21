@@ -84,6 +84,7 @@ function makeHarness(
   fake.registerKeySchema(ADMINS_TABLE, "firebaseUid");
 
   const record: AdminRecord = {
+    adminId: uid,
     firebaseUid: uid,
     email: `${uid}@example.com`,
     role,

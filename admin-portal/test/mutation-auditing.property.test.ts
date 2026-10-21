@@ -9,6 +9,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import fc from "fast-check";
 import { FakeDynamoClient } from "../lib/dev/in-memory-dynamo.ts";
 import { createAuditLog, AUDIT_TABLE_NAME, isSecretKey } from "../lib/audit.ts";
@@ -185,12 +186,22 @@ describe("Property 27: Every successful mutation is fully audited", () => {
             break;
           }
           case "reseller-create": {
-            const r = await h.accounts.createReseller({ orgName: "Org", contactEmail: "o@e.com" }, superActor);
+            const r = await h.accounts.createAccount({
+              accountType: "reseller",
+              orgName: "Org",
+              contactEmail: "o@e.com",
+              password: randomUUID(),
+            }, superActor);
             assert.strictEqual(r.ok, true);
             break;
           }
           case "reseller-suspend": {
-            const created = await h.accounts.createReseller({ orgName: "Org", contactEmail: "o@e.com" }, superActor);
+            const created = await h.accounts.createAccount({
+              accountType: "reseller",
+              orgName: "Org",
+              contactEmail: "o@e.com",
+              password: randomUUID(),
+            }, superActor);
             assert.strictEqual(created.ok, true);
             if (!created.ok) return;
             const beforeSuspend = h.dynamo.itemCount(AUDIT_TABLE_NAME);

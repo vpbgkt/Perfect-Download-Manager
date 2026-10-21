@@ -51,16 +51,20 @@ export async function GET(
       Key: { resellerAccountId: accountId },
     });
 
-    if (!accountData.item) {
+    if (!accountData) {
       return NextResponse.json(
         { error: "not_found", message: "Account not found" },
         { status: 404 }
       );
     }
 
-    const account = accountData.item as any;
+    const account = accountData;
 
-    if (!account.dhruApiUrl || !account.dhruUsername || !account.dhruApiKey) {
+    if (
+      typeof account.dhruApiUrl !== "string" ||
+      typeof account.dhruUsername !== "string" ||
+      typeof account.dhruApiKey !== "string"
+    ) {
       return NextResponse.json(
         {
           error: "configuration_missing",

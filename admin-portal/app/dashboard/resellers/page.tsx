@@ -96,6 +96,9 @@ export default function ResellersPage() {
               <TR>
                 <TH>Organization</TH>
                 <TH>Contact</TH>
+                <TH>Type</TH>
+                <TH>Balance</TH>
+                <TH>Discount</TH>
                 <TH>Account ID</TH>
                 <TH>State</TH>
                 <TH className="text-right">Action</TH>
@@ -106,6 +109,21 @@ export default function ResellersPage() {
                 <TR key={r.resellerAccountId}>
                   <TD className="font-medium">{r.orgName}</TD>
                   <TD>{r.contactEmail}</TD>
+                  <TD>
+                    <Badge tone={
+                      r.accountType === "distributor" ? "info" : 
+                      r.accountType === "dealer" ? "warning" : 
+                      "default"
+                    }>
+                      {r.accountType || "reseller"}
+                    </Badge>
+                  </TD>
+                  <TD>
+                    <span className={`font-mono ${(r.balance ?? 0) < 100 ? "text-orange-600 font-bold" : ""}`}>
+                      {(r.balance ?? 0).toLocaleString()}
+                    </span>
+                  </TD>
+                  <TD className="text-gray-600">{r.discountPercent ?? 0}%</TD>
                   <TD className="font-mono text-xs break-all">{r.resellerAccountId}</TD>
                   <TD>
                     <Badge tone={r.state === "active" ? "success" : "warning"}>{r.state}</Badge>
@@ -144,6 +162,10 @@ export default function ResellersPage() {
 function CreateReseller({ onCreated }: { onCreated: () => void }) {
   const [orgName, setOrgName] = React.useState("");
   const [contactEmail, setContactEmail] = React.useState("");
+  const [accountType, setAccountType] = React.useState<"distributor" | "reseller" | "dealer">("reseller");
+  const [password, setPassword] = React.useState("");
+  const [initialBalance, setInitialBalance] = React.useState("0");
+  const [discountPercent, setDiscountPercent] = React.useState("0");
   const [error, setError] = React.useState<string | null>(null);
   const [created, setCreated] = React.useState<ResellerAccount | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -154,10 +176,21 @@ function CreateReseller({ onCreated }: { onCreated: () => void }) {
     setError(null);
     setCreated(null);
     try {
-      const acct = await api.createReseller({ orgName: orgName.trim(), contactEmail: contactEmail.trim() });
+      const acct = await api.createReseller({
+        orgName: orgName.trim(),
+        contactEmail: contactEmail.trim(),
+        accountType,
+        password: password.trim(),
+        initialBalance: parseFloat(initialBalance) || 0,
+        discountPercent: parseFloat(discountPercent) || 0,
+      });
       setCreated(acct);
       setOrgName("");
       setContactEmail("");
+      setPassword("");
+      setAccountType("reseller");
+      setInitialBalance("0");
+      setDiscountPercent("0");
       onCreated();
     } catch (err) {
       setError(err instanceof ApiError ? `${err.field ? err.field + ": " : ""}${err.message}` : "Create failed");
@@ -169,27 +202,94 @@ function CreateReseller({ onCreated }: { onCreated: () => void }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create reseller</CardTitle>
-        <CardDescription>Organization name and contact email are required.</CardDescription>
+        <CardTitle>Create account</CardTitle>
+        <CardDescription>Create a new distributor, reseller, or dealer account with initial balance and discount.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <form onSubmit={onSubmit} className="grid gap-4">
+          {/* Row 1: Account Type */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="org">Organization name</Label>
-            <Input id="org" required value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+            <Label htmlFor="accountType">Account Type</Label>
+            <select
+              id="accountType"
+              value={accountType}
+              onChange={(e) => setAccountType(e.target.value as "distributor" | "reseller" | "dealer")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              required
+            >
+              <option value="distributor">Distributor (Top tier - can create resellers)</option>
+              <option value="reseller">Reseller (Mid tier - can create dealers)</option>
+              <option value="dealer">Dealer (Bottom tier - end customer)</option>
+            </select>
           </div>
+
+          {/* Row 2: Org Name & Email */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="org">Organization name</Label>
+              <Input id="org" required value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email">Contact email</Label>
+              <Input id="email" type="email" required value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Row 3: Password */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">Contact email</Label>
-            <Input id="email" type="email" required value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Minimum 8 characters"
+              minLength={8}
+            />
+            <span className="text-xs text-gray-500">User can change this after first login</span>
           </div>
-          <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create"}</Button>
+
+          {/* Row 4: Balance & Discount */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="balance">Initial Balance (credits)</Label>
+              <Input
+                id="balance"
+                type="number"
+                min="0"
+                step="1"
+                value={initialBalance}
+                onChange={(e) => setInitialBalance(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="discount">Discount Percent (%)</Label>
+              <Input
+                id="discount"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Account"}</Button>
         </form>
         {error && <div className="mt-3"><ErrorText>{error}</ErrorText></div>}
         {created && (
-          <p className="mt-3 text-sm">
-            <SuccessText>Created.</SuccessText>{" "}
-            <span className="font-mono text-xs break-all">ID: {created.resellerAccountId}</span>
-          </p>
+          <div className="mt-3">
+            <SuccessText>Account created successfully!</SuccessText>
+            <div className="mt-2 text-sm">
+              <div className="font-mono text-xs break-all">ID: {created.resellerAccountId}</div>
+              <div className="text-xs text-gray-600 mt-1">Type: {created.accountType}</div>
+              <div className="text-xs text-gray-600">Balance: {created.balance} credits</div>
+              <div className="text-xs text-gray-600">Discount: {created.discountPercent}%</div>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

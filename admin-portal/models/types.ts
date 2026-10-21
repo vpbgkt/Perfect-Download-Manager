@@ -139,10 +139,21 @@ export interface SeoUpdateBody {
 /** Reseller account record. */
 export interface ResellerAccount {
   resellerAccountId: string;
+  accountType: "distributor" | "reseller" | "dealer";
   orgName: string;
   contactEmail: string;
   state: "active" | "suspended";
+  
+  // Balance & pricing
+  balance: number;
+  discountPercent: number;
+  
+  // Hierarchy
+  parentAccountId?: string;
+  
+  // Timestamps
   createdAt?: string;
+  lastLoginAt?: string;
 }
 
 /** Paginated reseller list response. */
@@ -184,4 +195,94 @@ export interface AuditEntry {
 export interface AuditQueryResult {
   entries: AuditEntry[];
   nextToken: string | null;
+}
+
+/** Balance transaction record. */
+export interface BalanceTransaction {
+  transactionId: string;
+  accountId: string;
+  type: "credit" | "debit";
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  reason: string;
+  relatedEntity?: string;
+  createdBy: string;
+  createdByRole: string;
+  createdAt: string;
+}
+
+/** Paginated transaction query result. */
+export interface TransactionQueryResult {
+  transactions: BalanceTransaction[];
+  nextToken: string | null;
+}
+
+/** Order source type. */
+export type OrderSource = "dashboard" | "api";
+
+/** Order status type. */
+export type OrderStatus = "completed" | "failed" | "refunded";
+
+/** Order record from the order history. */
+export interface OrderRecord {
+  orderId: string;
+  accountId: string;
+  licenseKey: string;
+  plan: string;
+  quantity: number;
+  basePrice: number;
+  discountPercent: number;
+  discountAmount: number;
+  finalPrice: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  status: OrderStatus;
+  source: OrderSource;
+  transactionId?: string;
+  createdAt: string;
+}
+
+/** Paginated order list result. */
+export interface OrderListResult {
+  items: OrderRecord[];
+  nextToken?: string;
+}
+
+/** Admin-configured product plan for license purchases. */
+export interface ProductPlan {
+  planId: string;
+  name: string;
+  durationMonths: number;
+  price: number;
+  maxActivations: number;
+  features: string[];
+  status: "active" | "inactive";
+  sortOrder: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Attributes accepted when creating a product plan. */
+export interface CreatePlanBody {
+  name: string;
+  durationMonths: number;
+  price: number;
+  maxActivations?: number;
+  features?: string[];
+  sortOrder?: number;
+  description?: string;
+}
+
+/** Attributes accepted when updating a product plan. */
+export interface UpdatePlanBody {
+  name?: string;
+  durationMonths?: number;
+  price?: number;
+  maxActivations?: number;
+  features?: string[];
+  status?: "active" | "inactive";
+  sortOrder?: number;
+  description?: string;
 }

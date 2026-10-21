@@ -82,6 +82,9 @@ canary.txt
 *.token
 license-*.json
 
+# Local DynamoDB account backups may contain real identifiers and contact data.
+admin-portal/deploy/dynamodb/pdm-portal-admins-backup-*.json
+
 # Local scratch
 stack-info.json
 deploy-out.log

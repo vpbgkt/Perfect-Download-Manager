@@ -116,16 +116,14 @@ describe("Create form — prefix input (Req 5.13)", () => {
       "create page must check for 'super_admin' role");
   });
 
-  it("prefix input is absent when isAdmin is false (reseller)", () => {
-    // The prefix section must be wrapped in a conditional render: {isAdmin && (...)}
-    // This means for a reseller (isAdmin = false), it won't render.
-    assert.match(CREATE_PAGE, /\{isAdmin\s*&&/,
-      "prefix section must be conditionally rendered with {isAdmin && ...}");
-    // Confirm the keyPrefix input is INSIDE the conditional block
-    const isAdminBlockStart = CREATE_PAGE.indexOf("{isAdmin &&");
+  it("returns no license form when isAdmin is false (reseller)", () => {
+    assert.match(CREATE_PAGE, /if\s*\(\s*!isAdmin\s*\)\s*return\s+null/,
+      "non-admin users must not render the license form");
+    // The prefix control can remain unconditional inside the admin-only page.
     const keyPrefixLocation = CREATE_PAGE.indexOf('id="keyPrefix"');
-    assert.ok(isAdminBlockStart < keyPrefixLocation,
-      "keyPrefix input must appear after the isAdmin conditional guard");
+    const adminGuardLocation = CREATE_PAGE.indexOf("if (!isAdmin) return null;");
+    assert.ok(adminGuardLocation >= 0 && adminGuardLocation < keyPrefixLocation,
+      "keyPrefix input must be behind the admin-only render guard");
   });
 });
 

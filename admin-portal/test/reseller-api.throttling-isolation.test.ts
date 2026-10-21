@@ -102,9 +102,13 @@ function seedKey(dynamo: FakeDynamoClient, secret: string, opts: { reseller: str
 function seedReseller(dynamo: FakeDynamoClient, id: string, state: "active" | "suspended") {
   const rec: ResellerAccountRecord = {
     resellerAccountId: id,
+    accountType: "reseller",
     orgName: "Org",
     contactEmail: "o@e.com",
+    passwordHash: "",
     state,
+    balance: 0,
+    discountPercent: 0,
   };
   void dynamo.put({ TableName: RESELLERS_TABLE, Item: rec as unknown as Record<string, unknown> });
 }

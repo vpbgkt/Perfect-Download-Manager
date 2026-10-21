@@ -10,9 +10,22 @@ import { Input, Label } from "../../../../components/ui/input.tsx";
 import { ExpiryField } from "../../../../components/ui/expiry-field.tsx";
 import { useSession } from "../../../../components/dashboard/session-provider.tsx";
 
+/**
+ * Admin-only freeform license creation page.
+ * Non-admin users are redirected to /dashboard/purchase.
+ */
 export default function NewLicensePage() {
   const router = useRouter();
   const { session } = useSession();
+  const isAdmin = session?.role === "admin" || session?.role === "super_admin";
+
+  // Redirect non-admin users to the plan-based purchase page
+  React.useEffect(() => {
+    if (session && !isAdmin) {
+      router.replace("/dashboard/purchase");
+    }
+  }, [session, isAdmin, router]);
+
   const [plan, setPlan] = React.useState("standard");
   const [maxActivations, setMaxActivations] = React.useState("1");
   const [owner, setOwner] = React.useState("");
@@ -27,13 +40,11 @@ export default function NewLicensePage() {
   const [customerCompany, setCustomerCompany] = React.useState("");
   const [customerNotes, setCustomerNotes] = React.useState("");
 
-  // Custom key prefix (admin/super_admin only)
+  // Custom key prefix
   const [keyPrefix, setKeyPrefix] = React.useState("");
 
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-
-  const isAdmin = session?.role === "admin" || session?.role === "super_admin";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,71 +82,75 @@ export default function NewLicensePage() {
     }
   }
 
+  // Don't render form for non-admin (they'll be redirected)
+  if (!isAdmin) return null;
+
   return (
     <>
-      <PageHeader title="New license" description="Mint a new license key." />
-      <Card className="max-w-xl">
-        <CardContent>
-          <form onSubmit={onSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="plan">Plan</Label>
-              <Input id="plan" value={plan} onChange={(e) => setPlan(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="max">Max activations</Label>
-              <Input
-                id="max"
-                type="number"
-                min={1}
-                required
-                value={maxActivations}
-                onChange={(e) => setMaxActivations(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="owner">Owner (optional)</Label>
-              <Input id="owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
-            </div>
-            <ExpiryField id="expires" label="Expires at (optional)" value={expiresAt} onChange={setExpiresAt} />
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="features">Features (comma-separated, optional)</Label>
-              <Input id="features" value={features} onChange={(e) => setFeatures(e.target.value)} />
-            </div>
+      <PageHeader title="New License" description="Mint a new license key (admin)." />
 
-            {/* Customer information block */}
-            <div className="flex flex-col gap-3 border-t pt-4 mt-2">
-              <div>
-                <h3 className="text-sm font-medium text-[var(--color-fg)]">Customer information</h3>
-                <p className="text-xs text-[var(--color-muted)] mt-0.5">Optional, but recommended</p>
+      <div className="flex flex-col gap-6 max-w-2xl">
+        <Card>
+          <CardContent>
+            <form onSubmit={onSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="plan">Plan</Label>
+                <Input id="plan" value={plan} onChange={(e) => setPlan(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="customerName">Name</Label>
-                <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                <Label htmlFor="max">Max activations</Label>
+                <Input
+                  id="max"
+                  type="number"
+                  min={1}
+                  required
+                  value={maxActivations}
+                  onChange={(e) => setMaxActivations(e.target.value)}
+                />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="customerEmail">Email</Label>
-                <Input id="customerEmail" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+                <Label htmlFor="owner">Owner (optional)</Label>
+                <Input id="owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
               </div>
+              <ExpiryField id="expires" label="Expires at (optional)" value={expiresAt} onChange={setExpiresAt} />
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="customerPhone">Phone</Label>
-                <Input id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                <Label htmlFor="features">Features (comma-separated, optional)</Label>
+                <Input id="features" value={features} onChange={(e) => setFeatures(e.target.value)} />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="customerCountry">Country code</Label>
-                <Input id="customerCountry" maxLength={2} placeholder="e.g. US" value={customerCountry} onChange={(e) => setCustomerCountry(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="customerCompany">Company</Label>
-                <Input id="customerCompany" value={customerCompany} onChange={(e) => setCustomerCompany(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="customerNotes">Notes</Label>
-                <Input id="customerNotes" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} />
-              </div>
-            </div>
 
-            {/* Custom key prefix — admin/super_admin only */}
-            {isAdmin && (
+              {/* Customer information block */}
+              <div className="flex flex-col gap-3 border-t pt-4 mt-2">
+                <div>
+                  <h3 className="text-sm font-medium text-[var(--color-fg)]">Customer information</h3>
+                  <p className="text-xs text-[var(--color-muted)] mt-0.5">Optional, but recommended</p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="customerName">Name</Label>
+                  <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="customerEmail">Email</Label>
+                  <Input id="customerEmail" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="customerPhone">Phone</Label>
+                  <Input id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="customerCountry">Country code</Label>
+                  <Input id="customerCountry" maxLength={2} placeholder="e.g. US" value={customerCountry} onChange={(e) => setCustomerCountry(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="customerCompany">Company</Label>
+                  <Input id="customerCompany" value={customerCompany} onChange={(e) => setCustomerCompany(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="customerNotes">Notes</Label>
+                  <Input id="customerNotes" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} />
+                </div>
+              </div>
+
+              {/* Custom key prefix */}
               <div className="flex flex-col gap-1.5 border-t pt-4 mt-2">
                 <Label htmlFor="keyPrefix">Custom key prefix (optional)</Label>
                 <Input
@@ -146,21 +161,21 @@ export default function NewLicensePage() {
                   onChange={(e) => setKeyPrefix(e.target.value)}
                 />
               </div>
-            )}
 
-            {error && <ErrorText>{error}</ErrorText>}
+              {error && <ErrorText>{error}</ErrorText>}
 
-            <div className="flex gap-2">
-              <Button type="submit" disabled={saving}>
-                {saving ? "Creating…" : "Create license"}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => router.back()}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Creating…" : "Create License"}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => router.back()}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </>
   );
 }

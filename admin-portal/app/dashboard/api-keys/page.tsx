@@ -843,7 +843,7 @@ function IssueKey() {
             </div>
           )}
           <div>
-            <Button type="submit" disabled={busy || hasInsufficientBalance}>
+            <Button type="submit" disabled={busy || hasInsufficientBalance === true}>
               {busy ? "Issuing…" : "Issue key"}
             </Button>
           </div>

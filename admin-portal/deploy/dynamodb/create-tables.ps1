@@ -1,4 +1,4 @@
-# Creates ONLY the seven pdm-portal-* DynamoDB tables in ap-south-1.
+# Creates ONLY the eight pdm-portal-* DynamoDB tables in ap-south-1.
 # Create-only + idempotent: existing tables are skipped, nothing is ever deleted
 # or modified. Safe to re-run. Does not touch pdm-licenses or any other table.
 
@@ -16,7 +16,8 @@ $tables = @(
   "pdm-portal-counters",
   "pdm-portal-seo",
   "pdm-portal-releases",
-  "pdm-portal-audit"
+  "pdm-portal-audit",
+  "pdm-portal-transactions"
 )
 
 foreach ($t in $tables) {

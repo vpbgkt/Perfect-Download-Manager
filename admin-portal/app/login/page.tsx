@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <AuthShell title="Sign in" description="Use your PDM staff or reseller account.">
+    <AuthShell title="Sign in" description="Sign in to your PDM Portal account.">
       <Suspense fallback={null}>
         <LoginForm />
       </Suspense>

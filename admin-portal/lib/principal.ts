@@ -1,7 +1,7 @@
 /**
  * Unified principal resolution for license endpoints.
  *
- * Resolves the caller of a license endpoint through one of two credential
+ * Resolves the caller of a license endpoint through one of three credential
  * paths:
  *
  *  1. **Api_Key (Reseller_API)** — when an `x-api-key` header is present, the
@@ -9,19 +9,16 @@
  *     Api_Key principals are implicitly `mfaEnrolled: true` and carry a
  *     `resellerAccountId` for ownership scoping.
  *
- *  2. **Firebase ID token (interactive)** — when no `x-api-key` header is
- *     present, the existing Firebase path runs exactly as today: extract the ID
- *     token from the `Authorization: Bearer` header or a body `idToken` field,
- *     verify it through {@link Authenticator.authenticate}, and apply the same
- *     ordering and error taxonomy.
+ *  2. **JWT token (password-authenticated users)** — when a valid JWT token is
+ *     present in the Authorization header, verify it and resolve the principal
+ *     from the token payload.
  *
- * Both paths produce the same {@link Principal} shape so downstream permission
+ *  3. **Firebase ID token (legacy)** — for backward compatibility, if a Firebase
+ *     ID token is detected, authenticate through the existing Firebase path.
+ *
+ * All paths produce the same {@link Principal} shape so downstream permission
  * checks and `resellerAccountId` scoping work identically regardless of
  * credential type.
- *
- * The MFA-enrollment gate remains Firebase-only because Api_Key callers are
- * always considered MFA-enrolled (they authenticated through the key issuance
- * ceremony rather than a browser session).
  *
  * @module lib/principal
  * Requirements: 1.7, 3.5, 5.7, 7.12
@@ -29,6 +26,7 @@
 
 import type { Authenticator, AuthOutcome, Principal } from "./auth.ts";
 import { extractIdToken } from "./http.ts";
+import { verifyToken } from "./jwt.ts";
 
 /**
  * The outcome of resolving a principal, including which credential path was
@@ -42,8 +40,9 @@ export interface ResolvedPrincipal {
  * Resolve the caller of a license endpoint.
  *
  * An `x-api-key` header authenticates a Reseller_API caller through the
- * existing {@link Authenticator.authenticateApiKey}; otherwise the Firebase ID
- * token path runs exactly as today, with unchanged ordering and errors.
+ * existing {@link Authenticator.authenticateApiKey}; otherwise try JWT token
+ * verification (password auth), then fall back to Firebase ID token for
+ * backward compatibility.
  *
  * @param req - The incoming HTTP request.
  * @param body - The parsed JSON body (may be null for GET requests).
@@ -66,18 +65,53 @@ export async function resolvePrincipal(
     return { ok: true, value: { principal: result.value } };
   }
 
-  // ── Path 2: Firebase ID token (interactive portal user) ──
-  const idToken = extractIdToken(req, body);
-  if (!idToken) {
+  // ── Path 2: JWT token (password-authenticated users) ──
+  const token = extractIdToken(req, body);
+  if (token) {
+    // Try JWT verification first
+    const jwtResult = verifyToken(token);
+    if (jwtResult.ok) {
+      const payload = jwtResult.payload;
+      const result = await authenticator.authenticateJwtSession({
+        accountId: payload.accountId,
+        email: payload.email,
+        role: payload.role as Principal["role"],
+        resellerAccountId: payload.resellerAccountId,
+        sessionVersion: payload.sessionVersion,
+      });
+      if (!result.ok) return result;
+      return { ok: true, value: { principal: result.value } };
+    }
+
+    console.log("[resolvePrincipal] JWT verification failed:", jwtResult.error);
+
+    // JWT verification failed - try Firebase as fallback (for existing sessions)
+    if (authenticator.authenticate) {
+      const result = await authenticator.authenticate({ idToken: token });
+      if (!result.ok) {
+        console.log("[resolvePrincipal] Firebase auth also failed:", result.error);
+        return { ok: false, error: result.error };
+      }
+      console.log("[resolvePrincipal] Firebase auth succeeded");
+      return { ok: true, value: { principal: result.value } };
+    }
+    
+    // No Firebase authenticator available, return JWT error
+    console.log("[resolvePrincipal] No Firebase authenticator, returning JWT error");
     return {
       ok: false,
-      error: { code: "session_expired", message: "Missing credentials" },
+      error: {
+        code: "session_expired",
+        message: jwtResult.error.message,
+      },
     };
   }
 
-  const result = await authenticator.authenticate({ idToken });
-  if (!result.ok) {
-    return { ok: false, error: result.error };
-  }
-  return { ok: true, value: { principal: result.value } };
+  console.log("[resolvePrincipal] No token found in request");
+  
+  // No credentials found
+  return {
+    ok: false,
+    error: { code: "session_expired", message: "Missing credentials" },
+  };
 }

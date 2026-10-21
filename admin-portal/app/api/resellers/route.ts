@@ -27,6 +27,7 @@ import {
   readJsonBody,
   validationErrorResponse,
 } from "@/lib/http.ts";
+import { resolvePrincipal } from "@/lib/principal.ts";
 
 /** Permission gating reseller-account management (super_admin only, Req 2.6). */
 const REQUIRED_PERMISSION = "reseller:manage" as const;
@@ -48,15 +49,15 @@ function sourceIpOf(req: Request): string {
 export async function GET(req: Request): Promise<NextResponse> {
   const { authenticator, dynamo } = getServerContext();
 
-  const idToken = extractIdToken(req, null);
-  if (!idToken) {
-    return authErrorResponse({ code: "session_expired", message: "Authentication required" });
+  // Resolve principal (JWT or Firebase)
+  const resolved = await resolvePrincipal(req, null, authenticator);
+  if (!resolved.ok) {
+    return authErrorResponse(resolved.error);
   }
-  const authed = await authenticator.authenticate({ idToken });
-  if (!authed.ok) {
-    return authErrorResponse(authed.error);
-  }
-  const permitted = authenticator.requirePermission(authed.value, REQUIRED_PERMISSION);
+  const principal = resolved.value.principal;
+
+  // Require permission
+  const permitted = authenticator.requirePermission(principal, REQUIRED_PERMISSION);
   if (!permitted.ok) {
     return authErrorResponse(permitted.error);
   }
@@ -103,21 +104,64 @@ export async function POST(req: Request): Promise<NextResponse> {
     return authErrorResponse(mfa.error);
   }
 
-  // 4. Validate + create (Req 10.1, 10.4, 10.5).
+  // 4. Validate + create account with new multi-tier structure
   const manager = createAccountManager({
     dynamo,
     audit: createAuditLog(dynamo),
   });
 
-  const result = await manager.createReseller(
-    { orgName: body?.orgName, contactEmail: body?.contactEmail },
+  // Extract account creation fields (with backward compatibility)
+  const accountTypeInput = body?.accountType ?? "reseller";
+  const accountType = (["distributor", "reseller", "dealer"] as const).find(
+    (type) => type === accountTypeInput
+  );
+  if (!accountType) {
+    return validationErrorResponse(
+      "accountType",
+      "accountType must be distributor, reseller, or dealer"
+    );
+  }
+  const password = body?.password;
+  if (typeof password !== "string" || password.length < 12) {
+    return validationErrorResponse("password", "password must be at least 12 characters");
+  }
+  const initialBalance = body?.initialBalance ?? 0;
+  if (typeof initialBalance !== "number" || !Number.isFinite(initialBalance) || initialBalance < 0) {
+    return validationErrorResponse("initialBalance", "initialBalance must be a non-negative number");
+  }
+  const discountPercent = body?.discountPercent ?? 0;
+  if (
+    typeof discountPercent !== "number" ||
+    !Number.isFinite(discountPercent) ||
+    discountPercent < 0 ||
+    discountPercent > 100
+  ) {
+    return validationErrorResponse("discountPercent", "discountPercent must be between 0 and 100");
+  }
+  const parentAccountId = body?.parentAccountId;
+  if (parentAccountId !== undefined && typeof parentAccountId !== "string") {
+    return validationErrorResponse("parentAccountId", "parentAccountId must be a string");
+  }
+
+  const result = await manager.createAccount(
+    {
+      accountType,
+      orgName: body?.orgName,
+      contactEmail: body?.contactEmail,
+      password,
+      initialBalance,
+      discountPercent,
+      parentAccountId,
+    },
     { actor: principal.identity, actorRole: principal.role, sourceIp: sourceIpOf(req) }
   );
 
   if (!result.ok) {
-    // Missing orgName / contactEmail → 400 with nothing written (Req 10.4).
+    // Missing required fields → 400 with nothing written.
     return validationErrorResponse(result.error.field ?? "reseller", result.error.message);
   }
 
-  return NextResponse.json(result.value, { status: 201 });
+  // Return account without exposing passwordHash
+  const { passwordHash, ...safeAccount } = result.value;
+  return NextResponse.json(safeAccount, { status: 201 });
 }

@@ -77,16 +77,22 @@ export async function POST(req: Request): Promise<NextResponse> {
     return validationErrorResponse("orderType", "Order type must be 'imei' or 'file'");
   }
 
-  if (!serviceId) {
+  if (
+    (typeof serviceId !== "string" && typeof serviceId !== "number") ||
+    String(serviceId).trim().length === 0
+  ) {
     return validationErrorResponse("serviceId", "Service ID is required");
   }
 
-  if (orderType === "imei" && !imei) {
+  if (orderType === "imei" && (typeof imei !== "string" || !imei.trim())) {
     return validationErrorResponse("imei", "IMEI is required for IMEI orders");
   }
 
-  if (orderType === "file" && !fileName) {
+  if (orderType === "file" && (typeof fileName !== "string" || !fileName.trim())) {
     return validationErrorResponse("fileName", "File name is required for file orders");
+  }
+  if (fileData !== undefined && typeof fileData !== "string") {
+    return validationErrorResponse("fileData", "File data must be a string");
   }
 
   // 4. Verify permission - admins can place for any account, distributors only for their own
@@ -105,14 +111,14 @@ export async function POST(req: Request): Promise<NextResponse> {
       Key: { resellerAccountId: accountId },
     });
 
-    if (!accountData.item) {
+    if (!accountData) {
       return NextResponse.json(
         { error: "not_found", message: "Account not found" },
         { status: 404 }
       );
     }
 
-    const account = accountData.item as any;
+    const account = accountData;
 
     // 6. Check account state
     if (account.state !== "active") {
@@ -123,7 +129,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // 7. Verify Dhru API is configured
-    if (!account.dhruApiUrl || !account.dhruUsername || !account.dhruApiKey) {
+    if (
+      typeof account.dhruApiUrl !== "string" ||
+      typeof account.dhruUsername !== "string" ||
+      typeof account.dhruApiKey !== "string"
+    ) {
       return NextResponse.json(
         {
           error: "configuration_missing",
@@ -133,9 +143,15 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // 8. Get service details to determine cost (placeholder - you should fetch from Dhru service list)
-    // For now, using a simple cost estimation
-    const estimatedCost = body.estimatedCost || 10; // Should be fetched from service details
+    // 8. Require the cost from a trusted service catalog; never guess a charge.
+    const estimatedCost = body?.estimatedCost;
+    if (
+      typeof estimatedCost !== "number" ||
+      !Number.isFinite(estimatedCost) ||
+      estimatedCost <= 0
+    ) {
+      return validationErrorResponse("estimatedCost", "estimatedCost must be a positive number");
+    }
 
     // 9. Check PDM wallet balance
     const transactionManager = createTransactionManager({ dynamo });
@@ -171,17 +187,33 @@ export async function POST(req: Request): Promise<NextResponse> {
     };
 
     if (orderType === "imei") {
+      if (typeof imei !== "string") {
+        return validationErrorResponse("imei", "IMEI is required for IMEI orders");
+      }
       dhruParams.IMEI = imei;
-      if (modelId) dhruParams.MODELID = modelId;
-      if (providerId) dhruParams.PROVIDERID = providerId;
-      if (mep) dhruParams.MEP = mep;
-      if (pin) dhruParams.PIN = pin;
-      if (kbh) dhruParams.KBH = kbh;
-      if (prd) dhruParams.PRD = prd;
-      if (type) dhruParams.TYPE = type;
-      if (reference) dhruParams.REFERENCE = reference;
-      if (locks) dhruParams.LOCKS = locks;
+      const optionalFields: Array<[string, unknown]> = [
+        ["MODELID", modelId],
+        ["PROVIDERID", providerId],
+        ["MEP", mep],
+        ["PIN", pin],
+        ["KBH", kbh],
+        ["PRD", prd],
+        ["TYPE", type],
+        ["REFERENCE", reference],
+        ["LOCKS", locks],
+      ];
+      for (const [field, value] of optionalFields) {
+        if (value !== undefined) {
+          if (typeof value !== "string") {
+            return validationErrorResponse(field.toLowerCase(), `${field} must be a string`);
+          }
+          dhruParams[field] = value;
+        }
+      }
     } else if (orderType === "file") {
+      if (typeof fileName !== "string") {
+        return validationErrorResponse("fileName", "File name is required for file orders");
+      }
       dhruParams.FILENAME = fileName;
       if (fileData) dhruParams.FILE = fileData;
     }
@@ -232,24 +264,18 @@ export async function POST(req: Request): Promise<NextResponse> {
     const dhruOrderId = dhruData.ORDERID || dhruData.ORDER_ID;
 
     // 13. Deduct cost from PDM wallet
-    const audit = createAuditLog(dynamo);
-    const debitResult = await transactionManager.createTransaction({
-      accountId,
-      type: "debit",
-      amount: estimatedCost,
-      reason: `Dhru API ${orderType} order - ${dhruOrderId || "N/A"}`,
-      relatedEntity: `dhru:${orderType}:${dhruOrderId || serviceId}`,
-      metadata: {
-        dhruOrderId,
-        orderType,
-        serviceId: String(serviceId),
-        imei: orderType === "imei" ? imei : undefined,
-        fileName: orderType === "file" ? fileName : undefined,
+    const debitResult = await transactionManager.debitBalance(
+      {
+        accountId,
+        amount: estimatedCost,
+        reason: "dhru_order",
+        relatedEntity: `dhru:${orderType}:${dhruOrderId || serviceId}`,
       },
-      actor: principal.identity,
-      actorRole: principal.role,
-      sourceIp: sourceIpOf(req),
-    });
+      {
+        identity: principal.identity,
+        role: principal.role,
+      }
+    );
 
     if (!debitResult.ok) {
       // Order was placed but debit failed - log critical error
@@ -279,18 +305,21 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // 14. Create audit log entry
-    await audit.log({
-      action: "dhru_order_placed",
+    await createAuditLog(dynamo).writeAuditEntry({
+      action: "dhru.order.placed",
       actor: principal.identity,
       actorRole: principal.role,
       target: accountId,
       sourceIp: sourceIpOf(req),
-      metadata: {
-        dhruOrderId,
-        orderType,
-        serviceId: String(serviceId),
-        cost: estimatedCost,
-        transactionId: debitResult.value.transactionId,
+      changes: {
+        dhruOrderId: { before: null, after: dhruOrderId },
+        orderType: { before: null, after: orderType },
+        serviceId: { before: null, after: String(serviceId) },
+        cost: { before: null, after: estimatedCost },
+        transactionId: {
+          before: null,
+          after: debitResult.value.transactionId,
+        },
       },
     });
 
@@ -310,7 +339,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       transaction: {
         transactionId: debitResult.value.transactionId,
         previousBalance: currentBalance,
-        newBalance: debitResult.value.newBalance,
+        newBalance: debitResult.value.balanceAfter,
         amount: estimatedCost,
       },
       dhruResponse: dhruData,

@@ -75,8 +75,9 @@ export const MAX_SEARCH_TERM_LENGTH = 128;
 
 /**
  * The caller's authorization scope. `admin` / `super_admin` see every
- * (non-trial) record; a `reseller` is restricted to its own `resellerAccountId`
- * (Req 2.4, 4.2). A `reseller` whose `resellerAccountId` is null owns nothing.
+ * (non-trial) record; non-admin roles (`distributor`, `reseller`, `dealer`) are
+ * restricted to their own `resellerAccountId` (Req 2.4, 4.2). A non-admin
+ * caller whose `resellerAccountId` is null owns nothing.
  */
 export interface LicenseQueryScope {
   role: Role;
@@ -210,13 +211,14 @@ function isInternalItem(item: RawLicense): boolean {
 
 /**
  * True when the caller's scope authorizes viewing this record (Req 2.4, 4.2).
- * Non-reseller roles see everything; a reseller sees only its own account.
+ * Admin / super_admin see everything; non-admin roles (distributor, reseller,
+ * dealer) see only records owned by their own resellerAccountId.
  */
 function isVisibleTo(item: RawLicense, scope: LicenseQueryScope): boolean {
-  if (scope.role !== "reseller") {
+  if (scope.role === "admin" || scope.role === "super_admin") {
     return true;
   }
-  // A reseller with no account owns nothing; otherwise ownership must match.
+  // Non-admin with no account owns nothing; otherwise ownership must match.
   return (
     scope.resellerAccountId != null &&
     item.resellerAccountId === scope.resellerAccountId
@@ -381,7 +383,7 @@ export function createLicenseQuery(deps: LicenseQueryDeps): LicenseQuery {
         ":rl": RL_COUNTER_PREFIX,
       };
       let filter = "NOT begins_with(#pk, :trial) AND NOT begins_with(#pk, :rl)";
-      if (scope.role === "reseller") {
+      if (scope.role !== "admin" && scope.role !== "super_admin") {
         names["#rid"] = "resellerAccountId";
         values[":rid"] = scope.resellerAccountId ?? "\u0000__no_account__";
         filter += " AND #rid = :rid";

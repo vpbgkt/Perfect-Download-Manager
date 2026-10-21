@@ -1,0 +1,23 @@
+{
+  "TableName": "pdm-portal-transactions",
+  "AttributeDefinitions": [
+    { "AttributeName": "transactionId", "AttributeType": "S" },
+    { "AttributeName": "accountId", "AttributeType": "S" },
+    { "AttributeName": "createdAt", "AttributeType": "S" }
+  ],
+  "KeySchema": [
+    { "AttributeName": "transactionId", "KeyType": "HASH" }
+  ],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "accountId-createdAt-index",
+      "KeySchema": [
+        { "AttributeName": "accountId", "KeyType": "HASH" },
+        { "AttributeName": "createdAt", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST",
+  "SSESpecification": { "Enabled": true }
+}

@@ -1,17 +1,13 @@
 /**
  * Authentication, MFA (email-OTP), session, and Api_Key authorization library.
  *
- * The portal delegates *identity* (password login) to Firebase Authentication
- * and verifies Firebase ID tokens statelessly. On top of that it owns:
+ * The portal uses password-based JWT authentication for all users (admins,
+ * distributors, resellers, and dealers).
  *
- *  - Role / `resellerAccountId` resolution from `pdm-portal-admins` (and/or
- *    Firebase custom claims).
- *  - An email-delivered one-time passcode (OTP) second factor. Only a one-way
- *    hash of the OTP is ever persisted; the plaintext is never stored or logged.
- *  - `mfaEnrolled` gating: a principal that has never completed an OTP
- *    verification is blocked from Mutations (Req 1.5).
- *  - `failedOtp` / `lockUntil` lockout: ≥5 failed OTP attempts inside a 15-minute
- *    window lock the account for ≥15 minutes (Req 1.6).
+ *  - Role / `resellerAccountId` resolution from `pdm-portal-admins` and
+ *    `pdm-portal-resellers` tables.
+ *  - Password authentication using bcrypt hashing.
+ *  - JWT token generation and verification with 7-day expiration.
  *  - `lastSeenAt` 30-minute idle-expiry (Req 1.7) and logout invalidation
  *    (Req 1.8).
  *  - Api_Key authentication by SHA-256 hash match plus key-revocation and
@@ -19,17 +15,17 @@
  *  - A uniform `authentication_failed` result that never discloses which field
  *    was wrong (Req 1.3, 15.7).
  *
- * Everything external is injected — the Firebase token verifier, the
- * {@link DynamoClient}, the {@link EmailSender}, the one-way {@link Hasher}, the
- * clock, and the OTP generator — so property/unit tests can drive the module
- * entirely with in-memory fakes and never touch live Firebase.
+ * Everything external is injected — the {@link DynamoClient}, the one-way
+ * {@link Hasher}, the clock, and the password hasher — so property/unit tests
+ * can drive the module entirely with in-memory fakes and never touch live AWS.
  *
  * @module lib/auth
- * Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.1, 2.2, 2.4, 2.7,
+ * Requirements: 1.2, 1.3, 1.4, 1.7, 1.8, 2.1, 2.2, 2.4, 2.7,
  *               12.1, 12.2, 15.7
  */
 
 import { createHash, randomInt } from "node:crypto";
+import bcrypt from "bcryptjs";
 import type { DynamoClient, DynamoItem } from "./dynamo.ts";
 import type { EmailSender } from "./email.ts";
 import { hasPermission, type Permission, type Role } from "./rbac.ts";
@@ -87,7 +83,7 @@ function authFailed<T = never>(): AuthOutcome<T> {
 // ─── Principal ─────────────────────────────────────────────────────────────
 
 /** How the caller authenticated. */
-export type AuthMethod = "firebase" | "apikey";
+export type AuthMethod = "password" | "apikey" | "firebase";
 
 /** The resolved caller identity, recomputed server-side on every request. */
 export interface Principal {
@@ -101,6 +97,8 @@ export interface Principal {
   mfaEnrolled: boolean;
   /** Which credential type authenticated this principal. */
   authMethod: AuthMethod;
+  /** Password-session generation used to revoke previously issued JWTs. */
+  sessionVersion?: number;
 }
 
 // ─── Injected collaborators ──────────────────────────────────────────────────
@@ -141,6 +139,39 @@ export const sha256Hasher: Hasher = {
   },
 };
 
+// ─── Password Hashing (bcrypt) ───────────────────────────────────────────────
+
+/** Number of bcrypt rounds for password hashing (10 = ~100ms per hash). */
+const BCRYPT_ROUNDS = 10;
+
+/**
+ * Password hasher interface for distributor/reseller/dealer authentication.
+ * Uses bcrypt for secure password storage with salt + hashing.
+ */
+export interface PasswordHasher {
+  /** Hash a plaintext password into a bcrypt hash string. */
+  hash(password: string): Promise<string>;
+  /** Verify a plaintext password against a stored bcrypt hash. */
+  verify(password: string, hash: string): Promise<boolean>;
+}
+
+/** Default bcrypt-based password hasher. */
+export const bcryptPasswordHasher: PasswordHasher = {
+  async hash(password: string): Promise<string> {
+    return bcrypt.hash(password, BCRYPT_ROUNDS);
+  },
+  async verify(password: string, hash: string): Promise<boolean> {
+    try {
+      return await bcrypt.compare(password, hash);
+    } catch {
+      // Invalid hash format or bcrypt error
+      return false;
+    }
+  },
+};
+
+// ───────────────────────────────────────────────────────────────────────────────
+
 /** Default OTP generator: a cryptographically random 6-digit code. */
 export function defaultOtpGenerator(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, "0");
@@ -165,14 +196,18 @@ const DEFAULT_TABLES: AuthTableNames = {
 /** Dependencies for {@link createAuthenticator}. */
 export interface AuthDeps {
   dynamo: DynamoClient;
-  tokenVerifier: TokenVerifier;
-  emailSender: EmailSender;
+  /** Legacy Firebase verifier; not configured by the password-only portal. */
+  tokenVerifier?: TokenVerifier;
+  /** Legacy OTP email sender; not configured by the password-only portal. */
+  emailSender?: EmailSender;
+  /** OTP generator override for tests. */
+  otpGenerator?: () => string;
   /** One-way hasher (defaults to SHA-256 hex). */
   hasher?: Hasher;
+  /** Password hasher for all accounts (defaults to bcrypt). */
+  passwordHasher?: PasswordHasher;
   /** Clock (defaults to `() => new Date()`). */
   now?: Clock;
-  /** OTP generator (defaults to a random 6-digit code). */
-  otpGenerator?: () => string;
   /** Table-name overrides. */
   tables?: Partial<AuthTableNames>;
 }
@@ -192,14 +227,18 @@ export const MAX_OTP_FAILURES = 5;
 
 // ─── Persisted record shapes ─────────────────────────────────────────────────
 
-/** Row in `pdm-portal-admins`. No password hash is ever stored. */
+/** Row in `pdm-portal-admins`. Supports both legacy Firebase auth and new password auth. */
 export interface AdminRecord {
-  firebaseUid: string;
-  adminId?: string;
+  adminId: string;
   email: string;
   role: Role;
+  passwordHash?: string; // Password hash for password-based authentication
+  sessionVersion?: number;
+  state?: "active" | "suspended";
   resellerAccountId?: string | null;
   mfaEnrolled?: boolean;
+  /** @deprecated Legacy Firebase UID - will be removed after migration */
+  firebaseUid?: string;
   /** One-way hash of the pending OTP (never plaintext). */
   otpHash?: string;
   otpExpiresAt?: string;
@@ -228,10 +267,23 @@ export interface ApiKeyRecord {
 /** Row in `pdm-portal-resellers`. */
 export interface ResellerAccountRecord {
   resellerAccountId: string;
+  accountType: "distributor" | "reseller" | "dealer";
   orgName: string;
   contactEmail: string;
+  passwordHash: string;
   state: "active" | "suspended";
+  sessionVersion?: number;
+  
+  // Balance & pricing
+  balance: number;
+  discountPercent: number;
+  
+  // Hierarchy
+  parentAccountId?: string;
+  
+  // Timestamps
   createdAt?: string;
+  lastLoginAt?: string;
 }
 
 /** Minimal shape needed for the ownership check on a License_Record. */
@@ -282,6 +334,32 @@ export interface Authenticator {
     apiKey: string;
   }): Promise<AuthOutcome<Principal>>;
 
+  /**
+   * Authenticate a distributor/reseller/dealer by email and password.
+   * Verifies password hash, checks account state, and updates lastLoginAt.
+   * Returns a Principal with the account's role derived from accountType.
+   */
+  authenticatePassword(input: {
+    email: string;
+    password: string;
+  }): Promise<AuthOutcome<Principal>>;
+
+  /** Resolve and validate a password JWT against the current account record. */
+  authenticateJwtSession(input: {
+    accountId: string;
+    email: string;
+    role: Role;
+    resellerAccountId: string | null;
+    sessionVersion: number;
+  }): Promise<AuthOutcome<Principal>>;
+
+  /** Revoke all password JWTs for the account by advancing its session version. */
+  logoutPasswordSession(input: {
+    accountId: string;
+    email: string;
+    role: Role;
+  }): Promise<AuthOutcome<void>>;
+
   /** RBAC check delegating to `lib/rbac.hasPermission` (Req 2.2). */
   requirePermission(
     principal: Principal,
@@ -306,11 +384,20 @@ export interface Authenticator {
  */
 export function createAuthenticator(deps: AuthDeps): Authenticator {
   const dynamo = deps.dynamo;
-  const tokenVerifier = deps.tokenVerifier;
-  const emailSender = deps.emailSender;
-  const hasher = deps.hasher ?? sha256Hasher;
-  const now: Clock = deps.now ?? (() => new Date());
+  const tokenVerifier = deps.tokenVerifier ?? {
+    async verifyIdToken(): Promise<VerifiedToken> {
+      throw new Error("Firebase token verification is not configured");
+    },
+  };
+  const emailSender = deps.emailSender ?? {
+    async sendOtp(): Promise<void> {
+      throw new Error("OTP email delivery is not configured");
+    },
+  };
   const generateOtp = deps.otpGenerator ?? defaultOtpGenerator;
+  const hasher = deps.hasher ?? sha256Hasher;
+  const passwordHasher = deps.passwordHasher ?? bcryptPasswordHasher;
+  const now: Clock = deps.now ?? (() => new Date());
   const tables: AuthTableNames = { ...DEFAULT_TABLES, ...deps.tables };
 
   // ── admin-record helpers ──
@@ -328,7 +415,7 @@ export function createAuthenticator(deps: AuthDeps): Authenticator {
   }
 
   function resolveRole(record: AdminRecord): Role | null {
-    if (record.role === "super_admin" || record.role === "admin" || record.role === "reseller") {
+    if (record.role === "super_admin" || record.role === "admin" || record.role === "reseller" || record.role === "distributor" || record.role === "dealer") {
       return record.role;
     }
     return null;
@@ -342,7 +429,7 @@ export function createAuthenticator(deps: AuthDeps): Authenticator {
 
   function toPrincipal(record: AdminRecord, role: Role): Principal {
     return {
-      identity: record.firebaseUid,
+      identity: record.firebaseUid ?? record.adminId,
       role,
       resellerAccountId: record.resellerAccountId ?? null,
       mfaEnrolled: record.mfaEnrolled === true,
@@ -601,6 +688,218 @@ export function createAuthenticator(deps: AuthDeps): Authenticator {
     });
   }
 
+  // ── Password auth (all users: admins, distributors, resellers, dealers) ──
+
+  async function authenticatePassword(input: {
+    email: string;
+    password: string;
+  }): Promise<AuthOutcome<Principal>> {
+    // Validate input format
+    if (!input.email || typeof input.email !== "string" || input.email.trim().length === 0) {
+      return authFailed();
+    }
+    if (!input.password || typeof input.password !== "string") {
+      return authFailed();
+    }
+
+    const normalizedEmail = input.email.trim().toLowerCase();
+
+    // Try admin table first (super_admin, admin, readonly_admin)
+    const adminResult = await dynamo.query({
+      TableName: tables.admins,
+      IndexName: "email-index",
+      KeyConditionExpression: "email = :email",
+      ExpressionAttributeValues: { ":email": normalizedEmail },
+    });
+
+    const admin = adminResult.items[0] as unknown as AdminRecord | undefined;
+    
+    if (admin && admin.passwordHash) {
+      // Verify password
+      const passwordMatches = await passwordHasher.verify(input.password, admin.passwordHash);
+      if (!passwordMatches) return authFailed();
+
+      // Update lastSeenAt using firebaseUid as the key (table still uses it as PK)
+      const loginTime = now().toISOString();
+      const keyToUse = admin.firebaseUid ? { firebaseUid: admin.firebaseUid } : { adminId: admin.adminId };
+      await dynamo.update({
+        TableName: tables.admins,
+        Key: keyToUse,
+        UpdateExpression: "SET lastSeenAt = :time",
+        ExpressionAttributeValues: { ":time": loginTime },
+      });
+
+      return ok({
+        identity: admin.adminId,
+        role: admin.role,
+        resellerAccountId: admin.resellerAccountId || null,
+        mfaEnrolled: true, // Password auth doesn't require additional MFA
+        authMethod: "password",
+        sessionVersion: admin.sessionVersion ?? 0,
+      });
+    }
+
+    // Try reseller/distributor/dealer table
+    const resellerResult = await dynamo.query({
+      TableName: tables.resellers,
+      IndexName: "contactEmail-index",
+      KeyConditionExpression: "contactEmail = :email",
+      ExpressionAttributeValues: { ":email": normalizedEmail },
+    });
+
+    const account = resellerResult.items[0] as unknown as ResellerAccountRecord | undefined;
+    if (!account) return authFailed();
+
+    // Check account state
+    if (account.state !== "active") {
+      return fail({
+        code: "not_authorized",
+        message: "Account is suspended",
+      });
+    }
+
+    // Verify password
+    const passwordMatches = await passwordHasher.verify(input.password, account.passwordHash);
+    if (!passwordMatches) return authFailed();
+
+    // Map accountType to role
+    const role: Role = account.accountType;
+
+    // Update lastLoginAt
+    const loginTime = now().toISOString();
+    await dynamo.update({
+      TableName: tables.resellers,
+      Key: { resellerAccountId: account.resellerAccountId },
+      UpdateExpression: "SET lastLoginAt = :loginTime",
+      ExpressionAttributeValues: { ":loginTime": loginTime },
+    });
+
+    return ok({
+      identity: account.resellerAccountId,
+      role,
+      resellerAccountId: account.resellerAccountId,
+      mfaEnrolled: true, // Password auth doesn't require additional MFA
+      authMethod: "password",
+      sessionVersion: account.sessionVersion ?? 0,
+    });
+  }
+
+  async function authenticateJwtSession(input: {
+    accountId: string;
+    email: string;
+    role: Role;
+    resellerAccountId: string | null;
+    sessionVersion: number;
+  }): Promise<AuthOutcome<Principal>> {
+    if (
+      typeof input.sessionVersion !== "number" ||
+      !Number.isInteger(input.sessionVersion) ||
+      input.sessionVersion < 0
+    ) {
+      return authFailed();
+    }
+
+    if (
+      input.role === "distributor" ||
+      input.role === "reseller" ||
+      input.role === "dealer"
+    ) {
+      const account = (await dynamo.get({
+        TableName: tables.resellers,
+        Key: { resellerAccountId: input.accountId },
+      })) as ResellerAccountRecord | null;
+
+      if (
+        !account ||
+        account.state !== "active" ||
+        account.accountType !== input.role ||
+        account.resellerAccountId !== input.resellerAccountId ||
+        (account.sessionVersion ?? 0) !== input.sessionVersion
+      ) {
+        return authFailed();
+      }
+
+      return ok({
+        identity: account.resellerAccountId,
+        role: account.accountType,
+        resellerAccountId: account.resellerAccountId,
+        mfaEnrolled: true,
+        authMethod: "password",
+        sessionVersion: account.sessionVersion ?? 0,
+      });
+    }
+
+    const result = await dynamo.query({
+      TableName: tables.admins,
+      IndexName: "email-index",
+      KeyConditionExpression: "email = :email",
+      ExpressionAttributeValues: { ":email": input.email.toLowerCase() },
+    });
+    const admin = result.items[0] as unknown as AdminRecord | undefined;
+    if (
+      !admin ||
+      admin.adminId !== input.accountId ||
+      admin.role !== input.role ||
+      admin.state === "suspended" ||
+      (admin.sessionVersion ?? 0) !== input.sessionVersion
+    ) {
+      return authFailed();
+    }
+
+    return ok({
+      identity: admin.adminId,
+      role: admin.role,
+      resellerAccountId: admin.resellerAccountId ?? null,
+      mfaEnrolled: true,
+      authMethod: "password",
+      sessionVersion: admin.sessionVersion ?? 0,
+    });
+  }
+
+  async function logoutPasswordSession(input: {
+    accountId: string;
+    email: string;
+    role: Role;
+  }): Promise<AuthOutcome<void>> {
+    if (
+      input.role === "distributor" ||
+      input.role === "reseller" ||
+      input.role === "dealer"
+    ) {
+      const account = (await dynamo.get({
+        TableName: tables.resellers,
+        Key: { resellerAccountId: input.accountId },
+      })) as ResellerAccountRecord | null;
+      if (!account || account.accountType !== input.role) return authFailed();
+
+      await dynamo.atomicIncrement(
+        tables.resellers,
+        { resellerAccountId: input.accountId },
+        "sessionVersion",
+        1
+      );
+      return ok(undefined);
+    }
+
+    const result = await dynamo.query({
+      TableName: tables.admins,
+      IndexName: "email-index",
+      KeyConditionExpression: "email = :email",
+      ExpressionAttributeValues: { ":email": input.email.toLowerCase() },
+    });
+    const admin = result.items[0] as unknown as AdminRecord | undefined;
+    if (!admin || admin.adminId !== input.accountId || admin.role !== input.role) {
+      return authFailed();
+    }
+
+    const key =
+      admin.firebaseUid !== undefined
+        ? { firebaseUid: admin.firebaseUid }
+        : { adminId: admin.adminId };
+    await dynamo.atomicIncrement(tables.admins, key, "sessionVersion", 1);
+    return ok(undefined);
+  }
+
   // ── pure authorization checks ──
 
   function requirePermission(
@@ -624,11 +923,11 @@ export function createAuthenticator(deps: AuthDeps): Authenticator {
     principal: Principal,
     record: OwnableRecord
   ): AuthOutcome<void> {
-    // Non-reseller roles are not ownership-scoped.
-    if (principal.role !== "reseller") {
+    // Admin / super_admin roles are not ownership-scoped.
+    if (principal.role === "admin" || principal.role === "super_admin") {
       return ok(undefined);
     }
-    // A reseller with no account, or a record it does not own, is not-found.
+    // Non-admin with no account, or a record it does not own, is not-found.
     if (
       principal.resellerAccountId != null &&
       record.resellerAccountId === principal.resellerAccountId
@@ -645,44 +944,12 @@ export function createAuthenticator(deps: AuthDeps): Authenticator {
     openSession,
     logout,
     authenticateApiKey,
+    authenticatePassword,
+    authenticateJwtSession,
+    logoutPasswordSession,
     requirePermission,
     requireMfaEnrolled,
     assertOwnership,
-  };
-}
-
-// ─── Firebase Admin SDK adapter (production) ─────────────────────────────────
-
-/**
- * Real {@link TokenVerifier} backed by the Firebase Admin SDK. `firebase-admin`
- * is imported lazily inside each method so merely importing this module (as the
- * tests do) never loads or requires a live Firebase environment.
- */
-/**
- * Idempotently initialize the Firebase Admin app so `getAuth()` works. Uses
- * Application Default Credentials, which read the service-account JSON pointed
- * to by `GOOGLE_APPLICATION_CREDENTIALS`.
- */
-async function ensureFirebaseApp(): Promise<void> {
-  const { getApps, initializeApp, applicationDefault } = await import("firebase-admin/app");
-  if (getApps().length === 0) {
-    initializeApp({ credential: applicationDefault() });
-  }
-}
-
-export function createFirebaseTokenVerifier(): TokenVerifier {
-  return {
-    async verifyIdToken(idToken: string, checkRevoked = true): Promise<VerifiedToken> {
-      await ensureFirebaseApp();
-      const { getAuth } = await import("firebase-admin/auth");
-      const decoded = await getAuth().verifyIdToken(idToken, checkRevoked);
-      return { uid: decoded.uid, claims: decoded as Record<string, unknown> };
-    },
-    async revokeRefreshTokens(uid: string): Promise<void> {
-      await ensureFirebaseApp();
-      const { getAuth } = await import("firebase-admin/auth");
-      await getAuth().revokeRefreshTokens(uid);
-    },
   };
 }
 

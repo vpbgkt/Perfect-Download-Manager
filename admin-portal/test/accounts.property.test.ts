@@ -5,6 +5,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import fc from "fast-check";
 import { FakeDynamoClient } from "../lib/dev/in-memory-dynamo.ts";
 import { createAuditLog } from "../lib/audit.ts";
@@ -31,6 +32,14 @@ function harness() {
   const accounts = createAccountManager({
     dynamo,
     audit,
+    passwordHasher: {
+      async hash(password) {
+        return `hash:${password}`;
+      },
+      async verify(password, hash) {
+        return hash === `hash:${password}`;
+      },
+    },
     now: () => new Date("2025-06-15T12:00:00.000Z"),
     generateId: () => `res-${idN++}`,
   });
@@ -47,12 +56,17 @@ describe("Property 24: Reseller account creation validation and defaults", () =>
         fc.string({ minLength: 1, maxLength: 40 }).filter((s) => s.trim().length > 0),
         async (orgName, contactEmail) => {
           const { dynamo, accounts } = harness();
-          const res = await accounts.createReseller({ orgName, contactEmail }, actor);
+          const res = await accounts.createAccount({
+            accountType: "reseller",
+            orgName,
+            contactEmail,
+            password: randomUUID(),
+          }, actor);
           assert.strictEqual(res.ok, true);
           if (!res.ok) return;
           assert.strictEqual(res.value.state, RESELLER_ACTIVE);
           assert.strictEqual(res.value.orgName, orgName.trim());
-          assert.strictEqual(res.value.contactEmail, contactEmail.trim());
+          assert.strictEqual(res.value.contactEmail, contactEmail.trim().toLowerCase());
           assert.ok(res.value.resellerAccountId.length > 0);
 
           const stored = await dynamo.get({
@@ -76,8 +90,13 @@ describe("Property 24: Reseller account creation validation and defaults", () =>
           const orgBad = typeof orgName !== "string" || orgName.trim() === "";
           fc.pre(orgBad || typeof contactEmail !== "string" || contactEmail.trim() === "");
           const { dynamo, accounts } = harness();
-          const res = await accounts.createReseller(
-            { orgName: orgName as unknown, contactEmail: contactEmail as unknown },
+          const res = await accounts.createAccount(
+            {
+              accountType: "reseller",
+              orgName,
+              contactEmail,
+              password: randomUUID(),
+            },
             actor
           );
           assert.strictEqual(res.ok, false);
@@ -97,8 +116,13 @@ describe("Property 25: Reseller suspend/reactivate round-trip", () => {
         fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
         async (org) => {
           const { dynamo, accounts } = harness();
-          const created = await accounts.createReseller(
-            { orgName: org, contactEmail: "ops@example.com" },
+          const created = await accounts.createAccount(
+            {
+              accountType: "reseller",
+              orgName: org,
+              contactEmail: "ops@example.com",
+              password: randomUUID(),
+            },
             actor
           );
           assert.strictEqual(created.ok, true);

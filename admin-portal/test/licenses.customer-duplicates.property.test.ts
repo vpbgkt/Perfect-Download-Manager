@@ -189,7 +189,13 @@ describe("Property 21: Customer email is non-unique and both credential paths be
           const updateResult = await updater.update({
             licenseKey: result2.value.licenseKey,
             attributes: { customerEmail: sharedEmail },
-            principal: { identity: adminActor.actor, role: "admin", resellerAccountId: null },
+            principal: {
+              identity: adminActor.actor,
+              role: "admin",
+              resellerAccountId: null,
+              mfaEnrolled: true,
+              authMethod: "password",
+            },
             sourceIp: adminActor.sourceIp,
           });
           assert.strictEqual(

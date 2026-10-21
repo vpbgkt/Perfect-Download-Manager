@@ -4,63 +4,70 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../ui/button.tsx";
 import { Input, Label } from "../ui/input.tsx";
-import { getFirebaseAuth, isFirebaseConfigured } from "../../lib/firebase-client.ts";
+import { getSafeRedirectPath } from "../../lib/auth-redirect.ts";
 
 /**
- * Step 1 of sign-in: Firebase email/password. On success we exchange the
- * Firebase ID token at POST /api/auth/login, which emails the OTP, then move to
- * the /verify-otp screen. Credential errors are shown generically so we never
- * disclose which field was wrong (mirrors the backend's uniform failure).
+ * Unified login form using password authentication for all users:
+ * - Admins (super_admin, admin, readonly_admin)
+ * - Distributors
+ * - Resellers
+ * - Dealers
+ * 
+ * All accounts authenticate via email + password and receive a JWT token.
  */
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/dashboard";
+  const next = searchParams.get("next");
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
-  const configured = isFirebaseConfigured();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    try {
-      const { signInWithEmailAndPassword } = await import("firebase/auth");
-      const auth = getFirebaseAuth();
-      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const idToken = await cred.user.getIdToken();
 
-      const res = await fetch("/api/auth/login", {
+    try {
+      const result = await fetch("/api/auth/login-password", {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-        body: "{}",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
-      if (res.status === 200) {
-        const data = await res.json().catch(() => ({}));
-        if (data.status === "authenticated") {
-          // OTP disabled: session already opened — go straight to the app.
-          window.location.assign(next);
-        } else {
-          router.push(`/verify-otp?next=${encodeURIComponent(next)}`);
+      if (result.ok) {
+        const data = await result.json();
+        if (data.success && data.account && data.token) {
+          // Password auth successful - store JWT token
+          const accountData = {
+            accountId: data.account.accountId,
+            resellerAccountId: data.account.resellerAccountId,
+            role: data.account.role || "reseller",
+            authMethod: data.account.authMethod || "password",
+            token: data.token,
+          };
+          sessionStorage.setItem("pdm_account", JSON.stringify(accountData));
+          
+          // Redirect to dashboard
+          window.location.href = getSafeRedirectPath(next, window.location.origin);
+          return;
         }
-        return;
       }
-      if (res.status === 423) {
+      
+      // Handle errors
+      if (result.status === 401) {
+        const errorData = await result.json().catch(() => ({}));
+        setError(errorData.message || "Invalid email or password");
+      } else if (result.status === 423) {
         setError("This account is temporarily locked. Try again later.");
       } else {
         setError("Sign-in failed. Check your credentials and try again.");
       }
     } catch (err) {
-      // Firebase credential errors and config errors both land here.
-      setError(
-        !configured
-          ? "Firebase is not configured on this environment."
-          : "Sign-in failed. Check your credentials and try again."
-      );
+      console.error("Login error:", err);
+      setError("Sign-in failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -68,13 +75,6 @@ export function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      {!configured && (
-        <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800" role="status">
-          Firebase sign-in isn&apos;t configured yet. Add the{" "}
-          <code>NEXT_PUBLIC_FIREBASE_*</code> values to <code>.env.local</code>.
-        </p>
-      )}
-
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">Email</Label>
         <Input
@@ -110,6 +110,10 @@ export function LoginForm() {
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Signing in…" : "Continue"}
       </Button>
+
+      <p className="text-xs text-center text-gray-500">
+        Admin, distributor, reseller, and dealer accounts
+      </p>
     </form>
   );
 }

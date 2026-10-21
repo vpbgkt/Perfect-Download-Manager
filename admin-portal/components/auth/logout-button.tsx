@@ -2,12 +2,10 @@
 
 import * as React from "react";
 import { Button, type ButtonProps } from "../ui/button.tsx";
-import { getFirebaseAuth, isFirebaseConfigured } from "../../lib/firebase-client.ts";
 
 /**
- * Ends the session: revokes the Firebase refresh token + clears the portal
- * session cookie via POST /api/auth/logout, signs out of the Firebase SDK, then
- * navigates to /login.
+ * Ends the session: clears the JWT token from sessionStorage,
+ * calls the logout API, and navigates to /login.
  */
 export function LogoutButton(props: ButtonProps) {
   const [loading, setLoading] = React.useState(false);
@@ -15,22 +13,40 @@ export function LogoutButton(props: ButtonProps) {
   async function onClick() {
     setLoading(true);
     try {
-      let idToken: string | undefined;
-      if (isFirebaseConfigured()) {
-        const auth = getFirebaseAuth();
-        idToken = await auth.currentUser?.getIdToken();
-        const { signOut } = await import("firebase/auth");
-        await signOut(auth).catch(() => {});
+      const storedAccount = sessionStorage.getItem("pdm_account");
+      let token: string | undefined;
+      if (storedAccount) {
+        try {
+          const account: unknown = JSON.parse(storedAccount);
+          if (
+            typeof account === "object" &&
+            account !== null &&
+            "token" in account &&
+            typeof account.token === "string"
+          ) {
+            token = account.token;
+          }
+        } catch (error) {
+          console.error("Could not read the current session token for logout:", error);
+        }
       }
-      await fetch("/api/auth/logout", {
+
+      const headers = new Headers({ "Content-Type": "application/json" });
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers,
         body: "{}",
-      }).catch(() => {});
+      });
+      if (!response.ok) {
+        console.error("The server could not revoke the current session:", response.status);
+      }
+    } catch (error) {
+      console.error("The server could not revoke the current session:", error);
     } finally {
+      sessionStorage.removeItem("pdm_account");
+      // Redirect to login page
       window.location.assign("/login");
     }
   }

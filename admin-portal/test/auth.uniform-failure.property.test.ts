@@ -101,6 +101,7 @@ async function runScenario(scenario: Scenario): Promise<AuthOutcome<Principal | 
 
     case "wrongOtp": {
       await seedAdmin({
+        adminId: scenario.uid,
         firebaseUid: scenario.uid,
         email: `${scenario.uid}@example.com`,
         role: "admin",
@@ -114,6 +115,7 @@ async function runScenario(scenario: Scenario): Promise<AuthOutcome<Principal | 
 
     case "malformedOtp": {
       await seedAdmin({
+        adminId: scenario.uid,
         firebaseUid: scenario.uid,
         email: `${scenario.uid}@example.com`,
         role: "admin",
@@ -144,9 +146,13 @@ async function runScenario(scenario: Scenario): Promise<AuthOutcome<Principal | 
       // Owning reseller is healthy so the failure is attributable only to the key.
       await seedReseller({
         resellerAccountId: scenario.resellerAccountId,
+        accountType: "reseller",
         orgName: "Org",
         contactEmail: "org@example.com",
+        passwordHash: "",
         state: "active",
+        balance: 0,
+        discountPercent: 0,
       });
       return auth.authenticateApiKey({ apiKey: scenario.apiKey });
     }
@@ -160,9 +166,13 @@ async function runScenario(scenario: Scenario): Promise<AuthOutcome<Principal | 
       });
       await seedReseller({
         resellerAccountId: scenario.resellerAccountId,
+        accountType: "reseller",
         orgName: "Org",
         contactEmail: "org@example.com",
+        passwordHash: "",
         state: "suspended",
+        balance: 0,
+        discountPercent: 0,
       });
       return auth.authenticateApiKey({ apiKey: scenario.apiKey });
     }

@@ -12,6 +12,9 @@ import {
   ShieldCheck,
   ScrollText,
   Users,
+  UserCog,
+  ShoppingCart,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import { hasPermission, type Permission } from "../../lib/rbac.ts";
@@ -25,11 +28,19 @@ interface NavItem {
   icon: LucideIcon;
   /** Permission required to see this item; omitted = visible to all roles. */
   permission?: Permission;
+  /** If true, only admin/super_admin can see this item. */
+  adminOnly?: boolean;
+  /** If true, only non-admin roles can see this item. */
+  nonAdminOnly?: boolean;
 }
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/accounts", label: "Accounts", icon: UserCog, permission: "reseller:manage" },
   { href: "/dashboard/licenses", label: "Licenses", icon: KeyRound, permission: "license:read" },
+  { href: "/dashboard/purchase", label: "Purchase", icon: ShoppingCart, permission: "license:create", nonAdminOnly: true },
+  { href: "/dashboard/orders", label: "Orders", icon: ShoppingCart, permission: "order:read" },
+  { href: "/dashboard/plans", label: "Plans", icon: Package, adminOnly: true },
   { href: "/dashboard/releases", label: "Releases", icon: Download, permission: "release:read" },
   { href: "/dashboard/seo", label: "SEO", icon: Search, permission: "seo:read" },
   { href: "/dashboard/resellers", label: "Resellers", icon: Building2, permission: "reseller:manage" },
@@ -43,8 +54,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { session } = useSession();
   const pathname = usePathname();
   const role = session?.role;
+  const isAdminRole = role === "admin" || role === "super_admin";
 
-  const visible = NAV.filter((item) => !item.permission || (role && hasPermission(role, item.permission)));
+  const visible = NAV.filter((item) => {
+    // Admin-only items
+    if (item.adminOnly && !isAdminRole) return false;
+    // Non-admin-only items (e.g. Purchase)
+    if (item.nonAdminOnly && isAdminRole) return false;
+    // Permission check
+    if (item.permission && !(role && hasPermission(role, item.permission))) return false;
+    return true;
+  });
 
   return (
     <div className="flex min-h-screen">

@@ -417,7 +417,7 @@ describe("Property 14: Attempt_Counters are independent per-bucket fixed windows
           fc.constant({ event: {}, expected: "unknown" }),
           fc.constant({ event: undefined, expected: "unknown" })
         ),
-        (sample) => {
+        async (sample) => {
           assert.strictEqual(clientIp(sample.event as never), sample.expected);
         }
       ),

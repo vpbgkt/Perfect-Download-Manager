@@ -107,7 +107,13 @@ const validCustomerDataArb: fc.Arbitrary<Record<CustomerField, string>> = fc.rec
 });
 
 const actor = { actor: "admin-user", actorRole: "admin", sourceIp: "198.51.100.42" };
-const principal = { identity: "admin-user", role: "admin" as const, resellerAccountId: null };
+const principal = {
+  identity: "admin-user",
+  role: "admin" as const,
+  resellerAccountId: null,
+  mfaEnrolled: true,
+  authMethod: "password" as const,
+};
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 

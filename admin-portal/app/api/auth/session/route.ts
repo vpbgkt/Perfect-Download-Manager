@@ -14,14 +14,41 @@ import { NextResponse } from "next/server";
 import { getServerContext } from "../../../../lib/server-context.ts";
 import { authErrorResponse, extractIdToken } from "../../../../lib/http.ts";
 
+// Force Node.js runtime for JWT support
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request): Promise<NextResponse> {
-  const idToken = extractIdToken(req, null);
-  if (!idToken) {
+  const token = extractIdToken(req, null);
+  if (!token) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
+  // Try JWT verification first (for password-authenticated users).
+  const { verifyToken } = await import("../../../../lib/jwt.ts");
+  const jwtResult = verifyToken(token);
+  if (jwtResult.ok) {
+    const { authenticator } = getServerContext();
+    const session = await authenticator.authenticateJwtSession({
+      accountId: jwtResult.payload.accountId,
+      email: jwtResult.payload.email,
+      role: jwtResult.payload.role as "super_admin" | "admin" | "distributor" | "reseller" | "dealer",
+      resellerAccountId: jwtResult.payload.resellerAccountId,
+      sessionVersion: jwtResult.payload.sessionVersion,
+    });
+    if (!session.ok) return authErrorResponse(session.error);
+
+    return NextResponse.json({
+      identity: session.value.identity,
+      role: session.value.role,
+      resellerAccountId: session.value.resellerAccountId,
+      mfaEnrolled: session.value.mfaEnrolled,
+    });
+  }
+
+  // Try Firebase authentication (for admin users)
   const { authenticator } = getServerContext();
-  const auth = await authenticator.authenticate({ idToken });
+  const auth = await authenticator.authenticate({ idToken: token });
   if (!auth.ok) {
     return authErrorResponse(auth.error);
   }

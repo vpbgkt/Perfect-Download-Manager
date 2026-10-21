@@ -273,7 +273,7 @@ describe("Property 7: Customer_Profile storage round-trips and normalization is 
 
           // For each stored Customer_Field, normalizing it again must be identity.
           for (const field of CUSTOMER_FIELDS) {
-            const storedValue = viewed[field];
+            const storedValue: string | undefined = viewed[field];
             if (storedValue !== undefined) {
               const renormalized = normalizeCustomerField(field, storedValue);
               assert.strictEqual(
@@ -330,7 +330,13 @@ describe("Property 7: Customer_Profile storage round-trips and normalization is 
           const updateResult = await updater.update({
             licenseKey,
             attributes: updateAttrs,
-            principal: { identity: actor.actor, role: "admin", resellerAccountId: null },
+            principal: {
+              identity: actor.actor,
+              role: "admin",
+              resellerAccountId: null,
+              mfaEnrolled: true,
+              authMethod: "password",
+            },
             sourceIp: actor.sourceIp,
           });
           assert.strictEqual(updateResult.ok, true, "update must succeed");

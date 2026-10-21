@@ -5,6 +5,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "../../components/u
 import { PageHeader } from "../../components/ui/feedback.tsx";
 import { useSession } from "../../components/dashboard/session-provider.tsx";
 import { hasPermission, type Permission } from "../../lib/rbac.ts";
+import { BalanceOverviewWidget, BalanceWidget } from "../../components/dashboard/balance-widget.tsx";
 
 interface Tile {
   href: string;
@@ -15,6 +16,7 @@ interface Tile {
 
 const TILES: Tile[] = [
   { href: "/dashboard/licenses", title: "Licenses", description: "Create, search, and manage license keys.", permission: "license:read" },
+  { href: "/dashboard/orders", title: "Orders", description: "View purchase history for all license orders.", permission: "order:read" },
   { href: "/dashboard/releases", title: "Releases", description: "Publish builds and sign the update manifest.", permission: "release:read" },
   { href: "/dashboard/seo", title: "SEO", description: "Edit marketing-site titles, descriptions, and OG tags.", permission: "seo:read" },
   { href: "/dashboard/resellers", title: "Resellers", description: "Onboard and manage reseller accounts.", permission: "reseller:manage" },
@@ -28,12 +30,30 @@ export default function DashboardPage() {
   const role = session?.role;
   const tiles = TILES.filter((t) => !t.permission || (role && hasPermission(role, t.permission)));
 
+  // Show personal balance for reseller/distributor/dealer, overview for admins
+  const showBalanceWidget = session?.resellerAccountId;
+  const showBalanceOverview = role === "super_admin" || role === "admin";
+
   return (
     <>
       <PageHeader
         title="Overview"
         description="Welcome to the PDM Seller & Admin Portal."
       />
+      
+      {/* Balance widgets */}
+      {(showBalanceWidget || showBalanceOverview) && (
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {showBalanceWidget && session.resellerAccountId && (
+            <BalanceWidget accountId={session.resellerAccountId} />
+          )}
+          {showBalanceOverview && (
+            <BalanceOverviewWidget />
+          )}
+        </div>
+      )}
+
+      {/* Navigation tiles */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {tiles.map((t) => (
           <Link key={t.href} href={t.href} className="block">

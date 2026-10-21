@@ -180,7 +180,7 @@ const bodyWithAtLeastOneInvalidFieldArb: fc.Arbitrary<{
     const expectedInvalidFields: CustomerField[] = [];
 
     for (const decision of decisions) {
-      if (decision.mode === "omit") continue;
+      if (!("value" in decision)) continue;
       body[decision.field] = decision.value;
       if (decision.mode === "invalid-format" || decision.mode === "invalid-type") {
         expectedInvalidFields.push(decision.field);
@@ -193,7 +193,13 @@ const bodyWithAtLeastOneInvalidFieldArb: fc.Arbitrary<{
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
 const actor = { actor: "admin-user", actorRole: "admin", sourceIp: "198.51.100.1" };
-const principal = { identity: "admin-user", role: "admin" as const, resellerAccountId: null };
+const principal = {
+  identity: "admin-user",
+  role: "admin" as const,
+  resellerAccountId: null,
+  mfaEnrolled: true,
+  authMethod: "password" as const,
+};
 
 function buildDeps() {
   const dynamo = new FakeDynamoClient();

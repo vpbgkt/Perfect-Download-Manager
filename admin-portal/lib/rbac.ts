@@ -11,8 +11,8 @@
  * permission Y at all?"
  */
 
-/** The three portal roles (Req 2.1). */
-export type Role = "super_admin" | "admin" | "reseller";
+/** The portal roles: admin roles (super_admin, admin) and account hierarchy (distributor, reseller, dealer) (Req 2.1). */
+export type Role = "super_admin" | "admin" | "distributor" | "reseller" | "dealer";
 
 /** Every named permission that gates a Portal_Backend operation. */
 export type Permission =
@@ -28,7 +28,14 @@ export type Permission =
   | "apikey:create"
   | "apikey:revoke"
   | "apikey:update"
-  | "audit:read";
+  | "audit:read"
+  | "account:create"           // Create sub-accounts (distributor→reseller, reseller→dealer)
+  | "account:manage"           // Manage sub-accounts (suspend, reactivate)
+  | "balance:view"             // View own balance
+  | "balance:add"              // Add balance to accounts
+  | "balance:view_transactions" // View transaction history
+  | "hierarchy:view"           // View account hierarchy
+  | "order:read";              // View order history
 
 /**
  * Static permission matrix.
@@ -36,8 +43,10 @@ export type Permission =
  * - `super_admin` holds ALL permissions (Req 2.6).
  * - `admin` holds license:*, release:*, seo:*, audit:read but NOT
  *   reseller:manage, admin:manage, or apikey:* (Req 2.5).
- * - `reseller` holds license:create, license:read, license:update only
+ * - `distributor` can create/manage resellers, create API keys, view balance & hierarchy
+ * - `reseller` can create/manage dealers, create API keys, view balance & hierarchy
  *   (ownership-scoped at the data layer) (Req 2.4).
+ * - `dealer` can only create licenses and view own balance (most restricted tier).
  */
 export const PERMISSION_MATRIX: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   super_admin: new Set<Permission>([
@@ -54,6 +63,13 @@ export const PERMISSION_MATRIX: Readonly<Record<Role, ReadonlySet<Permission>>> 
     "apikey:revoke",
     "apikey:update",
     "audit:read",
+    "account:create",
+    "account:manage",
+    "balance:view",
+    "balance:add",
+    "balance:view_transactions",
+    "hierarchy:view",
+    "order:read",
   ]),
 
   admin: new Set<Permission>([
@@ -65,12 +81,44 @@ export const PERMISSION_MATRIX: Readonly<Record<Role, ReadonlySet<Permission>>> 
     "seo:read",
     "seo:update",
     "audit:read",
+    "balance:view",
+    "balance:view_transactions",
+    "order:read",
+  ]),
+
+  distributor: new Set<Permission>([
+    "license:create",
+    "license:read",
+    "license:update",
+    "apikey:create",
+    "account:create",        // Can create resellers
+    "account:manage",        // Can manage resellers
+    "balance:view",
+    "balance:view_transactions",
+    "hierarchy:view",
+    "order:read",
   ]),
 
   reseller: new Set<Permission>([
     "license:create",
     "license:read",
     "license:update",
+    "apikey:create",
+    "account:create",        // Can create dealers
+    "account:manage",        // Can manage dealers
+    "balance:view",
+    "balance:view_transactions",
+    "hierarchy:view",
+    "order:read",
+  ]),
+
+  dealer: new Set<Permission>([
+    "license:create",
+    "license:read",
+    "license:update",
+    "balance:view",
+    "balance:view_transactions",
+    "order:read",
   ]),
 };
 

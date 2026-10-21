@@ -126,23 +126,27 @@ export async function GET(
       Key: { resellerAccountId: accountId },
     });
 
-    if (!accountData.item) {
+    if (!accountData) {
       return NextResponse.json(
         { error: "not_found", message: "Account not found" },
         { status: 404 }
       );
     }
 
-    const account = accountData.item as any;
+    const account = accountData;
 
     return NextResponse.json({
       success: true,
       accountId,
       config: {
-        dhruApiUrl: account.dhruApiUrl || null,
-        dhruUsername: account.dhruUsername || null,
-        configured: !!(account.dhruApiUrl && account.dhruUsername && account.dhruApiKey),
-        configuredAt: account.dhruConfiguredAt || null,
+        dhruApiUrl: typeof account.dhruApiUrl === "string" ? account.dhruApiUrl : null,
+        dhruUsername: typeof account.dhruUsername === "string" ? account.dhruUsername : null,
+        configured:
+          typeof account.dhruApiUrl === "string" &&
+          typeof account.dhruUsername === "string" &&
+          typeof account.dhruApiKey === "string",
+        configuredAt:
+          typeof account.dhruConfiguredAt === "string" ? account.dhruConfiguredAt : null,
       },
     });
   } catch (error) {

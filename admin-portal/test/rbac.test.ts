@@ -19,6 +19,13 @@ describe("rbac", () => {
         "apikey:revoke",
         "apikey:update",
         "audit:read",
+        "account:create",
+        "account:manage",
+        "balance:view",
+        "balance:add",
+        "balance:view_transactions",
+        "hierarchy:view",
+        "order:read",
       ];
 
       for (const perm of allPermissions) {
@@ -75,6 +82,13 @@ describe("rbac", () => {
         "license:create",
         "license:read",
         "license:update",
+        "apikey:create",
+        "account:create",
+        "account:manage",
+        "balance:view",
+        "balance:view_transactions",
+        "hierarchy:view",
+        "order:read",
       ];
 
       for (const perm of resellerAllowed) {
@@ -93,7 +107,6 @@ describe("rbac", () => {
         "seo:update",
         "reseller:manage",
         "admin:manage",
-        "apikey:create",
         "apikey:revoke",
         "apikey:update",
         "audit:read",
@@ -120,16 +133,16 @@ describe("rbac", () => {
       }
     });
 
-    it("super_admin set contains all 13 permissions", () => {
-      assert.strictEqual(PERMISSION_MATRIX.super_admin.size, 13);
+    it("super_admin set contains all 20 permissions", () => {
+      assert.strictEqual(PERMISSION_MATRIX.super_admin.size, 20);
     });
 
-    it("admin set contains 8 permissions", () => {
-      assert.strictEqual(PERMISSION_MATRIX.admin.size, 8);
+    it("admin set contains 11 permissions", () => {
+      assert.strictEqual(PERMISSION_MATRIX.admin.size, 11);
     });
 
-    it("reseller set contains 3 permissions", () => {
-      assert.strictEqual(PERMISSION_MATRIX.reseller.size, 3);
+    it("reseller set contains 10 permissions", () => {
+      assert.strictEqual(PERMISSION_MATRIX.reseller.size, 10);
     });
   });
 });

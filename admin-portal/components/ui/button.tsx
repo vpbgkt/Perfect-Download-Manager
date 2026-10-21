@@ -1,10 +1,12 @@
 import * as React from "react";
 import { cn } from "../../lib/ui.ts";
 
-type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger";
+type Variant = "default" | "primary" | "secondary" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
+  default:
+    "bg-[var(--color-primary)] text-[var(--color-primary-fg)] hover:bg-[var(--color-primary-hover)]",
   primary:
     "bg-[var(--color-primary)] text-[var(--color-primary-fg)] hover:bg-[var(--color-primary-hover)]",
   secondary: "bg-gray-100 text-[var(--color-fg)] hover:bg-gray-200",

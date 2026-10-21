@@ -1,33 +1,31 @@
 /**
- * Reseller_Account management for the Admin & Reseller Portal.
+ * Multi-tier Account management for the Admin & Reseller Portal.
  *
- * Super-admin-only lifecycle over Reseller_Accounts stored in the
+ * Manages the lifecycle of distributor/reseller/dealer accounts stored in the
  * `pdm-portal-resellers` DynamoDB table. The operations:
  *
- *  - **create** a Reseller_Account from an organization name and a contact
- *    email, minting a unique identifier and an initial `active` state
- *    (Req 10.1); a request that omits either field is rejected with a
- *    validation error and nothing is written (Req 10.4);
+ *  - **create** an account (distributor/reseller/dealer) with organization name,
+ *    contact email, password, account type, initial balance, and discount
+ *    percentage. Mints a unique identifier and sets initial `active` state.
  *  - **suspend** an account, setting its `state` to `suspended` — after which
- *    the auth layer rejects Reseller_API requests from its Api_Keys (Req 10.2);
- *  - **reactivate** a suspended account, setting its `state` back to `active`
- *    so its active Api_Keys are honored again (Req 10.3); and
- *  - write an Audit_Entry recording the actor, the Reseller_Account identifier,
- *    and the action for every create / suspend / reactivate (Req 10.5).
+ *    the auth layer rejects API requests from that account.
+ *  - **reactivate** a suspended account, setting its `state` back to `active`.
+ *  - write an Audit_Entry recording the actor, the account identifier,
+ *    and the action for every create / suspend / reactivate.
  *
  * Every external collaborator — the {@link DynamoClient}, the {@link AuditLog},
- * the clock, and the id generator — is injected, so the property/unit tests
- * (11.2, 11.3) can drive this module entirely against the in-memory DynamoDB
- * fake.
+ * the {@link PasswordHasher}, the clock, and the id generator — is injected for
+ * testability.
  *
  * @module lib/accounts
- * Requirements: 10.1, 10.2, 10.3, 10.4, 10.5
  */
 
 import { randomUUID } from "node:crypto";
 import type { DynamoClient, DynamoItem } from "./dynamo.ts";
 import type { AuditLog } from "./audit.ts";
-import type { ResellerAccountRecord } from "./auth.ts";
+import type { ResellerAccountRecord, PasswordHasher } from "./auth.ts";
+import { bcryptPasswordHasher } from "./auth.ts";
+import type { Role } from "./rbac.ts";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -41,10 +39,10 @@ export const RESELLER_PARTITION_KEY = "resellerAccountId";
 export const RESELLER_ACTIVE = "active" as const;
 export const RESELLER_SUSPENDED = "suspended" as const;
 
-/** Audit actions recorded for the account lifecycle (Req 10.5). */
-export const RESELLER_CREATE_ACTION = "reseller.create";
-export const RESELLER_SUSPEND_ACTION = "reseller.suspend";
-export const RESELLER_REACTIVATE_ACTION = "reseller.reactivate";
+/** Audit actions recorded for the account lifecycle. */
+export const ACCOUNT_CREATE_ACTION = "account.create";
+export const ACCOUNT_SUSPEND_ACTION = "account.suspend";
+export const ACCOUNT_REACTIVATE_ACTION = "account.reactivate";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -58,12 +56,22 @@ export interface AccountActor {
   sourceIp: string;
 }
 
-/** Caller-supplied, already-authorized create-reseller attributes. */
-export interface CreateResellerInput {
-  /** Organization name — required, non-empty (Req 10.1, 10.4). */
+/** Caller-supplied, already-authorized create-account attributes. */
+export interface CreateAccountInput {
+  /** Account type: distributor, reseller, or dealer. */
+  accountType: "distributor" | "reseller" | "dealer";
+  /** Organization name — required, non-empty. */
   orgName: unknown;
-  /** Contact email — required, non-empty (Req 10.1, 10.4). */
+  /** Contact email — required, non-empty. */
   contactEmail: unknown;
+  /** Password — required, non-empty (will be hashed with bcrypt). */
+  password: unknown;
+  /** Initial balance — optional, defaults to 0. */
+  initialBalance?: number;
+  /** Discount percentage (0-100) — optional, defaults to 0. */
+  discountPercent?: number;
+  /** Parent account ID for hierarchy tracking — optional. */
+  parentAccountId?: string;
 }
 
 /** Failure reasons an account operation can produce. */
@@ -75,7 +83,7 @@ export interface AccountError {
 }
 
 /** Discriminated-union outcome of a create attempt. */
-export type CreateResellerResult =
+export type CreateAccountResult =
   | { ok: true; value: ResellerAccountRecord }
   | { ok: false; error: AccountError };
 
@@ -88,8 +96,10 @@ export type SetStateResult =
 export interface AccountManagerDeps {
   /** DynamoDB client (real or the in-memory fake). */
   dynamo: DynamoClient;
-  /** Append-only audit log used to record the action (Req 10.5). */
+  /** Append-only audit log used to record the action. */
   audit: AuditLog;
+  /** Password hasher (bcrypt). */
+  passwordHasher?: PasswordHasher;
   /** Clock injection for a deterministic `createdAt` / audit timestamp. */
   now?: () => Date;
   /** Unique id generator injection (defaults to a UUID-based id). */
@@ -101,18 +111,18 @@ export interface AccountManagerDeps {
 /** The account-management API surface returned by {@link createAccountManager}. */
 export interface AccountManager {
   /**
-   * Validate the org name + contact email, mint a unique identifier, persist a
-   * new Reseller_Account in the `active` state via a collision-free conditional
-   * put, and append a create Audit_Entry (Req 10.1, 10.4, 10.5).
+   * Validate inputs, hash the password, mint a unique identifier, persist a
+   * new account in the `active` state via a collision-free conditional
+   * put, and append a create Audit_Entry.
    */
-  createReseller(
-    input: CreateResellerInput,
+  createAccount(
+    input: CreateAccountInput,
     actor: AccountActor
-  ): Promise<CreateResellerResult>;
+  ): Promise<CreateAccountResult>;
 
   /**
-   * Set a Reseller_Account's `state` to `suspended` and append a suspend
-   * Audit_Entry; an unknown account is reported as not-found (Req 10.2, 10.5).
+   * Set an account's `state` to `suspended` and append a suspend
+   * Audit_Entry; an unknown account is reported as not-found.
    */
   suspend(
     input: { resellerAccountId: string },
@@ -120,8 +130,8 @@ export interface AccountManager {
   ): Promise<SetStateResult>;
 
   /**
-   * Set a suspended Reseller_Account's `state` back to `active` and append a
-   * reactivate Audit_Entry; an unknown account is not-found (Req 10.3, 10.5).
+   * Set a suspended account's `state` back to `active` and append a
+   * reactivate Audit_Entry; an unknown account is not-found.
    */
   reactivate(
     input: { resellerAccountId: string },
@@ -129,8 +139,7 @@ export interface AccountManager {
   ): Promise<SetStateResult>;
 
   /**
-   * List Reseller_Accounts via a paginated scan (super_admin only at the route
-   * layer). Returns the records plus an optional continuation token.
+   * List accounts via a paginated scan. Returns the records plus an optional continuation token.
    */
   listResellers(options?: {
     pageSize?: number;
@@ -171,8 +180,9 @@ function requireNonEmptyString(
 export function createAccountManager(deps: AccountManagerDeps): AccountManager {
   const dynamo = deps.dynamo;
   const audit = deps.audit;
+  const passwordHasher = deps.passwordHasher ?? bcryptPasswordHasher;
   const now = deps.now ?? (() => new Date());
-  const generateId = deps.generateId ?? (() => `res_${randomUUID()}`);
+  const generateId = deps.generateId ?? (() => `acc_${randomUUID()}`);
   const tableName = deps.tableName ?? RESELLERS_TABLE_NAME;
 
   /** Load an existing Reseller_Account record, or null. */
@@ -209,15 +219,16 @@ export function createAccountManager(deps: AccountManagerDeps): AccountManager {
     const updated = await dynamo.update({
       TableName: tableName,
       Key: { [RESELLER_PARTITION_KEY]: resellerAccountId },
-      UpdateExpression: "SET #state = :state",
+      UpdateExpression: "SET #state = :state ADD sessionVersion :increment",
       ExpressionAttributeNames: { "#state": "state" },
-      ExpressionAttributeValues: { ":state": targetState },
+      ExpressionAttributeValues: { ":state": targetState, ":increment": 1 },
     });
 
     const record: ResellerAccountRecord = {
       ...(updated as ResellerAccountRecord | undefined ?? existing),
       resellerAccountId,
       state: targetState,
+      sessionVersion: (existing.sessionVersion ?? 0) + 1,
     };
 
     // Audit_Entry: actor, Reseller_Account identifier, action (Req 10.5).
@@ -237,9 +248,8 @@ export function createAccountManager(deps: AccountManagerDeps): AccountManager {
   }
 
   return {
-    async createReseller(input, actor) {
-      // ── Both fields are required; reject and write nothing otherwise
-      //    (Req 10.4). Validation happens BEFORE any write. ──
+    async createAccount(input, actor) {
+      // ── Validate all required fields ──
       const orgName = requireNonEmptyString(input.orgName, "orgName");
       if (!orgName.ok) {
         return fail(orgName.error);
@@ -248,35 +258,90 @@ export function createAccountManager(deps: AccountManagerDeps): AccountManager {
       if (!contactEmail.ok) {
         return fail(contactEmail.error);
       }
+      const password = requireNonEmptyString(input.password, "password");
+      if (!password.ok) {
+        return fail(password.error);
+      }
+
+      // Validate account type
+      const validTypes = ["distributor", "reseller", "dealer"];
+      if (!validTypes.includes(input.accountType)) {
+        return fail({
+          code: "validation_error",
+          field: "accountType",
+          message: "accountType must be distributor, reseller, or dealer",
+        });
+      }
+
+      // Validate discount percent if provided
+      if (input.discountPercent !== undefined) {
+        if (
+          typeof input.discountPercent !== "number" ||
+          input.discountPercent < 0 ||
+          input.discountPercent > 100
+        ) {
+          return fail({
+            code: "validation_error",
+            field: "discountPercent",
+            message: "discountPercent must be between 0 and 100",
+          });
+        }
+      }
+
+      // Validate initial balance if provided
+      if (input.initialBalance !== undefined) {
+        if (
+          typeof input.initialBalance !== "number" ||
+          input.initialBalance < 0
+        ) {
+          return fail({
+            code: "validation_error",
+            field: "initialBalance",
+            message: "initialBalance must be a non-negative number",
+          });
+        }
+      }
+
+      // Hash the password
+      const passwordHash = await passwordHasher.hash(password.value);
 
       const createdAt = now().toISOString();
       const record: ResellerAccountRecord = {
         resellerAccountId: generateId(),
+        accountType: input.accountType,
         orgName: orgName.value,
-        contactEmail: contactEmail.value,
-        // New accounts start active (Req 10.1).
+        contactEmail: contactEmail.value.toLowerCase(), // Normalize email to lowercase
+        passwordHash,
         state: RESELLER_ACTIVE,
+        sessionVersion: 0,
+        balance: input.initialBalance ?? 0,
+        discountPercent: input.discountPercent ?? 0,
+        parentAccountId: input.parentAccountId,
         createdAt,
       };
 
-      // Collision-free write on the unique identifier (Req 10.1).
+      // Collision-free write on the unique identifier
       await dynamo.conditionalPut(
         tableName,
         record as unknown as DynamoItem,
         RESELLER_PARTITION_KEY
       );
 
-      // Audit_Entry: actor, Reseller_Account identifier, action (Req 10.5).
+      // Audit_Entry: actor, account identifier, action
       await audit.writeAuditEntry({
         actor: actor.actor,
         actorRole: actor.actorRole,
-        action: RESELLER_CREATE_ACTION,
+        action: ACCOUNT_CREATE_ACTION,
         target: record.resellerAccountId,
         sourceIp: actor.sourceIp,
         timestamp: createdAt,
         changes: {
+          accountType: { before: null, after: record.accountType },
           orgName: { before: null, after: record.orgName },
           contactEmail: { before: null, after: record.contactEmail },
+          balance: { before: null, after: record.balance },
+          discountPercent: { before: null, after: record.discountPercent },
+          parentAccountId: { before: null, after: record.parentAccountId ?? null },
           state: { before: null, after: record.state },
         },
       });
@@ -288,7 +353,7 @@ export function createAccountManager(deps: AccountManagerDeps): AccountManager {
       return transition(
         input.resellerAccountId,
         RESELLER_SUSPENDED,
-        RESELLER_SUSPEND_ACTION,
+        ACCOUNT_SUSPEND_ACTION,
         actor
       );
     },
@@ -297,7 +362,7 @@ export function createAccountManager(deps: AccountManagerDeps): AccountManager {
       return transition(
         input.resellerAccountId,
         RESELLER_ACTIVE,
-        RESELLER_REACTIVATE_ACTION,
+        ACCOUNT_REACTIVATE_ACTION,
         actor
       );
     },

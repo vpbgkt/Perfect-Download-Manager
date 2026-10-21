@@ -98,7 +98,7 @@ describe("determineOutcome (Req 12.7, 12.12)", () => {
       outcome.detail.includes("Customer_Field round-trip"),
       "detail names the failing check"
     );
-    assert.ok(outcome.status !== "SUCCESSFUL", "must not report as successful");
+    assert.ok(String(outcome.status) !== "SUCCESSFUL", "must not report as successful");
   });
 
   it("reports PARTIALLY VERIFIED when environment is unreachable (Req 12.12)", () => {
@@ -108,7 +108,7 @@ describe("determineOutcome (Req 12.7, 12.12)", () => {
       outcome.detail.includes("not_verified") || outcome.detail.includes("could not be verified"),
       "detail explains that checks were not verified"
     );
-    assert.ok(outcome.status !== "SUCCESSFUL", "unreachable must not be reported as passed");
+    assert.ok(String(outcome.status) !== "SUCCESSFUL", "unreachable must not be reported as passed");
   });
 
   it("FAILED takes precedence over PARTIALLY VERIFIED when both exist", () => {

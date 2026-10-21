@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { getServerContext } from "@/lib/server-context.ts";
 import { resolvePrincipal } from "@/lib/principal.ts";
 import { authErrorResponse, validationErrorResponse } from "@/lib/http.ts";
+import { createPlanManager } from "@/lib/plans.ts";
 
 export async function GET(req: Request): Promise<NextResponse> {
   const { authenticator, dynamo } = getServerContext();
@@ -47,16 +48,20 @@ export async function GET(req: Request): Promise<NextResponse> {
       Key: { resellerAccountId: accountId },
     });
 
-    if (!accountData.item) {
+    if (!accountData) {
       return NextResponse.json(
         { error: "not_found", message: "Account not found" },
         { status: 404 }
       );
     }
 
-    const account = accountData.item as any;
+    const account = accountData;
 
-    if (!account.dhruApiUrl || !account.dhruUsername || !account.dhruApiKey) {
+    if (
+      typeof account.dhruApiUrl !== "string" ||
+      typeof account.dhruUsername !== "string" ||
+      typeof account.dhruApiKey !== "string"
+    ) {
       return NextResponse.json(
         {
           error: "configuration_missing",
@@ -124,7 +129,24 @@ export async function GET(req: Request): Promise<NextResponse> {
       }
     }
 
-    // 7. Return services list
+    // 7. Inject active PDM product plans as services
+    const planManager = createPlanManager({ dynamo });
+    const activePlans = await planManager.listActive();
+    for (const plan of activePlans) {
+      services.push({
+        ID: plan.planId,
+        SERVICE_NAME: plan.name,
+        PRICE: plan.price,
+        DURATION_MONTHS: plan.durationMonths,
+        MAX_ACTIVATIONS: plan.maxActivations,
+        FEATURES: plan.features,
+        DESCRIPTION: plan.description ?? "",
+        STATUS: plan.status,
+        type: "pdm_license",
+      });
+    }
+
+    // 8. Return services list
     return NextResponse.json({
       success: true,
       accountId,

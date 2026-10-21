@@ -1,10 +1,20 @@
 {
   "TableName": "pdm-portal-admins",
   "AttributeDefinitions": [
-    { "AttributeName": "firebaseUid", "AttributeType": "S" }
+    { "AttributeName": "adminId", "AttributeType": "S" },
+    { "AttributeName": "email", "AttributeType": "S" }
   ],
   "KeySchema": [
-    { "AttributeName": "firebaseUid", "KeyType": "HASH" }
+    { "AttributeName": "adminId", "KeyType": "HASH" }
+  ],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "email-index",
+      "KeySchema": [
+        { "AttributeName": "email", "KeyType": "HASH" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    }
   ],
   "BillingMode": "PAY_PER_REQUEST",
   "SSESpecification": { "Enabled": true }

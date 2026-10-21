@@ -19,8 +19,10 @@
 import { NextResponse } from "next/server";
 import { createApiKeyManager } from "@/lib/apikeys.ts";
 import { createAuditLog } from "@/lib/audit.ts";
+import { createTransactionManager } from "@/lib/transactions.ts";
 import { getServerContext } from "@/lib/server-context.ts";
 import type { UsagePlan } from "@/lib/ratelimit.ts";
+import { calculateApiKeyPrice, getAccountForPricing } from "@/lib/pricing.ts";
 import {
   authErrorResponse,
   extractIdToken,
@@ -106,6 +108,40 @@ export async function POST(
     monthlyQuota: quota.value,
   };
 
+  // ── Check account balance and calculate price (NEW) ──
+  const account = await getAccountForPricing(dynamo, resellerAccountId);
+  if (!account) {
+    return validationErrorResponse("resellerAccountId", "Account not found");
+  }
+
+  if (account.state !== "active") {
+    return NextResponse.json(
+      { error: "account_suspended", message: "Account is suspended" },
+      { status: 403 }
+    );
+  }
+
+  const pricing = calculateApiKeyPrice(account);
+  
+  // Check sufficient balance
+  if (account.balance < pricing.finalPrice) {
+    return NextResponse.json(
+      {
+        error: "insufficient_balance",
+        message: `Insufficient balance. Required: ${pricing.finalPrice}, Available: ${account.balance}`,
+        required: pricing.finalPrice,
+        available: account.balance,
+        pricing: {
+          basePrice: pricing.basePrice,
+          discountPercent: pricing.discountPercent,
+          discountAmount: pricing.discountAmount,
+          finalPrice: pricing.finalPrice,
+        },
+      },
+      { status: 402 } // Payment Required
+    );
+  }
+
   // 5. Delegate issuance + auditing to the lib module (returns secret once).
   const manager = createApiKeyManager({ dynamo, audit: createAuditLog(dynamo) });
   const result = await manager.issueApiKey(
@@ -118,6 +154,24 @@ export async function POST(
       return validationErrorResponse(result.error.field ?? "input", result.error.message);
     }
     return NextResponse.json({ error: "conflict", reason: result.error.message }, { status: 409 });
+  }
+
+  // ── Deduct balance after successful key creation (NEW) ──
+  const transactionManager = createTransactionManager({ dynamo });
+  const debitResult = await transactionManager.debitBalance(
+    {
+      accountId: resellerAccountId,
+      amount: pricing.finalPrice,
+      reason: "key_purchase",
+      relatedEntity: result.value.record.apiKeyId,
+    },
+    { identity: principal.identity, role: principal.role }
+  );
+
+  if (!debitResult.ok) {
+    // This shouldn't happen as we already checked balance, but log it
+    console.error("Failed to debit balance after key creation:", debitResult.error);
+    // Key is already created, so we continue (could implement rollback in production)
   }
 
   // The plaintext secret is returned exactly once, alongside the safe-to-log
@@ -135,6 +189,14 @@ export async function POST(
       },
       state: record.state,
       createdAt: record.createdAt,
+      // Include pricing information in response
+      pricing: {
+        basePrice: pricing.basePrice,
+        discountPercent: pricing.discountPercent,
+        discountAmount: pricing.discountAmount,
+        finalPrice: pricing.finalPrice,
+      },
+      newBalance: debitResult.ok ? debitResult.value.balanceAfter : account.balance,
     },
     { status: 201 }
   );

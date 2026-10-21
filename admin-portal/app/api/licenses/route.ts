@@ -8,6 +8,10 @@
  * permissions, and gate a supplied `keyPrefix` to `admin`/`super_admin` with a
  * 403 (Req 5.7).
  *
+ * For non-admin callers (distributor/reseller/dealer), license creation is
+ * treated as an ORDER: the license price is deducted from their account
+ * balance, the license is minted, and an order record is created.
+ *
  * @module app/api/licenses/route
  * Requirements: 1.7, 1.9, 2.5, 2.8, 3.9, 3.11, 4.9, 5.7, 5.14, 7.3, 7.8,
  *               7.10, 7.12, 10.6
@@ -34,6 +38,10 @@ import { validateKeyPrefix, normalizeKeyPrefix } from "../../../lib/licenses/key
 import { evaluateCustomerProfile } from "../../../lib/licenses/customer.ts";
 import { resolvePrincipal } from "../../../lib/principal.ts";
 import type { Principal } from "../../../lib/auth.ts";
+import { calculatePrice, getAccountForPricing } from "../../../lib/pricing.ts";
+import { createTransactionManager } from "../../../lib/transactions.ts";
+import { createOrderManager, type OrderSource } from "../../../lib/orders.ts";
+import { createPlanManager } from "../../../lib/plans.ts";
 
 /** Derive the license-query ownership scope from an authenticated principal. */
 function scopeOf(principal: Principal): LicenseQueryScope {
@@ -53,15 +61,13 @@ function sourceIpOf(req: Request): string {
 /**
  * POST /api/licenses — create a new License_Record (Req 3).
  *
- * Flow:
- *  1. Parse body
- *  2. Resolve principal (Api_Key or Firebase)
- *  3. Require `license:create` permission → 403
- *  4. Require MFA enrollment (Firebase only) → 403
- *  5. Gate keyPrefix to admin/super_admin → 403
- *  6. Validate prefix and Customer_Profile before any write → 400
- *  7. Validate other inputs → 400
- *  8. Delegate creation
+ * For non-admin roles, this acts as an ORDER:
+ *  1. Calculate price based on account discount
+ *  2. Check & deduct balance
+ *  3. Mint the license
+ *  4. Record the order
+ *
+ * For admin/super_admin roles, license creation is free (no balance deduction).
  */
 export async function POST(req: Request): Promise<NextResponse> {
   // ── Parse body first so the ID token can also be read from it. ──
@@ -175,14 +181,120 @@ export async function POST(req: Request): Promise<NextResponse> {
     features = body.features as string[];
   }
 
-  // ── Reseller-created records are owned by the caller's account (Req 3.6). ──
+  // ── Non-admin records are owned by the caller's account (Req 3.6). ──
+  const isAdminRole = principal.role === "admin" || principal.role === "super_admin";
+
+  // ── For non-admin roles: require planId and use plan config ──
+  let priceInfo: { basePrice: number; discountPercent: number; discountAmount: number; finalPrice: number; balanceBefore: number; balanceAfter: number } | undefined;
+  let transactionId: string | undefined;
+  let planDerivedExpiry: string | undefined;
+  let planDerivedMaxAct: number | undefined;
+  let planDerivedFeatures: string[] | undefined;
+  let planDerivedPlanName: string | undefined;
+
+  // Determine order source: API key callers → "api", dashboard callers → "dashboard"
+  const orderSource: OrderSource = principal.authMethod === "apikey" ? "api" : "dashboard";
+
+  if (!isAdminRole && principal.resellerAccountId) {
+    // Non-admin users MUST select a plan
+    const planId = body.planId;
+    if (!planId || typeof planId !== "string") {
+      return validationErrorResponse("planId", "A product plan must be selected");
+    }
+
+    // Look up the plan
+    const planManager = createPlanManager({ dynamo: ctx.dynamo });
+    const planResult = await planManager.getPlan(planId);
+    if (!planResult.ok) {
+      return validationErrorResponse("planId", "Selected plan not found");
+    }
+    const selectedPlan = planResult.value;
+    if (selectedPlan.status !== "active") {
+      return validationErrorResponse("planId", "Selected plan is no longer available");
+    }
+
+    // Derive license attributes from plan
+    planDerivedPlanName = selectedPlan.name;
+    planDerivedMaxAct = selectedPlan.maxActivations;
+    planDerivedFeatures = selectedPlan.features.length > 0 ? selectedPlan.features : undefined;
+
+    // Calculate expiry from plan duration
+    const expiry = new Date();
+    expiry.setMonth(expiry.getMonth() + selectedPlan.durationMonths);
+    planDerivedExpiry = expiry.toISOString();
+
+    // Fetch account for pricing
+    const account = await getAccountForPricing(ctx.dynamo, principal.resellerAccountId);
+    if (!account) {
+      return badRequestResponse("Account not found");
+    }
+    if (account.state !== "active") {
+      return authErrorResponse({ code: "not_authorized", message: "Account is suspended" });
+    }
+
+    // Calculate price using the plan's price (not the default base price)
+    const pricing = calculatePrice(selectedPlan.price, account.discountPercent);
+    priceInfo = {
+      basePrice: pricing.basePrice,
+      discountPercent: pricing.discountPercent,
+      discountAmount: pricing.discountAmount,
+      finalPrice: pricing.finalPrice,
+      balanceBefore: account.balance,
+      balanceAfter: account.balance - pricing.finalPrice,
+    };
+
+    // Check sufficient balance
+    if (account.balance < pricing.finalPrice) {
+      return NextResponse.json(
+        {
+          error: "insufficient_balance",
+          message: `Insufficient balance. Available: ${account.balance}, Required: ${pricing.finalPrice}`,
+          balance: account.balance,
+          required: pricing.finalPrice,
+        },
+        { status: 402 }
+      );
+    }
+
+    // Debit balance
+    const txnManager = createTransactionManager({ dynamo: ctx.dynamo });
+    const debitResult = await txnManager.debitBalance(
+      {
+        accountId: principal.resellerAccountId,
+        amount: pricing.finalPrice,
+        reason: "license_purchase",
+        relatedEntity: `plan:${selectedPlan.planId}`,
+      },
+      { identity: principal.identity, role: principal.role }
+    );
+
+    if (!debitResult.ok) {
+      if (debitResult.error.code === "insufficient_balance") {
+        return NextResponse.json(
+          {
+            error: "insufficient_balance",
+            message: debitResult.error.message,
+          },
+          { status: 402 }
+        );
+      }
+      return badRequestResponse(debitResult.error.message);
+    }
+
+    transactionId = debitResult.value.transactionId;
+    // Update balance info from actual transaction
+    priceInfo.balanceBefore = debitResult.value.balanceBefore;
+    priceInfo.balanceAfter = debitResult.value.balanceAfter;
+  }
+
+  // Build the license creation input — plan-derived values take precedence for non-admin
   const input: CreateLicenseInput = {
-    plan,
-    maxActivations: maxActivations.value,
+    plan: isAdminRole ? plan : (planDerivedPlanName ?? plan),
+    maxActivations: isAdminRole ? maxActivations.value : (planDerivedMaxAct ?? maxActivations.value),
     owner,
-    expiresAt,
-    features,
-    resellerAccountId: principal.role === "reseller" ? principal.resellerAccountId : undefined,
+    expiresAt: isAdminRole ? expiresAt : (planDerivedExpiry ?? expiresAt),
+    features: isAdminRole ? features : (planDerivedFeatures ?? features),
+    resellerAccountId: !isAdminRole ? principal.resellerAccountId : undefined,
     keyPrefix,
     customer: Object.keys(customer.set).length > 0 ? customer.set : undefined,
   };
@@ -197,6 +309,20 @@ export async function POST(req: Request): Promise<NextResponse> {
   });
 
   if (!result.ok) {
+    // If license creation fails after balance deduction, refund the balance
+    if (!isAdminRole && principal.resellerAccountId && priceInfo) {
+      const txnManager = createTransactionManager({ dynamo: ctx.dynamo });
+      await txnManager.creditBalance(
+        {
+          accountId: principal.resellerAccountId,
+          amount: priceInfo.finalPrice,
+          reason: "refund",
+          relatedEntity: `license_creation_failed`,
+        },
+        { identity: principal.identity, role: principal.role }
+      );
+    }
+
     if (result.error.code === "validation_error") {
       return validationErrorResponse(result.error.field ?? "input", result.error.message);
     }
@@ -204,9 +330,36 @@ export async function POST(req: Request): Promise<NextResponse> {
     return badRequestResponse(result.error.message);
   }
 
-  // Return the complete generated License_Key plus keyPrefix and present
-  // Customer_Fields (Req 5.14, 10.6).
-  return NextResponse.json(result.value, { status: 201 });
+  // ── Record the order for non-admin roles ──
+  let orderRecord;
+  if (!isAdminRole && principal.resellerAccountId && priceInfo) {
+    const orderManager = createOrderManager({ dynamo: ctx.dynamo });
+    const orderResult = await orderManager.createOrder({
+      accountId: principal.resellerAccountId,
+      licenseKey: result.value.licenseKey,
+      plan: result.value.plan,
+      quantity: 1,
+      basePrice: priceInfo.basePrice,
+      discountPercent: priceInfo.discountPercent,
+      discountAmount: priceInfo.discountAmount,
+      finalPrice: priceInfo.finalPrice,
+      balanceBefore: priceInfo.balanceBefore,
+      balanceAfter: priceInfo.balanceAfter,
+      status: "completed",
+      source: orderSource,
+      transactionId,
+    });
+    if (orderResult.ok) {
+      orderRecord = orderResult.value;
+    }
+  }
+
+  // Return the complete generated License_Key plus order info if applicable.
+  const response: Record<string, unknown> = { ...result.value };
+  if (orderRecord) {
+    response.order = orderRecord;
+  }
+  return NextResponse.json(response, { status: 201 });
 }
 
 /**

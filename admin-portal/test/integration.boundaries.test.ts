@@ -12,6 +12,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { generateKeyPairSync, verify as cryptoVerify } from "node:crypto";
 import { FakeDynamoClient } from "../lib/dev/in-memory-dynamo.ts";
 import { createAuditLog } from "../lib/audit.ts";
@@ -54,6 +55,7 @@ describe("Firebase ID-token verification boundary (Req 1.2, 2.1)", () => {
 
     const now = "2025-06-15T12:00:00.000Z";
     const admin: AdminRecord = {
+      adminId: "uid-super",
       firebaseUid: "uid-super",
       email: "s@e.com",
       role: "super_admin",
@@ -208,8 +210,13 @@ describe("Portal operational data read back from its own tables (Req 14.5)", () 
       generateId: () => `res-${idN++}`,
     });
 
-    const created = await accounts.createReseller(
-      { orgName: "Distributor", contactEmail: "ops@dist.com" },
+    const created = await accounts.createAccount(
+      {
+        accountType: "distributor",
+        orgName: "Distributor",
+        contactEmail: "ops@dist.com",
+        password: randomUUID(),
+      },
       { actor: "super-1", actorRole: "super_admin", sourceIp: "1.2.3.4" }
     );
     assert.strictEqual(created.ok, true);

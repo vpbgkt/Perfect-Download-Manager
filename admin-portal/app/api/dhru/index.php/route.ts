@@ -400,8 +400,8 @@ async function handlePlaceOrder(
       expiresAt,
       resellerAccountId: account.resellerAccountId,
       customer: {
-        email,
-        name: username,
+        customerEmail: email,
+        customerName: username,
       },
     },
     {
@@ -418,23 +418,18 @@ async function handlePlaceOrder(
   const license = licenseResult.value;
   
   // 7. Deduct balance
-  const debitResult = await transactionManager.createTransaction({
-    accountId: account.resellerAccountId,
-    type: "debit",
-    amount: cost,
-    reason: `PDM License via Dhru API - ${service.SERVICENAME}`,
-    relatedEntity: `license:${license.licenseKey}`,
-    metadata: {
-      dhruServiceId: serviceId,
-      licenseKey: license.licenseKey,
-      username,
-      email,
-      plan: service.SERVICENAME,
+  const debitResult = await transactionManager.debitBalance(
+    {
+      accountId: account.resellerAccountId,
+      amount: cost,
+      reason: "license_purchase",
+      relatedEntity: `license:${license.licenseKey}`,
     },
-    actor: `dhru:${account.dhruApiUsername}`,
-    actorRole: "reseller",
-    sourceIp: sourceIpOf(req),
-  });
+    {
+      identity: `dhru:${account.dhruApiUsername}`,
+      role: "reseller",
+    }
+  );
   
   if (!debitResult.ok) {
     // License created but balance deduction failed - critical error
@@ -473,18 +468,16 @@ async function handlePlaceOrder(
   }
   
   // 9. Create audit log
-  await audit.log({
-    action: "dhru_license_purchased",
+  await audit.writeAuditEntry({
+    action: "dhru.license.purchase",
     actor: `dhru:${account.dhruApiUsername}`,
     actorRole: "reseller",
     target: license.licenseKey,
     sourceIp: sourceIpOf(req),
-    metadata: {
-      orderId,
-      serviceId,
-      cost,
-      username,
-      email,
+    changes: {
+      orderId: { before: null, after: orderId },
+      serviceId: { before: null, after: serviceId },
+      cost: { before: null, after: cost },
     },
   });
   

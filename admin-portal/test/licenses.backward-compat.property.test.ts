@@ -69,7 +69,13 @@ const REQUIRED_RESPONSE_FIELDS = [
 const actor = { actor: "admin-user", actorRole: "admin", sourceIp: "198.51.100.1" };
 const adminScope = { role: "admin" as const, resellerAccountId: null };
 const resellerScope = { role: "reseller" as const, resellerAccountId: "res-alpha" };
-const principal = { identity: "admin-user", role: "admin" as const, resellerAccountId: null };
+const principal = {
+  identity: "admin-user",
+  role: "admin" as const,
+  resellerAccountId: null,
+  mfaEnrolled: true,
+  authMethod: "password" as const,
+};
 
 // ─── Arbitraries ─────────────────────────────────────────────────────────────
 

@@ -10,8 +10,11 @@ import { LinkButton } from "../../../components/ui/link-button.tsx";
 import { Input } from "../../../components/ui/input.tsx";
 import { Badge, statusTone } from "../../../components/ui/badge.tsx";
 import { Table, THead, TBody, TR, TH, TD } from "../../../components/ui/table.tsx";
+import { useSession } from "../../../components/dashboard/session-provider.tsx";
 
 export default function LicensesPage() {
+  const { session } = useSession();
+  const isAdmin = session?.role === "admin" || session?.role === "super_admin";
   const [items, setItems] = React.useState<LicenseSummary[]>([]);
   const [search, setSearch] = React.useState("");
   const [nextToken, setNextToken] = React.useState<string | undefined>();
@@ -61,7 +64,7 @@ export default function LicensesPage() {
       <PageHeader
         title="Licenses"
         description="Search by license key, owner, customer email, name, company, or phone."
-        actions={<LinkButton href="/dashboard/licenses/new">New license</LinkButton>}
+        actions={<LinkButton href={isAdmin ? "/dashboard/licenses/new" : "/dashboard/purchase"}>{isAdmin ? "New License" : "Purchase License"}</LinkButton>}
       />
 
       <form onSubmit={onSearch} className="mb-4 flex gap-2">

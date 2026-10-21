@@ -142,3 +142,20 @@ export function extractIdToken(
   }
   return null;
 }
+
+/**
+ * Extract authentication token from request - supports both Firebase ID tokens
+ * and JWT tokens for password-based authentication.
+ * 
+ * @param req - Request object
+ * @param body - Parsed JSON body (optional)
+ * @returns Token string or null if not found
+ */
+export function extractAuthToken(
+  req: Request,
+  body: Record<string, unknown> | null = null
+): string | null {
+  // First try standard token extraction (works for both Firebase and JWT)
+  return extractIdToken(req, body);
+}
+

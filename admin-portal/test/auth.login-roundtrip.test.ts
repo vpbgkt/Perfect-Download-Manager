@@ -33,6 +33,7 @@ function setup() {
   });
 
   const admin: AdminRecord = {
+    adminId: "admin-1",
     firebaseUid: "uid-1",
     email: "admin@example.com",
     role: "admin",
