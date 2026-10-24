@@ -248,6 +248,48 @@ test("handoff fails after the cancel: the download is restarted in the browser",
         "a failed handoff must hand the download back to the browser");
 });
 
+test("needs_browser: PDM cannot fetch it, so the browser downloads it even with browserFallback off", async () => {
+    // PDM is running but its own request gets an HTML page (a login or a JavaScript check guards
+    // the file). The browser's copy was already cancelled, so it must be restarted there.
+    const w = loadWorker({
+        native: (msg) => (msg.ping
+            ? { ok: true, pong: true, hostVersion: "2", appRunning: true }
+            : { ok: false, error: "needs_browser" }),
+        store: { browserFallback: false, sendDocsAndImages: true }
+    });
+    await sleep(30);
+
+    const run = w.determineFilename(item({
+        url: "https://pmc.example.org/articles/1/pdf/paper.pdf",
+        finalUrl: "https://pmc.example.org/articles/1/pdf/paper.pdf",
+        filename: "paper.pdf",
+        mime: "application/pdf"
+    }));
+    await run.suggested;
+    await sleep(60);
+
+    assert.deepEqual(w.of("cancel"), [1]);
+    assert.deepEqual(w.of("download"), ["https://pmc.example.org/articles/1/pdf/paper.pdf"]);
+    assert.deepEqual(w.of("erase"), [1], "the cancelled entry is replaced by the browser's restart");
+    assert.ok(w.of("notify").some((m) => /browser's session/.test(m)));
+});
+
+test("needs_browser on an explicit send: the browser downloads it and the send reports success", async () => {
+    const w = loadWorker({
+        native: (msg) => (msg.ping
+            ? { ok: true, pong: true, hostVersion: "2", appRunning: true }
+            : { ok: false, error: "needs_browser" })
+    });
+    await sleep(30);
+
+    const response = await new Promise((resolve) => {
+        w.fire("message", { type: "sendUrl", url: "https://example.com/report.pdf", referrer: "" }, {}, resolve);
+    });
+
+    assert.deepEqual(response, { ok: true, fallback: "browser" });
+    assert.deepEqual(w.of("download"), ["https://example.com/report.pdf"]);
+});
+
 test("filtered file types are left to the browser untouched", async () => {
     const w = loadWorker({ native: readyHost });
     await sleep(30);

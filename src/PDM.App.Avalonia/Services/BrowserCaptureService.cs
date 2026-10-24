@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -29,6 +31,11 @@ public sealed class BrowserCaptureService : IAsyncDisposable
     // Hard gate so a burst can never stack "New download detected" dialogs (mirrors the WPF head).
     private int _promptShowing;
 
+    // Inspection done by ReturnToBrowserAsync before the browser is answered, handed to HandleAsync
+    // (keyed by request URL) so an accepted download is still probed only once.
+    private readonly ConcurrentDictionary<string, (DuplicateInfo? Duplicate, RemoteFileInfo? Info)> _inspected =
+        new(StringComparer.Ordinal);
+
     public BrowserCaptureService(AppHost host, AvaloniaNotifier notifier, Func<Window?> ownerProvider)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
@@ -46,14 +53,44 @@ public sealed class BrowserCaptureService : IAsyncDisposable
             NativeHostRegistrar.EnsureStoreExtensionRegistered(hostExe);
         });
 
-        _listener = new DownloadRequestListener(HandleAsync, _logger);
+        _listener = new DownloadRequestListener(HandleAsync, _logger, ReturnToBrowserAsync);
         _listener.Start();
     }
 
+    /// <summary>
+    /// Runs before the browser is answered. True when PDM's own request gets an HTML page where the
+    /// browser got a file: typically a document behind a login, a session cookie or a JavaScript
+    /// check (PubMed Central's "Preparing to download ..." page), which only the browser can pass.
+    /// The browser then downloads it itself instead of PDM failing with "this is a web page".
+    /// </summary>
+    private async Task<bool> ReturnToBrowserAsync(DownloadRequest request, CancellationToken cancellationToken)
+    {
+        // A refresh capture is correlated by HandleAsync, which probes for itself.
+        if (!TryGetHttpUri(request.Url, out Uri? uri) || _host.RefreshCoordinator.Current is not null)
+        {
+            return false;
+        }
+
+        var inspected = await _host.DownloadManager
+            .InspectForDuplicateAsync(uri, request.Referrer, request.FileName, cancellationToken).ConfigureAwait(false);
+
+        if (inspected.Info is { IsLikelyWebPage: true })
+        {
+            return true;
+        }
+
+        _inspected[request.Url] = inspected;
+        return false;
+    }
+
+    private static bool TryGetHttpUri(string url, [NotNullWhen(true)] out Uri? uri) =>
+        Uri.TryCreate(url, UriKind.Absolute, out uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
     private async Task HandleAsync(DownloadRequest request)
     {
-        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out Uri? uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        bool preInspected = _inspected.TryRemove(request.Url, out var inspected);
+        if (!TryGetHttpUri(request.Url, out Uri? uri))
         {
             return;
         }
@@ -67,8 +104,10 @@ public sealed class BrowserCaptureService : IAsyncDisposable
 
         // Resolve identity once (probing when needed) so a dynamic link is still recognised, and the
         // probe is reused for the add so a new download never probes twice.
-        var (duplicate, probed) = await _host.DownloadManager
-            .InspectForDuplicateAsync(uri, request.Referrer, request.FileName).ConfigureAwait(false);
+        var (duplicate, probed) = preInspected
+            ? inspected
+            : await _host.DownloadManager
+                .InspectForDuplicateAsync(uri, request.Referrer, request.FileName).ConfigureAwait(false);
 
         if (duplicate is not null)
         {

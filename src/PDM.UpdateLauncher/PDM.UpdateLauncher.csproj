@@ -22,15 +22,20 @@
     ~15-20 MB compressed, but the payoff is that the updater is now completely
     decoupled from whatever runtime version the main app is using - it can update
     the main app across framework upgrades without becoming a chicken-and-egg
-    problem. IncludeNativeLibrariesForSelfExtract + IncludeAllContentForSelfExtract
-    ensures every native SxS lib is bundled and self-extracted on first launch.
+    problem. IncludeNativeLibrariesForSelfExtract ensures every native SxS lib is
+    bundled and self-extracted on first launch.
+
+    IncludeAllContentForSelfExtract stays off: with it the managed assemblies are
+    extracted too and the exe resolves framework assemblies from its own folder, so
+    in a trimmed install folder it loaded the app's trimmed System.*.dll and failed
+    in Main with MissingMethodException. Loaded from the bundle it is self-sufficient.
   -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <IncludeAllContentForSelfExtract>false</IncludeAllContentForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>embedded</DebugType>
   </PropertyGroup>

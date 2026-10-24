@@ -48,10 +48,24 @@ and `research/`.
   with 100-nanosecond ticks
 - ETAs of a day or more no longer wrap around in the download list and the CLI (30 hours showed as
   06:00:00)
+- PDFs and documents sent from the browser no longer fail with "That link points to a web page". Files
+  behind a sign-in, a session cookie or a JavaScript check (for example PubMed Central's "Preparing to
+  download ..." page) give PDM an HTML page where the browser gets the file. PDM now checks before
+  accepting a browser download and answers `needs_browser`, and the extension (1.3.1) downloads the file
+  in the browser instead of losing it. The native host passes such answers through instead of
+  treating them as "PDM not running" and relaunching PDM for 30 s
+- A "Pipe is broken" warning was logged every time the browser extension checked whether PDM was
+  running. When that check disconnected very quickly, the capture pipe also paused for 500 ms, so a
+  download sent straight after it could miss PDM
 
 ### Changed
 - Download options: `InitialConnections`, `RampUpInterval` and `MinSplitDuration` removed;
   `MinSplitSize` 4 MiB -> 128 KiB; `StallTimeout` 60 s -> 20 s; `RefusedConnectionRetryDelay` added
+- Installer 49 MB -> 19.5 MB: the update launcher (`pdm-update.exe`) is now NativeAOT, 2 MB instead of a
+  36 MB copy of the whole .NET runtime. Installer files use maximum compression
+- `build/publish-aot-dist.ps1`: when the Visual C++ build tools are missing it builds a trimmed
+  self-contained version (about 26 MB installer) instead of failing, and it puts `vswhere.exe` on PATH
+  so NativeAOT links on a fresh Build Tools install
 
 ---
 

@@ -1,5 +1,16 @@
 # Changelog — PDM Browser Integration
 
+## 1.3.1
+
+**PDFs and documents that need your browser session no longer fail**
+- Some files are only served to the browser: a sign-in, a session cookie or a JavaScript check
+  (for example PubMed Central's "Preparing to download ..." page) guards them, and PDM's own request
+  gets an HTML page. PDM 1.4.0 now checks this before accepting a download and answers
+  `needs_browser`; the extension then downloads the file in the browser and says why. Previously the
+  browser's copy was cancelled and PDM failed with "That link points to a web page".
+- Applies to automatic interception, right-click "Download with PDM", "Send this page" and page-scan
+  sends, independent of the "let the browser download when PDM is unavailable" setting.
+
 ## 1.3.0
 
 **No more stray "Save as" dialog**

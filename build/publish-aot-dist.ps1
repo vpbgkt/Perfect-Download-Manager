@@ -7,7 +7,7 @@
 # Produces dist/PDM/ containing:
 #   PDM.exe                 - Avalonia desktop head, NativeAOT self-contained
 #   pdm-native-host.exe     - browser native-messaging host, NativeAOT self-contained
-#   pdm-update.exe          - update launcher, self-contained single-file
+#   pdm-update.exe          - update launcher, NativeAOT (trimmed single-file without the C++ tools)
 #   <native deps>           - e_sqlite3.dll, Skia/HarfBuzz, ANGLE, etc. (from the AOT publish)
 #   Assets/pdm.ico          - loose icon for the installer + shortcuts (Avalonia embeds it, so it
 #                             is copied here explicitly for WiX)
@@ -26,13 +26,36 @@ param(
     # — including swapping the embedded licensing key — invalidates the signature. Leave blank for
     # unsigned dev builds (the self-integrity check then reports "Unsigned" and does not punish).
     [string]$CertThumbprint = "",
-    [string]$TimestampUrl = "http://timestamp.digicert.com"
+    [string]$TimestampUrl = "http://timestamp.digicert.com",
+
+    # Build the trimmed self-contained fallback even when the C++ linker is available.
+    [switch]$NoAot
 )
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $repo "dist"
 $appOut = Join-Path $dist "PDM"
+
+# NativeAOT links with the MSVC linker (Visual Studio or Build Tools, "Desktop development with C++"
+# workload). Without it the publish fails, and an untrimmed self-contained build (~106 MB installer)
+# is not an acceptable substitute. Fall back to an IL-trimmed self-contained build instead: same
+# runtime-free layout, no VC++ redistributable needed (only the UCRT, part of Windows 10+).
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+$hasLinker = (Test-Path $vswhere) -and
+    [bool](& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+$useAot = $hasLinker -and -not $NoAot
+if ($useAot) {
+    # The ILCompiler's linker lookup calls vswhere.exe by bare name; a fresh Build Tools install does not
+    # put it on PATH, and the "not recognized" message then ends up in the linker command line.
+    $env:PATH = "$(Split-Path $vswhere -Parent);$env:PATH"
+} else {
+    Write-Host "MSVC linker not found (or -NoAot): building trimmed self-contained instead of NativeAOT." -ForegroundColor Yellow
+}
+$trimmed = @("--self-contained", "true", "-p:PublishAot=false", "-p:PublishTrimmed=true",
+             "-p:InvariantGlobalization=true", "-p:DebugType=none")
+$singleFile = @("-p:PublishSingleFile=true", "-p:IncludeNativeLibrariesForSelfExtract=true",
+                "-p:EnableCompressionInSingleFile=true")
 
 if (Test-Path $appOut) { Remove-Item $appOut -Recurse -Force }
 New-Item -ItemType Directory -Path $appOut -Force | Out-Null
@@ -51,21 +74,35 @@ $appTfm = "net10.0-windows10.0.19041.0"
 $helperTfm = "net10.0-windows"
 
 # 1) Avalonia desktop head - NativeAOT, self-contained, runtime-free (the base of the dist).
-$appPublish = Publish-AndLocate (Join-Path $repo "src/PDM.App.Avalonia/PDM.App.Avalonia.csproj") $appTfm `
+$appArgs = if ($useAot) {
     @("-p:PublishAot=true", "-p:InvariantGlobalization=true", "-p:StripSymbols=true", "-p:PublishReadyToRun=false")
+} else {
+    $trimmed + @("-p:PublishReadyToRun=false", "-p:PublishDocumentationFiles=false")
+}
+$appPublish = Publish-AndLocate (Join-Path $repo "src/PDM.App.Avalonia/PDM.App.Avalonia.csproj") $appTfm $appArgs
 Copy-Item (Join-Path $appPublish "*") $appOut -Recurse -Force
 
-# 2) Browser native-messaging host - NativeAOT self-contained.
-$hostPublish = Publish-AndLocate (Join-Path $repo "src/PDM.NativeHost/PDM.NativeHost.csproj") $helperTfm `
-    @("-p:PublishAot=true", "-p:InvariantGlobalization=true", "-p:StripSymbols=true")
+# 2) Browser native-messaging host - NativeAOT self-contained (trimmed single-file in the fallback).
+$hostArgs = if ($useAot) { @("-p:PublishAot=true", "-p:InvariantGlobalization=true", "-p:StripSymbols=true") } else { $trimmed + $singleFile }
+$hostPublish = Publish-AndLocate (Join-Path $repo "src/PDM.NativeHost/PDM.NativeHost.csproj") $helperTfm $hostArgs
 Copy-Item (Join-Path $hostPublish "pdm-native-host.exe") $appOut -Force
 
 # 3) Update launcher - self-contained single-file (the orchestrator copies just this exe to %TEMP%,
-#    so it must stand alone). NativeAOT is not required here and single-file keeps the temp-copy trick.
+#    so it must stand alone). A NativeAOT exe is a single standalone file too (~2 MB, no trim/AOT warnings).
+#    The fallback is a trimmed single-file (~11 MB); untrimmed, as up to 1.3.2, it carried the whole runtime (~36 MB).
+$launcherArgs = if ($useAot) {
+    @("-p:PublishAot=true", "-p:PublishSingleFile=false", "-p:InvariantGlobalization=true", "-p:StripSymbols=true")
+} else { $trimmed + $singleFile }
 $launcherPublish = Publish-AndLocate (Join-Path $repo "src/PDM.UpdateLauncher/PDM.UpdateLauncher.csproj") $helperTfm `
-    @("--self-contained", "true", "-p:PublishSingleFile=true", "-p:IncludeNativeLibrariesForSelfExtract=true",
-      "-p:IncludeAllContentForSelfExtract=true", "-p:EnableCompressionInSingleFile=true")
+    $launcherArgs
 Copy-Item (Join-Path $launcherPublish "pdm-update.exe") $appOut -Force
+
+# Debugger/diagnostics-only runtime files and unused alternate GCs: never loaded by the shipped app
+# (they serve attached debuggers, crash-dump creation and DOTNET_GCName). Not present in an AOT publish.
+foreach ($diag in @("createdump.exe", "mscordbi.dll", "mscordaccore.dll", "mscordaccore_*.dll",
+                    "Microsoft.DiaSymReader.Native.*.dll", "clrgc.dll", "clrgcexp.dll", "*.xml")) {
+    Get-ChildItem $appOut -Filter $diag -File | Remove-Item -Force
+}
 
 # Remove any stray launcher side-files the earlier copies may have introduced (baked into the exe).
 foreach ($stale in @("pdm-update.dll", "pdm-update.deps.json", "pdm-update.runtimeconfig.json", "pdm-update.pdb")) {

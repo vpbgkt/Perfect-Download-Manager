@@ -46,18 +46,42 @@ public sealed class DownloadRequestListener : ICaptureListener
     // caught again". Rejections additionally evict the URL immediately via ForgetRecent().
     private static readonly TimeSpan DedupWindow = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Error code replied when <c>returnToBrowser</c> declines a request: the browser should download
+    /// it itself. The extension restarts the download in the browser on this code.
+    /// </summary>
+    public const string NeedsBrowserError = "needs_browser";
+
+    // Upper bound on the pre-ack check. It is a single probe request; past this we ack as before and
+    // let the normal add path report whatever the server does.
+    private static readonly TimeSpan ReturnToBrowserTimeout = TimeSpan.FromSeconds(15);
+
     private readonly Func<DownloadRequest, Task> _handler;
+    private readonly Func<DownloadRequest, CancellationToken, Task<bool>>? _returnToBrowser;
     private readonly ILogger _logger;
+    private readonly string _pipeName;
     private readonly CancellationTokenSource _cts = new();
     private readonly RateLimiter _rateLimiter = new(RateLimitCount, RateWindow);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _recentUrls = new(StringComparer.OrdinalIgnoreCase);
     private Task? _loop;
     private int _disposed;
 
-    public DownloadRequestListener(Func<DownloadRequest, Task> handler, ILogger logger)
+    /// <param name="handler">Adds an accepted request; runs after the browser has been answered.</param>
+    /// <param name="logger">Diagnostics.</param>
+    /// <param name="returnToBrowser">
+    /// Optional check run BEFORE the browser is answered. Returning true replies
+    /// <see cref="NeedsBrowserError"/> instead of ok, so the extension downloads the file in the
+    /// browser rather than PDM accepting a download it cannot fetch (for example a link that only
+    /// serves the file to the browser's session and gives PDM an HTML page).
+    /// </param>
+    /// <param name="pipeName">Pipe to listen on; tests pass a unique name so they never meet a running PDM.</param>
+    public DownloadRequestListener(Func<DownloadRequest, Task> handler, ILogger logger,
+        Func<DownloadRequest, CancellationToken, Task<bool>>? returnToBrowser = null, string pipeName = PipeName)
     {
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _returnToBrowser = returnToBrowser;
+        _pipeName = pipeName;
     }
 
     /// <summary>Starts the accept loop on a background task.</summary>
@@ -70,10 +94,22 @@ public sealed class DownloadRequestListener : ICaptureListener
     {
         while (!token.IsCancellationRequested)
         {
+            NamedPipeServerStream? server = null;
             try
             {
-                NamedPipeServerStream server = CreateServer();
-                await server.WaitForConnectionAsync(token).ConfigureAwait(false);
+                server = CreateServer();
+                try
+                {
+                    await server.WaitForConnectionAsync(token).ConfigureAwait(false);
+                }
+                catch (IOException)
+                {
+                    // The client connected and left before the connection completed: the native
+                    // host's liveness probe connects and drops at once. Nothing to handle and nothing
+                    // wrong with the pipe, so listen again straight away (no warning, no backoff).
+                    server.Dispose();
+                    continue;
+                }
 
                 // Handle this connection on its own task and immediately loop back to create the
                 // next server instance, so there is always a pipe server ready to accept.
@@ -87,10 +123,12 @@ public sealed class DownloadRequestListener : ICaptureListener
             }
             catch (OperationCanceledException)
             {
+                server?.Dispose();
                 break;
             }
             catch (Exception ex)
             {
+                server?.Dispose();
                 _logger.LogWarning(ex, "Download request pipe error; continuing to listen.");
                 // Brief backoff so a persistent error does not spin the CPU.
                 try { await Task.Delay(500, token).ConfigureAwait(false); }
@@ -119,7 +157,7 @@ public sealed class DownloadRequestListener : ICaptureListener
         }
     }
 
-    private static NamedPipeServerStream CreateServer()
+    private NamedPipeServerStream CreateServer()
     {
         // Restrict the pipe to the current user only.
         var security = new PipeSecurity();
@@ -128,7 +166,7 @@ public sealed class DownloadRequestListener : ICaptureListener
             user, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
 
         return NamedPipeServerStreamAcl.Create(
-            PipeName,
+            _pipeName,
             PipeDirection.InOut,
             NamedPipeServerStream.MaxAllowedServerInstances,
             PipeTransmissionMode.Byte,
@@ -141,16 +179,20 @@ public sealed class DownloadRequestListener : ICaptureListener
     private async Task HandleConnectionAsync(NamedPipeServerStream server, CancellationToken token)
     {
         using var reader = new StreamReader(server, Encoding.UTF8, false, 4096, leaveOpen: true);
-        await using var writer = new StreamWriter(server, new UTF8Encoding(false), 256, leaveOpen: true)
-        {
-            AutoFlush = true
-        };
 
         string? line = await reader.ReadLineAsync(token).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(line))
         {
+            // The native host's liveness probe connects and disconnects without sending anything.
+            // Return before creating the writer: disposing it flushes into the closed pipe and
+            // throws "Pipe is broken", which logged a warning for every probe.
             return;
         }
+
+        await using var writer = new StreamWriter(server, new UTF8Encoding(false), 256, leaveOpen: true)
+        {
+            AutoFlush = true
+        };
 
         DownloadRequest? request;
         try
@@ -188,7 +230,18 @@ public sealed class DownloadRequestListener : ICaptureListener
             return;
         }
 
-        // Acknowledge receipt immediately, THEN run the handler. The handler may open a modal
+        // Before accepting, make sure PDM can actually fetch the file. Once we ack, the extension
+        // erases the browser's (cancelled) copy, so accepting a link that only gives PDM an HTML page
+        // left the user with no download at all.
+        if (await ShouldReturnToBrowserAsync(request, token).ConfigureAwait(false))
+        {
+            ForgetRecent(request.Url); // the browser's retry or a later re-send must not be deduped
+            _logger.LogInformation("Returned browser download to the browser (PDM gets a web page) for {Url}", request.Url);
+            await writer.WriteLineAsync($"{{\"ok\":false,\"error\":\"{NeedsBrowserError}\"}}").ConfigureAwait(false);
+            return;
+        }
+
+        // Acknowledge receipt, THEN run the handler. The handler may open a modal
         // "New download detected" prompt and wait for the user. If we awaited it before acking we
         // would hold the browser's native-messaging call open for the whole prompt (so the
         // extension appears to hang), and the pipe connection would stay busy. Sending the ack
@@ -204,6 +257,30 @@ public sealed class DownloadRequestListener : ICaptureListener
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to enqueue browser download for {Url}", request.Url);
+        }
+    }
+
+    private async Task<bool> ShouldReturnToBrowserAsync(DownloadRequest request, CancellationToken token)
+    {
+        if (_returnToBrowser is null)
+        {
+            return false;
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(ReturnToBrowserTimeout);
+        try
+        {
+            return await _returnToBrowser(request, timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            return false; // slow server: accept as before
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Pre-accept check failed for {Url}; accepting.", request.Url);
+            return false;
         }
     }
 
@@ -258,7 +335,7 @@ public sealed class DownloadRequestListener : ICaptureListener
         // Nudge WaitForConnection to return by opening a throwaway client connection.
         try
         {
-            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut);
+            using var client = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut);
             client.Connect(200);
         }
         catch (Exception)

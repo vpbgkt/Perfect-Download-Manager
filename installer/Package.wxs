@@ -33,7 +33,7 @@
            Compressed="yes">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of Perfect Download Manager is already installed." />
-    <MediaTemplate EmbedCab="yes" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Icon Id="AppIcon.ico" SourceFile="$(var.PublishDir)\Assets\pdm.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPHELPLINK" Value="https://github.com/perfectdownloadmanager" />

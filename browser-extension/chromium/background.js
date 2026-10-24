@@ -197,6 +197,12 @@ const HOST_MISSING_RE =
 // An older desktop app has no explicit ping handler: it validates the URL first and answers
 // invalid_url/no_url. That reply still proves the host ran, so it counts as installed.
 const LEGACY_PING_OK_RE = /invalid_url|no_url|bad_request/i;
+// PDM is running but cannot fetch this file itself: its own request gets an HTML page where the
+// browser gets the file (a login, session cookie or JavaScript check guards it). Only the browser
+// can download it, so it goes back to the browser regardless of the browserFallback setting.
+const NEEDS_BROWSER = "needs_browser";
+const NEEDS_BROWSER_MESSAGE =
+    "This file needs your browser's session (sign-in or site check), so your browser is downloading it.";
 
 // ---- In-memory state (reset whenever Chrome recycles the SW — which is what we want) --------
 const forwardTimestamps = [];
@@ -331,7 +337,7 @@ let hostProbe = null;        // in-flight probe, so concurrent callers share one
 
 function classifyHostError(error) {
     const err = error ? String(error) : "";
-    if (LEGACY_PING_OK_RE.test(err)) return HOST_READY;
+    if (LEGACY_PING_OK_RE.test(err) || err === NEEDS_BROWSER) return HOST_READY;
     if (HOST_MISSING_RE.test(err)) return HOST_MISSING;
     // "timeout", "pdm_unavailable", "disconnected", "Native host has exited", … The host exists
     // (or we cannot prove otherwise); treat as retryable rather than telling a paying user their
@@ -564,6 +570,14 @@ async function captureUserInitiated(url, referrer, filename) {
         await notify("Sent to Perfect Download Manager");
         return result;
     }
+    if (result && result.error === NEEDS_BROWSER) {
+        setHostState(HOST_READY, true, null);
+        if (await restartInBrowser(url)) {
+            flashBadge("!", BADGE_AMBER);
+            await notify(NEEDS_BROWSER_MESSAGE);
+            return { ok: true, fallback: "browser" };
+        }
+    }
 
     const verdict = classifyHostError(result && result.error);
     setHostState(verdict, null, result && result.error);
@@ -719,6 +733,10 @@ async function captureUserInitiatedQuiet(item) {
         referrer: item.referrer || "",
         filename: item.filename || ""
     });
+    if (r && r.error === NEEDS_BROWSER && await restartInBrowser(url)) {
+        setHostState(HOST_READY, true, null);
+        return { ok: true, fallback: "browser" };
+    }
     if (!(r && r.ok)) setHostState(classifyHostError(r && r.error), null, r && r.error);
     return r;
 }
@@ -921,6 +939,19 @@ async function handOff(item, url, filename, cancelled) {
     // Drop it from the dedup cache so the user can retry immediately (a failed handoff must never
     // lock out a retry).
     recentUrls.delete(url);
+
+    // PDM is fine but only the browser can fetch this file. If the user kept the browser's copy it
+    // is still running; otherwise restart it there, whatever browserFallback says (that setting is
+    // about PDM being unavailable, which it is not).
+    if (result && result.error === NEEDS_BROWSER) {
+        if (!cancelled) return;
+        if (await restartInBrowser(url)) {
+            eraseDownload(item.id);
+            flashBadge("!", BADGE_AMBER);
+            await notify(NEEDS_BROWSER_MESSAGE, { throttled: true });
+            return;
+        }
+    }
 
     // Recovery net. We cancelled the browser's download on the promise of handing it to PDM and
     // that promise was not kept, so put the download back rather than leaving the user with

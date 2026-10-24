@@ -85,9 +85,10 @@ internal static class Program
             new PipePayload { Url = message.Url, Referrer = message.Referrer, FileName = message.FileName },
             NativeHostJsonContext.Default.PipePayload);
 
-        if (await TrySendAsync(payload).ConfigureAwait(false))
+        string? ack = await TrySendAsync(payload).ConfigureAwait(false);
+        if (ack is not null)
         {
-            return new HostReply { Ok = true };
+            return ReplyFromAck(ack);
         }
 
         // PDM may not be running: launch it, then keep retrying while it starts. A cold start has
@@ -100,9 +101,10 @@ internal static class Program
             for (int i = 0; i < 60; i++)
             {
                 await Task.Delay(500).ConfigureAwait(false);
-                if (await TrySendAsync(payload).ConfigureAwait(false))
+                ack = await TrySendAsync(payload).ConfigureAwait(false);
+                if (ack is not null)
                 {
-                    return new HostReply { Ok = true };
+                    return ReplyFromAck(ack);
                 }
             }
         }
@@ -129,7 +131,36 @@ internal static class Program
         }
     }
 
-    private static async Task<bool> TrySendAsync(string payload)
+    /// <summary>
+    /// Maps the app's acknowledgement to the reply for the extension. A refusal from the running app
+    /// (for example <c>needs_browser</c>: let the browser download this one) is passed through as is;
+    /// it is an answer, not a sign that PDM is unavailable.
+    /// </summary>
+    private static HostReply ReplyFromAck(string ack)
+    {
+        if (ack.Contains("\"ok\":true", StringComparison.Ordinal))
+        {
+            return new HostReply { Ok = true };
+        }
+
+        string? error = null;
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(ack);
+            if (doc.RootElement.TryGetProperty("error", out JsonElement e) && e.ValueKind == JsonValueKind.String)
+            {
+                error = e.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return new HostReply { Ok = false, Error = string.IsNullOrEmpty(error) ? "rejected" : error };
+    }
+
+    /// <summary>Sends one request to the app; returns its acknowledgement line, or null when the app is not reachable.</summary>
+    private static async Task<string?> TrySendAsync(string payload)
     {
         try
         {
@@ -143,12 +174,11 @@ internal static class Program
             using var reader = new StreamReader(client, Encoding.UTF8, false, 256, leaveOpen: true);
 
             await writer.WriteLineAsync(payload).ConfigureAwait(false);
-            string? ack = await reader.ReadLineAsync().ConfigureAwait(false);
-            return ack is not null && ack.Contains("\"ok\":true", StringComparison.Ordinal);
+            return await reader.ReadLineAsync().ConfigureAwait(false);
         }
         catch (Exception)
         {
-            return false;
+            return null;
         }
     }
 

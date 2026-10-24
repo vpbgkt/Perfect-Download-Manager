@@ -57,10 +57,10 @@
     Trim hygiene for NativeAOT (docs/MIGRATION-AVALONIA-NATIVEAOT.md §5). Avalonia's DataGrid and
     Serilog reach some members via reflection and produce trim/AOT roll-up warnings (IL2104/IL3053).
     Rooting the assemblies keeps them intact under trimming so no feature is silently removed;
-    correctness is preferred over a marginally smaller binary. Applied only on a NativeAOT publish so
-    ordinary builds are unaffected.
+    correctness is preferred over a marginally smaller binary. Applied only on a NativeAOT or trimmed
+    publish so ordinary builds are unaffected.
   -->
-  <ItemGroup Condition="'$(PublishAot)' == 'true'">
+  <ItemGroup Condition="'$(PublishAot)' == 'true' Or '$(PublishTrimmed)' == 'true'">
     <TrimmerRootAssembly Include="Avalonia.Controls.DataGrid" />
     <TrimmerRootAssembly Include="Serilog" />
   </ItemGroup>
