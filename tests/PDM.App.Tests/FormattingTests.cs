@@ -182,4 +182,37 @@ public sealed class FormattingTests
         // Assert
         Assert.Equal(expected, result);
     }
+
+    /// <summary>
+    /// ETAs show total hours. The TimeSpan "hh" format is only the hours component (0-23), which used to
+    /// show a 30-hour estimate as 06:00:00 in the download list.
+    /// </summary>
+    [Theory]
+    [InlineData(0, "00:00:00")]
+    [InlineData(195, "00:03:15")]
+    [InlineData(3_600, "01:00:00")]
+    [InlineData(86_399, "23:59:59")]
+    [InlineData(86_400, "24:00:00")]                 // one day: previously "00:00:00"
+    [InlineData(108_000, "30:00:00")]                // 30 hours: previously "06:00:00"
+    [InlineData(359_999, "99:59:59")]                // largest value shown as-is
+    [InlineData(360_000, "99:59:59")]                // 100 hours and more are capped
+    [InlineData(10_000_000, "99:59:59")]
+    public void FormatEta_ShowsTotalHours_CappedAt99(long seconds, string expected)
+    {
+        // Act
+        string result = Formatting.FormatEta(TimeSpan.FromSeconds(seconds));
+
+        // Assert
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void FormatEta_Unknown_ReturnsPlaceholder()
+    {
+        // Act
+        string result = Formatting.FormatEta(null);
+
+        // Assert
+        Assert.Equal("—", result);
+    }
 }

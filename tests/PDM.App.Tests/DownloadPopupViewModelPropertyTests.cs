@@ -7,6 +7,7 @@ using PDM.App;
 using PDM.App.ViewModels;
 using PDM.Core.Models;
 using PDM.Infrastructure;
+using Xunit;
 
 namespace PDM.App.Tests;
 
@@ -21,52 +22,50 @@ public sealed class DownloadPopupViewModelPropertyTests
     /// <summary>
     /// **Validates: Requirements 2.5, 2.6**
     ///
-    /// For any DownloadProgress, when an estimated time remaining is available EtaText is
-    /// formatted as hours:minutes:seconds (including the capped maximum), and when no estimate
-    /// is available EtaText is the unknown-time indication.
+    /// The first snapshot a popup receives determines its ETA exactly: the remaining bytes divided by the
+    /// reported speed, formatted as hours:minutes:seconds, or the unknown-time indication when no estimate
+    /// can be made (size unknown, no speed, nothing left) or when the estimate is a day or more, which the
+    /// popup treats as noise. Later snapshots are smoothed over the speed history by design (the 1.3.2
+    /// IDM-style countdown), so they no longer equal any single snapshot's own <see cref="DownloadProgress.Eta"/>.
     /// </summary>
     [Property(Arbitrary = new[] { typeof(Generators) })]
-    public Property EtaDisplay_MatchesFormattingFormatEta(DownloadProgress progress)
+    public Property EtaDisplay_FirstSnapshot_IsRemainingOverSpeed(DownloadProgress progress)
     {
         // Arrange
         var vm = CreateViewModelWithProgress(progress);
 
         // Act
         vm.ApplyProgress(progress);
-        string etaText = vm.EtaText;
 
-        // Assert: EtaText must equal Formatting.FormatEta(progress.Eta)
-        string expected = Formatting.FormatEta(progress.Eta);
-
-        return Prop.ToProperty(etaText == expected)
-            .Label($"EtaText='{etaText}' expected='{expected}' Eta={progress.Eta}");
+        // Assert
+        string expected = Formatting.FormatEta(ExpectedFirstEta(progress));
+        return Prop.ToProperty(vm.EtaText == expected)
+            .Label($"EtaText='{vm.EtaText}' expected='{expected}' for {Describe(progress)}");
     }
 
     /// <summary>
     /// **Validates: Requirements 2.5, 2.6**
     ///
-    /// For any DownloadProgress where Eta is null, EtaText shows the unknown-time indication ("\u2014").
+    /// Whatever the history, EtaText is either the unknown-time indication ("\u2014") or a time of the form
+    /// hh:mm:ss, and a download of unknown size never shows a time.
     /// </summary>
     [Property(Arbitrary = new[] { typeof(Generators) })]
-    public Property EtaDisplay_WhenEtaNull_ShowsUnknownIndicator(DownloadProgress progress)
+    public Property EtaDisplay_IsTimeOrUnknownIndicator(DownloadProgress first, DownloadProgress second)
     {
         // Arrange
-        var vm = CreateViewModelWithProgress(progress);
-        vm.ApplyProgress(progress);
+        var vm = CreateViewModelWithProgress(first);
 
-        // Act/Assert
-        if (progress.Eta is null)
-        {
-            return Prop.ToProperty(vm.EtaText == "\u2014")
-                .Label($"Null Eta should show '\u2014', got '{vm.EtaText}'");
-        }
+        // Act
+        vm.ApplyProgress(first);
+        vm.ApplyProgress(second);
 
-        // When Eta is available, verify it matches hh:mm:ss pattern or the capped maximum
-        bool matchesTimeFormat = Regex.IsMatch(vm.EtaText, @"^\d{2}:\d{2}:\d{2}$");
-        bool isCappedMax = vm.EtaText == "99:59:59";
+        // Assert
+        bool isUnknown = vm.EtaText == "\u2014";
+        bool isTime = Regex.IsMatch(vm.EtaText, @"^\d{2}:\d{2}:\d{2}$");
+        bool unknownSizeShowsIndicator = second.TotalBytes is > 0 || isUnknown;
 
-        return Prop.ToProperty(matchesTimeFormat || isCappedMax)
-            .Label($"Non-null Eta should be hh:mm:ss or '99:59:59', got '{vm.EtaText}' for Eta={progress.Eta}");
+        return Prop.ToProperty((isUnknown || isTime) && unknownSizeShowsIndicator)
+            .Label($"EtaText='{vm.EtaText}' after {Describe(first)} then {Describe(second)}");
     }
 
     // Feature: idm-style-download-windows, Property 5: Display values reflect the most recent snapshot
@@ -74,14 +73,21 @@ public sealed class DownloadPopupViewModelPropertyTests
 
     /// <summary>
     /// For any <see cref="DownloadProgress"/> snapshot applied to a popup view-model, the bound
-    /// <c>ConnectionsText</c>, <c>DownloadedText</c>, <c>ProgressPercent</c>, <c>SpeedText</c>,
-    /// and <c>EtaText</c> reflect that snapshot's values.
+    /// <c>ConnectionsText</c> and <c>DownloadedText</c> reflect that snapshot, <c>EtaText</c> follows the
+    /// first-snapshot rule of Property 7, and <c>ProgressPercent</c> stays within [0, 100].
+    ///
+    /// <para>While a download is transferring, the downloaded amount moves smoothly from the previous
+    /// snapshot to the new one over the snapshot interval. The snapshot is applied twice so that the
+    /// interpolation starts and ends at the same value and the displayed amount is exact at once (the
+    /// interpolation over time is covered by <see cref="Interpolation_ReachesLatestSnapshotWithinInterval"/>).</para>
     /// </summary>
     [Property(Arbitrary = new[] { typeof(Generators) })]
     public Property SnapshotReflection_DisplayValuesReflectAppliedSnapshot(DownloadProgress progress)
     {
         var vm = CreateViewModelWithProgress(progress);
         vm.ApplyProgress(progress);
+        string etaAfterSnapshot = vm.EtaText;
+        vm.ApplyProgress(progress); // settle the interpolation on this snapshot
 
         // ConnectionsText must reflect "active/total" from the snapshot.
         bool connectionsOk = vm.ConnectionsText == $"{progress.ActiveConnections} / {progress.TotalConnections} active";
@@ -90,8 +96,9 @@ public sealed class DownloadPopupViewModelPropertyTests
         string formattedDownloaded = Formatting.FormatBytes(progress.BytesDownloaded);
         bool downloadedOk = vm.DownloadedText.Contains(formattedDownloaded);
 
-        // EtaText must match the formatted Eta from the snapshot.
-        bool etaOk = vm.EtaText == Formatting.FormatEta(progress.Eta);
+        // The ETA follows the first-snapshot rule (Property 7).
+        string expectedEta = Formatting.FormatEta(ExpectedFirstEta(progress));
+        bool etaOk = etaAfterSnapshot == expectedEta;
 
         // ProgressPercent must be in [0, 100].
         bool percentOk = vm.ProgressPercent >= 0.0 && vm.ProgressPercent <= 100.0;
@@ -99,13 +106,14 @@ public sealed class DownloadPopupViewModelPropertyTests
         return Prop.And(
             Prop.Label(connectionsOk, $"ConnectionsText: expected '{progress.ActiveConnections} / {progress.TotalConnections} active', got '{vm.ConnectionsText}'"),
             Prop.Label(downloadedOk, $"DownloadedText contains '{formattedDownloaded}': got '{vm.DownloadedText}'"))
-            .And(Prop.Label(etaOk, $"EtaText: expected '{Formatting.FormatEta(progress.Eta)}', got '{vm.EtaText}'"))
+            .And(Prop.Label(etaOk, $"EtaText: expected '{expectedEta}', got '{etaAfterSnapshot}'"))
             .And(Prop.Label(percentOk, $"ProgressPercent={vm.ProgressPercent} in [0,100]"));
     }
 
     /// <summary>
-    /// After applying two consecutive <see cref="DownloadProgress"/> snapshots, the view-model's
-    /// displayed values reflect only the second (most recent) snapshot, not the first.
+    /// After a second snapshot, the view-model's connection counts and downloaded amount reflect only the
+    /// second (most recent) snapshot, not the first. The ETA is deliberately smoothed over both snapshots'
+    /// speeds, so only its form is checked here (see Property 7).
     /// </summary>
     [Property(Arbitrary = new[] { typeof(Generators) })]
     public Property SnapshotReflection_MostRecentSnapshotWins(DownloadProgress first, DownloadProgress second)
@@ -121,8 +129,9 @@ public sealed class DownloadPopupViewModelPropertyTests
         var managed = CreateManagedDownload(state);
         var vm = new DownloadPopupViewModel(managed);
 
-        // Apply first, then second.
+        // Apply first, then second; second is applied twice so the interpolation has settled on it.
         vm.ApplyProgress(first);
+        vm.ApplyProgress(second);
         vm.ApplyProgress(second);
 
         // All display values must reflect the SECOND snapshot.
@@ -131,12 +140,47 @@ public sealed class DownloadPopupViewModelPropertyTests
         string formattedDownloaded = Formatting.FormatBytes(second.BytesDownloaded);
         bool downloadedOk = vm.DownloadedText.Contains(formattedDownloaded);
 
-        bool etaOk = vm.EtaText == Formatting.FormatEta(second.Eta);
+        bool etaWellFormed = vm.EtaText == "\u2014" || Regex.IsMatch(vm.EtaText, @"^\d{2}:\d{2}:\d{2}$");
 
         return Prop.And(
             Prop.Label(connectionsOk, $"ConnectionsText: expected '{second.ActiveConnections} / {second.TotalConnections} active', got '{vm.ConnectionsText}'"),
             Prop.Label(downloadedOk, $"DownloadedText contains '{formattedDownloaded}': got '{vm.DownloadedText}'"))
-            .And(Prop.Label(etaOk, $"EtaText: expected '{Formatting.FormatEta(second.Eta)}', got '{vm.EtaText}'"));
+            .And(Prop.Label(etaWellFormed, $"EtaText well formed: got '{vm.EtaText}'"));
+    }
+
+    /// <summary>
+    /// While transferring, the downloaded amount starts from the previous snapshot and reaches the latest
+    /// one within the 500 ms snapshot interval. The interval used to be compared in the wrong unit
+    /// (TimeSpan ticks against milliseconds), so the counter barely moved and stayed one snapshot behind.
+    /// </summary>
+    [Fact]
+    public async Task Interpolation_ReachesLatestSnapshotWithinInterval()
+    {
+        var state = new DownloadState
+        {
+            Id = Guid.NewGuid(),
+            SourceUrl = "https://example.com/file.zip",
+            DestinationPath = @"C:\Downloads\file.zip",
+            Status = DownloadStatus.Downloading,
+            TotalBytes = 1_000L * 1024 * 1024,
+        };
+
+        var vm = new DownloadPopupViewModel(CreateManagedDownload(state));
+        var first = new DownloadProgress
+        {
+            BytesDownloaded = 100L * 1024 * 1024, TotalBytes = state.TotalBytes, BytesPerSecond = 20 * 1024 * 1024,
+            Status = DownloadStatus.Downloading
+        };
+        var second = first with { BytesDownloaded = 110L * 1024 * 1024 };
+
+        vm.ApplyProgress(first);
+        vm.ApplyProgress(first);
+        vm.ApplyProgress(second);
+        Assert.DoesNotContain(Formatting.FormatBytes(second.BytesDownloaded), vm.DownloadedText);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(600));
+
+        Assert.StartsWith(Formatting.FormatBytes(second.BytesDownloaded), vm.DownloadedText);
     }
 
     /// <summary>
@@ -177,6 +221,25 @@ public sealed class DownloadPopupViewModelPropertyTests
     }
 
     #region Helpers
+
+    /// <summary>
+    /// The ETA a fresh popup shows after its first snapshot: the remaining bytes over the reported speed, or
+    /// null when that cannot be computed or is a day or more (see <c>DownloadPopupViewModel.ApplyProgress</c>).
+    /// </summary>
+    private static TimeSpan? ExpectedFirstEta(DownloadProgress p)
+    {
+        if (p.TotalBytes is not > 0 || p.BytesPerSecond <= 0)
+        {
+            return null;
+        }
+
+        long remaining = p.TotalBytes.Value - p.BytesDownloaded;
+        double seconds = remaining / p.BytesPerSecond;
+        return remaining > 0 && seconds < 86400 ? TimeSpan.FromSeconds(seconds) : null;
+    }
+
+    private static string Describe(DownloadProgress p) =>
+        $"[bytes={p.BytesDownloaded}, total={p.TotalBytes?.ToString() ?? "null"}, speed={p.BytesPerSecond}, status={p.Status}]";
 
     /// <summary>
     /// Creates a <see cref="DownloadPopupViewModel"/> with the given progress already applied.

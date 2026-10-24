@@ -19,6 +19,42 @@ PDM uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.4.0] - 2026-10-24
+
+Download engine rework. Root causes, measurements and design: `docs/DOWNLOAD-ENGINE-PERFORMANCE.md`
+and `research/`.
+
+### Fixed
+- Download speed: all connections now open as soon as a download starts (8 by default, like IDM). The
+  previous "add one connection every 2 s if throughput rises 15%" probe took 14+ s to reach 8 connections
+  and often stopped at 3-6 for good, which caused the lower (13-16 MB/s vs IDM's 18-20 MB/s) and
+  unstable speed
+- Speed collapsing to KB/s near 90-99%: connections that finish no longer quit while another connection
+  still has work. They take over the part of the range that would finish last, sized by each
+  connection's measured speed, so a slow connection's remainder is shared out instead of finishing alone
+- A connection that stops sending is taken over within seconds (its unread range is handed to an idle
+  connection), and the stall watchdog for resumable downloads is 20 s instead of 60 s
+- Servers that limit connections per client (HTTP 429/503 for the extra ones): PDM now settles on the
+  connections the server accepts and only occasionally tries one more, instead of retrying refused
+  connections for the whole download
+- Lower CPU use, and speed that holds up through brief disk stalls: the 8 KiB reads the Windows HTTP
+  stack returns are now gathered into 512 KiB disk writes instead of one write per read. CPU per
+  downloaded byte fell about 2.6x, and the buffer that keeps connections reading while the disk catches
+  up now holds its intended 128 MiB instead of 2 MiB
+- Resume offset could be recorded ahead of the bytes actually written when a segment was retried while
+  earlier writes were still in flight
+- Download popup: the downloaded counter and progress bar now move smoothly between updates. They sat
+  on the previous update (about half a second behind) because the interpolation compared milliseconds
+  with 100-nanosecond ticks
+- ETAs of a day or more no longer wrap around in the download list and the CLI (30 hours showed as
+  06:00:00)
+
+### Changed
+- Download options: `InitialConnections`, `RampUpInterval` and `MinSplitDuration` removed;
+  `MinSplitSize` 4 MiB -> 128 KiB; `StallTimeout` 60 s -> 20 s; `RefusedConnectionRetryDelay` added
+
+---
+
 ## [1.3.2] - 2026-10-01
 
 ### Added

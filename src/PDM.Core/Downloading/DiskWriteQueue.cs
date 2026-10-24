@@ -93,12 +93,21 @@ internal sealed class DiskWriteQueue : IAsyncDisposable
     /// <summary>
     /// Registers the byte offset a segment's writes start from, so contiguous accounting knows where the
     /// durable prefix begins. Must be called before any chunk for that segment is enqueued.
+    ///
+    /// <para>A retry or a hand-over of the same segment within this queue's round keeps the existing
+    /// account: chunks from the earlier attempt may still be in flight, and resetting the prefix to the
+    /// new attempt's read offset would report those unwritten bytes as durable (a resume after a crash in
+    /// that window would leave a hole). Pass <paramref name="restart"/> only when the segment is being
+    /// rewritten from its start.</para>
     /// </summary>
-    public void BeginSegment(int segmentIndex, long segmentStart, long alreadyDurableLength)
+    public void BeginSegment(int segmentIndex, long segmentStart, long alreadyDurableLength, bool restart = false)
     {
         lock (_accountingLock)
         {
-            _accounts[segmentIndex] = new SegmentWriteAccount(segmentStart, alreadyDurableLength);
+            if (restart || !_accounts.ContainsKey(segmentIndex))
+            {
+                _accounts[segmentIndex] = new SegmentWriteAccount(segmentStart, alreadyDurableLength);
+            }
         }
     }
 

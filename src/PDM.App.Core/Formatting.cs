@@ -92,7 +92,11 @@ public static class Formatting
         return FormatBytes((long)bytesPerSecond) + "/s";
     }
 
-    /// <summary>Formats an ETA, e.g. 00:03:15 or "—" when unknown.</summary>
+    /// <summary>
+    /// Formats an ETA as hours:minutes:seconds, e.g. 00:03:15 or 30:00:00, capped at 99:59:59; "—" when
+    /// unknown. Hours are total hours: the TimeSpan "hh" format is only the hours component (0-23), which
+    /// showed a 30-hour estimate as 06:00:00.
+    /// </summary>
     public static string FormatEta(TimeSpan? eta)
     {
         if (eta is not { } value)
@@ -100,8 +104,17 @@ public static class Formatting
             return "—";
         }
 
-        return value.TotalHours >= 100
-            ? "99:59:59"
-            : value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+        if (value.TotalHours >= 100)
+        {
+            return "99:59:59";
+        }
+
+        if (value < TimeSpan.Zero)
+        {
+            value = TimeSpan.Zero;
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture, $"{(int)value.TotalHours:00}:{value.Minutes:00}:{value.Seconds:00}");
     }
 }

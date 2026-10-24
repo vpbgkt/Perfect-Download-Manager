@@ -67,11 +67,19 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
     /// <summary>Bytes downloaded at the time of the latest snapshot (interpolation target).</summary>
     private long _currentBytes;
 
-    /// <summary>When the latest snapshot arrived (local ticks), used to compute interpolation progress.</summary>
-    private long _snapshotTicks;
+    /// <summary>
+    /// When the latest snapshot arrived, in <see cref="Environment.TickCount64"/> milliseconds, used to
+    /// compute interpolation progress.
+    /// </summary>
+    private long _snapshotAtMs;
 
-    /// <summary>Expected interval between snapshots in ticks (default 500ms = ProgressInterval).</summary>
-    private long _intervalTicks = TimeSpan.FromMilliseconds(500).Ticks;
+    /// <summary>
+    /// Expected interval between snapshots, in milliseconds (500 ms = the engine's ProgressInterval).
+    /// Must be in the same unit as <see cref="_snapshotAtMs"/>: this used to hold
+    /// <c>TimeSpan.FromMilliseconds(500).Ticks</c> (5,000,000 ticks of 100 ns), so interpolation advanced
+    /// 10,000x too slowly and the counter sat on the previous snapshot instead of moving smoothly.
+    /// </summary>
+    private readonly long _intervalMs = 500;
 
     /// <summary>Smoothed speed for display (EMA applied at the UI level for extra stability).</summary>
     private double _smoothedSpeed;
@@ -136,7 +144,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
             _etaSpeed = initial.BytesPerSecond; // Seed ETA speed to match
             _smoothedEtaSeconds = initial.Eta?.TotalSeconds;
         }
-        _snapshotTicks = Environment.TickCount64;
+        _snapshotAtMs = Environment.TickCount64;
 
         // Start the interpolation timer at 60 FPS (~16ms) for smooth visual updates between the 500ms
         // progress snapshots. Interpolation ticks are marshalled to the UI thread via the injected dispatcher.
@@ -272,16 +280,15 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
 
             // Interpolate between the last and current snapshot based on elapsed time since the snapshot
             // arrived. This produces continuous visual advancement instead of 500ms jumps.
-            long now = Environment.TickCount64;
-            long elapsed = now - _snapshotTicks;
-            if (elapsed >= _intervalTicks)
+            long elapsedMs = Environment.TickCount64 - _snapshotAtMs;
+            if (elapsedMs >= _intervalMs)
             {
                 // Past the expected interval → return the target (the next snapshot is late or this is
                 // the first tick after receiving one).
                 return _currentBytes;
             }
 
-            double t = Math.Clamp((double)elapsed / _intervalTicks, 0, 1);
+            double t = Math.Clamp((double)elapsedMs / _intervalMs, 0, 1);
             return _prevBytes + (long)((_currentBytes - _prevBytes) * t);
         }
     }
@@ -400,7 +407,7 @@ public sealed partial class DownloadPopupViewModel : ObservableObject, IDisposab
         // the BytesDownloaded getter interpolates across until the next snapshot arrives.
         _prevBytes = _currentBytes;
         _currentBytes = progress.BytesDownloaded;
-        _snapshotTicks = Environment.TickCount64;
+        _snapshotAtMs = Environment.TickCount64;
 
         // Apply EMA to speed at the UI level for additional visual stability. The worker already
         // smooths it (0.6 * instant + 0.4 * prev), but we apply a second, gentler pass here so sudden

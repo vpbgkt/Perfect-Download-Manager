@@ -18,7 +18,8 @@ namespace PDM.Core.Tests;
 ///         resume offset must only advance across a contiguous prefix.</item>
 ///   <item><b>Connection retirement</b> — a connection that exhausts retries releases its segment for
 ///         others to finish.</item>
-///   <item><b>Adaptive probing</b> — connections are added while a transfer is in progress.</item>
+///   <item><b>Takeover of slow or stalled connections</b> — a connection's unread range is handed to an
+///         idle one and its in-flight transfer cancelled, possibly before it has read a byte.</item>
 /// </list>
 ///
 /// <para>A bug in any of those would most likely show up as a rare, silent wrong byte rather than an
@@ -67,18 +68,16 @@ public sealed class DownloadEngineStressTests : IDisposable
     private static DownloadOptions RandomOptions(Random rng) => new()
     {
         MaxConnections = rng.Next(2, 13),
-        InitialConnections = rng.Next(1, 5),
-        RampUpInterval = TimeSpan.FromMilliseconds(rng.Next(10, 40)),
         MinSegmentSize = rng.Next(1, 5) * 32 * 1024,
         ReadBufferSize = rng.Next(1, 5) * 8 * 1024,
         DiskWriteParallelism = rng.Next(1, 9),
         MaxBufferedBytes = rng.Next(1, 9) * 64 * 1024,
         // Must stay >= the 64 KiB documented minimum for MinSplitSize.
         MinSplitSize = rng.Next(1, 5) * 64 * 1024,
-        MinSplitDuration = TimeSpan.Zero,
         MaxRetriesPerSegment = 12,
         RetryBaseDelay = TimeSpan.FromMilliseconds(1),
         RetryMaxDelay = TimeSpan.FromMilliseconds(5),
+        RefusedConnectionRetryDelay = TimeSpan.FromMilliseconds(5),
         StallTimeout = TimeSpan.FromSeconds(10),
         ProgressInterval = TimeSpan.FromMilliseconds(20),
     };
@@ -100,7 +99,8 @@ public sealed class DownloadEngineStressTests : IDisposable
     /// </summary>
     private static void AssertPlanTilesExactly(DownloadState state, long totalSize)
     {
-        List<DownloadSegment> ordered = state.Segments.OrderBy(s => s.Start).ToList();
+        // Empty segments (a stalled connection's whole range taken over before it read a byte) cover nothing.
+        List<DownloadSegment> ordered = state.Segments.Where(s => s.Length > 0).OrderBy(s => s.Start).ToList();
         Assert.NotEmpty(ordered);
 
         long cursor = 0;
@@ -303,15 +303,14 @@ public sealed class DownloadEngineStressTests : IDisposable
 
         var options = new DownloadOptions
         {
-            MaxConnections = 12,
-            InitialConnections = 12, // deliberately over-connect
+            MaxConnections = 12, // deliberately over-connect
             MinSegmentSize = 32 * 1024,
             ReadBufferSize = 8 * 1024,
             DiskWriteParallelism = 4,
-            MinSplitDuration = TimeSpan.Zero,
             MaxRetriesPerSegment = 12,
             RetryBaseDelay = TimeSpan.FromMilliseconds(1),
             RetryMaxDelay = TimeSpan.FromMilliseconds(4),
+            RefusedConnectionRetryDelay = TimeSpan.FromMilliseconds(5),
             ProgressInterval = TimeSpan.FromMilliseconds(20),
         };
         var chaos = new ChaosOptions

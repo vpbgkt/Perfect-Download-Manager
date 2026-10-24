@@ -7,27 +7,12 @@ namespace PDM.Core.Models;
 public sealed class DownloadOptions
 {
     /// <summary>
-    /// Maximum number of parallel connections (segments) for one download — the ceiling the adaptive
-    /// scheduler is allowed to ramp <em>up</em> to. Defaults to 8, the same stable count established
-    /// managers (e.g. IDM) use by default, because it is comfortably under the per-IP connection limit
-    /// most servers enforce. Going higher tends to trigger refusals/throttling and retry-backoff churn
-    /// that makes downloads slower and jumpy, not faster. Advanced users can raise this; the scheduler
-    /// then ramps toward it only while extra connections measurably increase throughput.
+    /// Number of parallel connections for one download. All of them are opened as soon as the transfer
+    /// starts. Defaults to 8, the same count IDM uses by default, which is comfortably under the per-IP
+    /// connection limit most servers enforce. A server that refuses connections lowers the count
+    /// automatically (connections that exhaust their retries retire and the next round uses fewer).
     /// </summary>
     public int MaxConnections { get; init; } = 8;
-
-    /// <summary>
-    /// Number of connections a download opens at the start, before adaptive probing. Kept low (2) so a
-    /// download never blasts a server it hasn't measured yet: the scheduler then adds connections one
-    /// at a time, keeping only those that measurably raise real throughput. This converges on each
-    /// server's optimal count — climbing where parallelism helps, staying at 2 where the server
-    /// throttles or the link/disk is already saturated (the profile that keeps speed stable instead of
-    /// collapsing partway through, and that matches how IDM parks unneeded connections).
-    /// </summary>
-    public int InitialConnections { get; init; } = 2;
-
-    /// <summary>How long to observe throughput at each step of adaptive connection probing.</summary>
-    public TimeSpan RampUpInterval { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Minimum bytes a segment must span. Prevents spawning many tiny connections for
@@ -39,11 +24,13 @@ public sealed class DownloadOptions
     public long MaxBytesPerSecond { get; init; }
 
     /// <summary>
-    /// Size of the buffer used for each socket read, in bytes — and therefore the size of each disk
-    /// write. 512 KiB keeps read syscalls and queue operations low on very fast links, and makes each
-    /// disk write large enough to reach good throughput per I/O (write throughput is roughly
-    /// chunk-size ÷ latency, so small chunks cap the writer). Kept at or below the shared array pool's
-    /// 1 MiB bucket so buffers are pooled rather than allocated.
+    /// Size of the buffer each connection fills before handing it to the disk writer, in bytes — and
+    /// therefore the size of each disk write (a partly filled buffer is handed over after 200 ms). The
+    /// HTTP stack returns far less per read (WinHTTP: 8 KiB), so reads are gathered: 512 KiB keeps queue
+    /// operations and write calls low on fast links and makes each disk write large enough to reach good
+    /// throughput per I/O (write throughput is roughly chunk-size ÷ latency, so small chunks cap the
+    /// writer). Kept at or below the shared array pool's 1 MiB bucket so buffers are pooled rather than
+    /// allocated.
     /// </summary>
     public int ReadBufferSize { get; init; } = 512 * 1024; // 512 KiB
 
@@ -58,24 +45,14 @@ public sealed class DownloadOptions
     public int DiskWriteParallelism { get; init; } = 4;
 
     /// <summary>
-    /// Absolute lower bound on the number of bytes a work-stealing split may hand to a freed
-    /// connection. Prevents spending an HTTP round trip on a scrap of data. See
-    /// <see cref="MinSplitDuration"/> for the bandwidth-aware component of the same decision.
+    /// Smallest number of bytes a work-stealing split may hand to a free connection. Whether a split is
+    /// worthwhile at all is decided by time (it must finish the range sooner by more than one measured
+    /// request round trip); this floor only stops a round trip being spent on a scrap of data. Small on
+    /// purpose: IDM keeps splitting down to roughly 128 KiB, and a large floor is what left the last
+    /// megabytes of a download crawling on a single slow connection. Does not apply when taking over a
+    /// stalled connection, whose remaining bytes are always handed over.
     /// </summary>
-    public long MinSplitSize { get; init; } = 4 * 1024 * 1024; // 4 MiB
-
-    /// <summary>
-    /// Bandwidth-aware component of the work-stealing split threshold: a split is only worthwhile if
-    /// the claimed half would keep a connection busy for at least this long at the currently observed
-    /// per-connection throughput.
-    ///
-    /// <para>This is what makes segment splitting correct across wildly different link speeds. On a
-    /// 10 Mbps line the effective floor stays at <see cref="MinSplitSize"/>; at 1 Gbps it rises to
-    /// tens of megabytes, so PDM stops splitting long before the per-request latency would cost more
-    /// than the parallelism gains. Without it, a fixed small chunk size would add substantial dead
-    /// time on fast, high-latency connections.</para>
-    /// </summary>
-    public TimeSpan MinSplitDuration { get; init; } = TimeSpan.FromSeconds(5);
+    public long MinSplitSize { get; init; } = 128 * 1024; // 128 KiB
 
     /// <summary>Number of automatic retry attempts per segment before failing.</summary>
     public int MaxRetriesPerSegment { get; init; } = 5;
@@ -90,6 +67,16 @@ public sealed class DownloadOptions
     /// </summary>
     public TimeSpan RetryMaxDelay { get; init; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// How long to wait before trying one more connection after a server refused one (HTTP 429 or 503 while
+    /// other connections were transferring). Many file hosts and mirrors cap concurrent connections per
+    /// client; each refusal lowers the number of connections PDM uses, and every time this delay passes one
+    /// more is tried. The delay doubles with each refusal (up to 8x), so a hard limit costs only a handful
+    /// of refused requests instead of a constant stream of them, which some servers punish by slowing down
+    /// the connections they did accept.
+    /// </summary>
+    public TimeSpan RefusedConnectionRetryDelay { get; init; } = TimeSpan.FromSeconds(8);
+
     /// <summary>How often progress snapshots are emitted to observers.</summary>
     public TimeSpan ProgressInterval { get; init; } = TimeSpan.FromMilliseconds(500);
 
@@ -98,10 +85,13 @@ public sealed class DownloadOptions
 
     /// <summary>
     /// Maximum time a single segment may wait for the next chunk of data before the connection is
-    /// treated as stalled and retried from its last persisted offset. Guards against a socket that
-    /// stays open but stops delivering bytes, which would otherwise hang the whole download.
+    /// treated as stalled and retried from its read offset. Guards against a socket that stays open but
+    /// stops delivering bytes. 20 seconds is close to IDM's observed behaviour (it abandons a silent
+    /// connection after about 17-18 seconds). Only applies to range-capable downloads, where a retry
+    /// resumes; a download that cannot resume restarts from byte 0 on retry, so it waits at least
+    /// 60 seconds before giving up on its connection.
     /// </summary>
-    public TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(60);
+    public TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
     /// <summary>Custom User-Agent header; a sensible default is used when null.</summary>
     public string? UserAgent { get; init; }
@@ -134,18 +124,6 @@ public sealed class DownloadOptions
                 "MaxConnections must be between 1 and 64.");
         }
 
-        if (InitialConnections < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(InitialConnections), InitialConnections,
-                "InitialConnections must be at least 1.");
-        }
-
-        if (RampUpInterval <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(RampUpInterval), RampUpInterval,
-                "RampUpInterval must be greater than zero.");
-        }
-
         if (MinSegmentSize < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(MinSegmentSize), MinSegmentSize,
@@ -176,16 +154,16 @@ public sealed class DownloadOptions
                 "MinSplitSize must be at least 64 KiB.");
         }
 
-        if (MinSplitDuration < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MinSplitDuration), MinSplitDuration,
-                "MinSplitDuration cannot be negative.");
-        }
-
         if (MaxBufferedBytes < ReadBufferSize)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxBufferedBytes), MaxBufferedBytes,
                 "MaxBufferedBytes must be at least ReadBufferSize.");
+        }
+
+        if (RefusedConnectionRetryDelay <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(RefusedConnectionRetryDelay), RefusedConnectionRetryDelay,
+                "RefusedConnectionRetryDelay must be greater than zero.");
         }
 
         if (DiskWriteParallelism is < 1 or > 64)

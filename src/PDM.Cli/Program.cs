@@ -129,7 +129,10 @@ internal static class Program
                 string speed = FormatBytes((long)value.BytesPerSecond) + "/s";
                 string done = FormatBytes(value.BytesDownloaded);
                 string total = FormatBytes(value.TotalBytes);
-                string eta = value.Eta is { } e ? e.ToString(@"hh\:mm\:ss") : "--:--:--";
+                // Total hours: the TimeSpan "hh" format is only the hours component and wraps at 24.
+                string eta = value.Eta is { } e
+                    ? string.Create(CultureInfo.InvariantCulture, $"{(int)e.TotalHours:00}:{e.Minutes:00}:{e.Seconds:00}")
+                    : "--:--:--";
                 string pct = value.Fraction is { } f ? (f * 100).ToString("0.0", CultureInfo.InvariantCulture) : "??";
 
                 Console.Write($"\r{pct,5}%  {done}/{total}  {speed,12}  ETA {eta}  " +
