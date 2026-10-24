@@ -67,7 +67,9 @@ import fs from "node:fs";
 const pemFile = process.env.PDM_SIGN_PEM_FILE;
 if (!pemFile) { console.error("PDM_SIGN_PEM_FILE env var is required"); process.exit(2); }
 const privateKeyPem = fs.readFileSync(pemFile, "utf8");
-const args = JSON.parse(fs.readFileSync(0, "utf8"));
+// Some PowerShell hosts prefix piped stdin with UTF-8 BOMs (more than one has been seen), which
+// JSON.parse rejects.
+const args = JSON.parse(fs.readFileSync(0, "utf8").replace(/^[﻿\s]+/, ""));
 
 // Build the manifest matching UpdateManifest fields. Property order and null handling must
 // match the .NET client's serializer (JsonIgnoreCondition.WhenWritingNull, JsonStringEnumConverter).
@@ -109,6 +111,9 @@ $input = @{
 } | ConvertTo-Json -Compress
 
 $env:PDM_SIGN_PEM_FILE = $pemTemp.FullName
+# Pipe UTF-8 without a BOM into node. $OutputEncoding otherwise depends on the shell: ASCII turns
+# non-ASCII release notes into "?" (as in the 1.3.2 manifest), UTF-8 with BOM makes JSON.parse fail.
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {
     $manifestJson = $input | node $signer
 } finally {

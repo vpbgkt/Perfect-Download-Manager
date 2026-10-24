@@ -55,10 +55,24 @@
             <a href="/#download">download the latest version</a> any time.
         </p>
 
-                        <section>
+                                <section>
+            <h2>1.4.0</h2>
+            <p class="release-date">2026-10-24</p>
+            <p><em>Latest stable</em></p>
+            <ul>
+                <li>Faster, steadier downloads: all 8 connections start at once (full speed in 1-2 s instead of 11-12 s)</li>
+                <li>No more crawling at 90-99%: finished connections take over the slowest remaining parts</li>
+                <li>Stalled connections are taken over within seconds; servers that limit connections are handled without retry storms</li>
+                <li>About 2.6x less CPU per downloaded byte; brief disk slowdowns no longer drop the speed</li>
+                <li>PDFs and documents that need your browser login are now downloaded by the browser instead of failing</li>
+                <li>Smaller installer (19.5 MB, was 49 MB)</li>
+                <li>Fixed: resume point could be saved ahead of the data on disk; ETAs over 24 hours; popup progress lag</li>
+            </ul>
+        </section>
+
+<section>
             <h2>1.3.2</h2>
             <p class="release-date">2026-09-07</p>
-            <p><em>Latest stable</em></p>
             <ul>
                 <li>DOWNLOAD PATH IMPROVEMENTS</li>
                 <li>CHANGED:</li>
