@@ -40,8 +40,21 @@ foreach ($required in @("manifest.json", "background.js", "theme.js",
 
 if (Test-Path $out) { Remove-Item $out -Force }
 
-# -Path with a trailing wildcard places file contents at the zip root, exactly what CWS wants.
-Compress-Archive -Path (Join-Path $srcDir "*") -DestinationPath $out -CompressionLevel Optimal
+# Files at the zip root, entry names with forward slashes. Windows PowerShell's Compress-Archive
+# stores "icons\icon16.png" (backslash), which the zip format does not allow and which a store
+# upload can reject or unpack with missing icons, so build the archive entry by entry instead.
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$srcRoot = (Resolve-Path $srcDir).Path.TrimEnd('\') + '\'
+$zip = [System.IO.Compression.ZipFile]::Open($out, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($file in Get-ChildItem $srcDir -Recurse -File) {
+        $entryName = $file.FullName.Substring($srcRoot.Length).Replace('\', '/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip, $file.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+} finally {
+    $zip.Dispose()
+}
 
 $size = [math]::Round((Get-Item $out).Length / 1KB, 1)
 Write-Host ""
