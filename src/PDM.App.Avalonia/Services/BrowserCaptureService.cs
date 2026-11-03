@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
-using Avalonia.Controls;
 using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 using PDM.App.Avalonia.Views;
@@ -19,28 +18,44 @@ namespace PDM.App.Avalonia.Services;
 /// request into a refresh-relink, a duplicate prompt, a "new download detected" prompt, or an
 /// auto-add — mirroring the WPF head's behaviour. All manager/network work stays off the UI thread;
 /// only dialogs are marshalled onto it.
+/// <para>
+/// Every prompt is its own window raised in front of the user (<see cref="AttentionPin"/>), never a
+/// dialog owned by the main window: the user is in the browser when a capture arrives, and an owned
+/// dialog brought the whole dashboard up with it, or could not open at all when the dashboard was
+/// minimized or not shown.
+/// </para>
 /// </summary>
 public sealed class BrowserCaptureService : IAsyncDisposable
 {
     private readonly AppHost _host;
     private readonly AvaloniaNotifier _notifier;
-    private readonly Func<Window?> _ownerProvider;
+    private readonly Action<Guid> _revealDownload;
     private readonly ILogger _logger;
     private DownloadRequestListener? _listener;
 
     // Hard gate so a burst can never stack "New download detected" dialogs (mirrors the WPF head).
     private int _promptShowing;
 
+    // The open "New download detected" prompt, so a repeat capture can bring it back to the front.
+    // Only touched on the UI thread.
+    private AttentionPin? _openPrompt;
+
     // Inspection done by ReturnToBrowserAsync before the browser is answered, handed to HandleAsync
     // (keyed by request URL) so an accepted download is still probed only once.
     private readonly ConcurrentDictionary<string, (DuplicateInfo? Duplicate, RemoteFileInfo? Info)> _inspected =
         new(StringComparer.Ordinal);
 
-    public BrowserCaptureService(AppHost host, AvaloniaNotifier notifier, Func<Window?> ownerProvider)
+    /// <param name="host">The composition root.</param>
+    /// <param name="notifier">In-app toasts for low-stakes confirmations.</param>
+    /// <param name="revealDownload">
+    /// Shows an existing download (its popup) for the duplicate prompt's "Show existing" choice. Called
+    /// on the UI thread.
+    /// </param>
+    public BrowserCaptureService(AppHost host, AvaloniaNotifier notifier, Action<Guid> revealDownload)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _notifier = notifier ?? throw new ArgumentNullException(nameof(notifier));
-        _ownerProvider = ownerProvider ?? throw new ArgumentNullException(nameof(ownerProvider));
+        _revealDownload = revealDownload ?? throw new ArgumentNullException(nameof(revealDownload));
         _logger = host.LoggerFactory.CreateLogger("PDM.BrowserIntegration");
     }
 
@@ -131,7 +146,7 @@ public sealed class BrowserCaptureService : IAsyncDisposable
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Auto-add of browser download {Url} failed", uri);
-                _notifier.ShowError("Download could not start", DescribeAddFailure(ex));
+                ReportFailure("Download could not start", DescribeAddFailure(ex));
             }
         }
     }
@@ -181,29 +196,23 @@ public sealed class BrowserCaptureService : IAsyncDisposable
     private async Task ShowDuplicatePromptAsync(
         DuplicateInfo duplicate, Uri uri, string? referrer, RemoteFileInfo? probedInfo)
     {
-        Window? owner = _ownerProvider();
-        if (owner is null)
-        {
-            return;
-        }
-
+        // "Show existing" opens that download's popup rather than the dashboard. The shared handler
+        // may call reveal from a pool thread, so it is marshalled back to the UI thread.
         await ShowOnUiAsync(() => DuplicatePrompt.HandleAsync(
-            new AvaloniaDuplicatePromptView(owner), _host.DownloadManager, duplicate, uri, referrer,
-            probedInfo, reveal: _ => owner.Activate())).ConfigureAwait(false);
+            new AvaloniaDuplicatePromptView(owner: null), _host.DownloadManager, duplicate, uri, referrer,
+            probedInfo, reveal: id => Dispatcher.UIThread.Post(() => _revealDownload(id)))).ConfigureAwait(false);
     }
 
     private async Task PromptRefreshRestartAsync(
         RefreshCoordinator.ArmedRefresh armed, Uri uri, string? referrer, string? reason)
     {
-        Window? owner = _ownerProvider();
-        if (owner is null)
+        bool restart = await ShowOnUiAsync(() =>
         {
-            return;
-        }
-
-        bool restart = await ShowOnUiAsync(() => ConfirmDialog.ShowAsync(owner, "Refresh download link",
-            $"PDM found a fresh link for \"{armed.FileName}\", but it can't continue your existing progress:\n\n" +
-            $"{reason}\n\nDownload it again from the beginning?")).ConfigureAwait(false);
+            var dialog = new ConfirmDialog("Refresh download link",
+                $"PDM found a fresh link for \"{armed.FileName}\", but it can't continue your existing progress:\n\n" +
+                $"{reason}\n\nDownload it again from the beginning?");
+            return new AttentionPin(dialog).ShowUnownedAsync(() => dialog.Confirmed);
+        }).ConfigureAwait(false);
 
         if (!restart)
         {
@@ -217,7 +226,7 @@ public sealed class BrowserCaptureService : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _notifier.ShowError("Could not restart download", ex.Message);
+            ReportFailure("Could not restart download", ex.Message);
         }
     }
 
@@ -225,24 +234,28 @@ public sealed class BrowserCaptureService : IAsyncDisposable
         Uri uri, string? suggestedFileName, string? directory, string? referrer,
         RemoteFileInfo? probedInfo, Action? onRejected)
     {
-        Window? owner = _ownerProvider();
-        if (owner is null)
-        {
-            return;
-        }
-
         // Cheap CAS: only one prompt visible at a time; excess requests in a burst are dropped.
         if (Interlocked.CompareExchange(ref _promptShowing, 1, 0) != 0)
         {
+            // Often this is the user clicking the link again because they never saw the open prompt.
+            // Bring it back to the front instead of dropping the retry with no feedback at all.
+            _logger.LogInformation("A download prompt is already open; raising it instead of prompting for {Url}", uri);
+            Dispatcher.UIThread.Post(() => _openPrompt?.Raise());
             return;
         }
 
         try
         {
-            NewDownloadDialog dialog = await ShowOnUiAsync(() => Task.FromResult(new NewDownloadDialog(uri, suggestedFileName)))
-                .ConfigureAwait(false);
-            NewDownloadChoice choice = await ShowOnUiAsync(() => dialog.ShowDialog<NewDownloadChoice>(owner))
-                .ConfigureAwait(false);
+            // The results are read on the UI thread while the window closes: the code below runs on a
+            // pool thread, where reading the dialog's controls throws.
+            (NewDownloadChoice choice, string fileName) = await ShowOnUiAsync(() =>
+            {
+                var dialog = new NewDownloadDialog(uri, suggestedFileName);
+                var pin = new AttentionPin(dialog);
+                _openPrompt = pin;
+                dialog.Closed += (_, _) => _openPrompt = null;
+                return pin.ShowUnownedAsync(() => (dialog.Choice, dialog.FileName));
+            }).ConfigureAwait(false);
 
             switch (choice)
             {
@@ -255,7 +268,7 @@ public sealed class BrowserCaptureService : IAsyncDisposable
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Start-now of browser download {Url} failed", uri);
-                        _notifier.ShowError("Download could not start", DescribeAddFailure(ex));
+                        ReportFailure("Download could not start", DescribeAddFailure(ex));
                     }
                     break;
 
@@ -265,12 +278,12 @@ public sealed class BrowserCaptureService : IAsyncDisposable
                         await _host.DownloadManager.AddAsync(uri, directory, suggestedFileName,
                             saveForLater: true, referrer: referrer, probedInfo: probedInfo).ConfigureAwait(false);
                         _notifier.ShowInfo("Saved for later",
-                            $"{dialog.FileName} is in your queue, paused. Right-click Resume when you're ready.");
+                            $"{fileName} is in your queue, paused. Right-click Resume when you're ready.");
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Save-for-later of browser download {Url} failed", uri);
-                        _notifier.ShowError("Download could not be saved", DescribeAddFailure(ex));
+                        ReportFailure("Download could not be saved", DescribeAddFailure(ex));
                     }
                     break;
 
@@ -284,6 +297,18 @@ public sealed class BrowserCaptureService : IAsyncDisposable
             Interlocked.Exchange(ref _promptShowing, 0);
         }
     }
+
+    /// <summary>
+    /// Tells the user a captured download did not go through, in a window raised in front of them.
+    /// Not a toast: toasts live in the main window, which is behind the browser (or not open at all)
+    /// when a capture fails, so the failure used to look like the link was never caught.
+    /// </summary>
+    private static void ReportFailure(string title, string message) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            var dialog = new MessageDialog(title, message);
+            _ = new AttentionPin(dialog).ShowUnownedAsync();
+        });
 
     private static string DescribeAddFailure(Exception ex) => ex switch
     {

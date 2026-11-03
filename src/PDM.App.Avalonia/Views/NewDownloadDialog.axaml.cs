@@ -13,8 +13,9 @@ public enum NewDownloadChoice
 
 /// <summary>
 /// Confirmation prompt shown when the browser extension captures a new download. Offers three
-/// choices so the user is never surprised by an unwanted download starting silently. Returns the
-/// chosen <see cref="NewDownloadChoice"/> via <see cref="Window.ShowDialog{T}"/>.
+/// choices so the user is never surprised by an unwanted download starting silently. Shown as its
+/// own window (not owned by the main window) so it never brings the dashboard with it; the chosen
+/// <see cref="NewDownloadChoice"/> is read from <see cref="Choice"/> once it closes.
 /// </summary>
 public partial class NewDownloadDialog : Window
 {
@@ -34,11 +35,20 @@ public partial class NewDownloadDialog : Window
     /// <summary>The resolved file name shown in the prompt (used by the caller for messaging).</summary>
     public string FileName => FileNameText.Text ?? "(unknown)";
 
-    private void OnStartNow(object? sender, RoutedEventArgs e) => Close(NewDownloadChoice.StartNow);
+    /// <summary>The button the user pressed; <see cref="NewDownloadChoice.Cancel"/> if the window was closed any other way.</summary>
+    public NewDownloadChoice Choice { get; private set; } = NewDownloadChoice.Cancel;
 
-    private void OnSaveForLater(object? sender, RoutedEventArgs e) => Close(NewDownloadChoice.SaveForLater);
+    private void OnStartNow(object? sender, RoutedEventArgs e) => Choose(NewDownloadChoice.StartNow);
 
-    private void OnCancel(object? sender, RoutedEventArgs e) => Close(NewDownloadChoice.Cancel);
+    private void OnSaveForLater(object? sender, RoutedEventArgs e) => Choose(NewDownloadChoice.SaveForLater);
+
+    private void OnCancel(object? sender, RoutedEventArgs e) => Choose(NewDownloadChoice.Cancel);
+
+    private void Choose(NewDownloadChoice choice)
+    {
+        Choice = choice;
+        Close(choice);
+    }
 
     private static string InferFileNameFromUrl(Uri url)
     {

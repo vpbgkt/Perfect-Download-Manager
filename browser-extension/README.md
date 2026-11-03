@@ -11,7 +11,8 @@ Browser extension (MV3)  --nativeMessaging-->  pdm-native-host.exe  --named pipe
 - The extension adds a right-click "Download with PDM" menu and an optional "intercept all
   downloads" toggle.
 - The native host relays each URL to the running app over a per-user named pipe
-  (`PDM.DownloadRequest`). If PDM is not running, the host launches it and retries.
+  (`PDM.DownloadRequest`). If PDM is not running, the host launches it in the background
+  (`PDM.exe --background`: tray only, no main window) and retries.
 - Captured downloads land in the same queue, categories, and settings as the UI.
 
 ### Interception happens in the filename barrier

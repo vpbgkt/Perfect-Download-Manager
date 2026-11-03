@@ -19,6 +19,32 @@ PDM uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.4.1] - 2026-11-03
+
+### Fixed
+- Browser captures: the "New download detected" prompt and the download popup now open in front of
+  the browser every time. The prompt used to open behind the browser (Windows does not let a
+  background app take the foreground), and the popup's always-on-top pin was cleared again as soon
+  as it was set, so the browser covered it moments later and it looked as if the link had not been
+  caught. Both now stay on top until you click another window
+- Browser captures no longer bring the whole PDM window along: the prompts used to be dialogs owned
+  by the main window, so Windows raised the dashboard with them. They are now their own windows, and
+  "Show existing" on a duplicate opens that download's popup instead of the dashboard
+- Clicking the link again while a prompt is open brings that prompt back to the front; the retry used
+  to be dropped without any feedback
+- When the browser has to start PDM, it starts in the tray: you see only the download prompt, not the
+  main window. Open the main window from the tray icon or by launching PDM again
+- Launching PDM while it is already running shows the running window again (the lookup used the old
+  window title, so a second launch did nothing)
+- A browser download that fails to start, or a refreshed link that fails to restart, now shows a message in front of you
+  instead of a notification inside the main window, which you usually could not see at that moment
+- "Save for later" on a captured download no longer reports "Download could not be saved" after
+  saving it
+- The tray icon's Open no longer crashes PDM after the main window was closed while a download popup
+  kept PDM running
+
+---
+
 ## [1.4.0] - 2026-10-24
 
 Download engine rework. Root causes, measurements and design: `docs/DOWNLOAD-ENGINE-PERFORMANCE.md`

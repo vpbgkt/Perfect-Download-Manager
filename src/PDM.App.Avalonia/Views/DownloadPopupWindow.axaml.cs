@@ -33,6 +33,7 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     private const int ShutdownCountdownSeconds = 10;
 
     private readonly IPowerController _powerController;
+    private readonly AttentionPin _attentionPin;
     private DispatcherTimer? _shutdownTimer;
     private int _shutdownRemaining;
 
@@ -56,8 +57,8 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
 
         // Surface the popup above other windows when the link is received (so it isn't missed), then
         // let it behave like a normal window — clicking another window brings that forward.
+        _attentionPin = new AttentionPin(this);
         Opened += OnPopupOpened;
-        Deactivated += OnPopupDeactivated;
     }
 
     /// <summary>
@@ -89,40 +90,17 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
     }
 
     /// <summary>
-    /// Raises the popup above every other window and keeps it pinned until the user interacts with a
-    /// different window.
+    /// Raises the popup above every other window and keeps it pinned until the user moves to a
+    /// different window (Requirement: on top until the user clicks away, then normal).
     /// <para>
-    /// A plain <c>SetForegroundWindow</c>/one-shot raise is not enough for the browser-extension flow:
-    /// the capture arrives while the <em>browser</em> owns the foreground, and Windows refuses to let a
-    /// background process steal focus, so the popup ended up behind the browser. Setting
-    /// <see cref="Window.Topmost"/> does not require foreground rights, so it reliably brings the popup
-    /// into view; <see cref="OnPopupDeactivated"/> then clears it on the first click elsewhere so the
-    /// window does not stay stuck above everything.
+    /// The capture arrives while the <em>browser</em> owns the foreground, and Windows refuses to let
+    /// a background process take it, so a plain activate left the popup behind the browser. The popup
+    /// used to set <see cref="Window.Topmost"/> and then clear it natively straight away (a one-shot
+    /// raise), so the browser covered it again as soon as it rearranged its own windows.
+    /// <see cref="AttentionPin"/> keeps the pin until the user has moved on.
     /// </para>
     /// </summary>
-    private void SurfaceToUser()
-    {
-        if (WindowState == WindowState.Minimized)
-        {
-            WindowState = WindowState.Normal;
-        }
-
-        Topmost = true;
-        WindowForeground.BringToFrontOnce(this);
-        Activate();
-    }
-
-    /// <summary>
-    /// Releases the temporary always-on-top pin as soon as the user moves to another window, restoring
-    /// normal z-order behaviour (Requirement: on top until the user clicks away, then normal).
-    /// </summary>
-    private void OnPopupDeactivated(object? sender, EventArgs e)
-    {
-        if (Topmost)
-        {
-            Topmost = false;
-        }
-    }
+    private void SurfaceToUser() => _attentionPin.Raise();
 
     /// <inheritdoc />
     public Guid Id => _viewModel.Id;
@@ -360,7 +338,6 @@ public partial class DownloadPopupWindow : Window, IDownloadPopup
         // the transfer. Notify the manager so it releases this popup while keeping it reopenable.
         _viewModel.Completed -= OnDownloadCompleted;
         Opened -= OnPopupOpened;
-        Deactivated -= OnPopupDeactivated;
         StopShutdownTimer();
         _viewModel.Dispose(); // Stop the interpolation timer and clean up resources.
         _onClosed?.Invoke(_viewModel.Id);

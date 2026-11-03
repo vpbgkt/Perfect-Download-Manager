@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 using PDM.App.Avalonia.Services;
 using PDM.App.Avalonia.Views;
@@ -23,6 +24,13 @@ namespace PDM.App.Avalonia;
 /// </summary>
 public partial class App : Application
 {
+    /// <summary>
+    /// Passed by the browser's native host when it has to start PDM to hand a captured download over.
+    /// PDM then starts in the tray without its main window, so the user sees only the download prompt
+    /// and popup; the main window opens from the tray icon or by launching PDM again.
+    /// </summary>
+    public const string BackgroundArgument = "--background";
+
     private static readonly Uri IconUri = new("avares://PDM/Assets/pdm.ico");
 
     /// <summary>The composition root; set during <see cref="OnFrameworkInitializationCompleted"/>.</summary>
@@ -33,17 +41,32 @@ public partial class App : Application
     private BrowserCaptureService? _capture;
     private TrayIcon? _trayIcon;
 
+    private IClassicDesktopStyleApplicationLifetime? _desktop;
+    private Func<MainWindow>? _createMainWindow;
+    private MainWindow? _mainWindow;
+    private ShutdownMode _normalShutdownMode;
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            bool startInBackground = desktop.Args?.Any(arg =>
+                string.Equals(arg, BackgroundArgument, StringComparison.OrdinalIgnoreCase)) == true;
+
             // Single instance per user: a second launch surfaces the running window and exits.
             _singleInstance = new SingleInstance();
             if (!_singleInstance.IsFirstInstance)
             {
-                _singleInstance.ActivateExisting();
+                // A background start only exists to hand a download over, which the native host
+                // retries against the running instance's pipe. It must never open that instance's
+                // main window.
+                if (!startInBackground)
+                {
+                    _singleInstance.ActivateExisting();
+                }
+
                 _singleInstance.Dispose();
                 _singleInstance = null;
                 desktop.Shutdown(0);
@@ -68,16 +91,31 @@ public partial class App : Application
             _popupManager.Start();
             mainViewModel.PopupManager = _popupManager;
 
-            var mainWindow = new MainWindow(mainViewModel, notifier)
+            _desktop = desktop;
+            _createMainWindow = () => new MainWindow(mainViewModel, notifier)
             {
                 Icon = new WindowIcon(AssetLoader.Open(IconUri))
             };
-            desktop.MainWindow = mainWindow;
+            _mainWindow = CreateMainWindow();
+            _normalShutdownMode = desktop.ShutdownMode;
 
-            _capture = new BrowserCaptureService(Host, notifier, () => desktop.MainWindow);
+            if (startInBackground)
+            {
+                // No MainWindow yet, or the lifetime would show it on startup. Until the user opens
+                // it, PDM lives in the tray, so closing the last download popup must not exit it.
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            }
+            else
+            {
+                desktop.MainWindow = _mainWindow;
+            }
+
+            // "Show existing" on a captured duplicate opens that download's popup, not the dashboard.
+            _capture = new BrowserCaptureService(Host, notifier, revealDownload: mainViewModel.RevealExisting);
             _capture.Start();
 
-            _trayIcon = BuildTrayIcon(mainWindow, desktop);
+            _trayIcon = BuildTrayIcon(desktop);
+            _singleInstance.ListenForActivation(() => Dispatcher.UIThread.Post(ShowMainWindow));
 
             desktop.ShutdownRequested += (_, _) =>
             {
@@ -134,7 +172,7 @@ public partial class App : Application
     }
 
     /// <summary>Builds the notification-area icon with Open/Exit; clicking it surfaces the window.</summary>
-    private static TrayIcon BuildTrayIcon(Window mainWindow, IClassicDesktopStyleApplicationLifetime desktop)
+    private TrayIcon BuildTrayIcon(IClassicDesktopStyleApplicationLifetime desktop)
     {
         var tray = new TrayIcon
         {
@@ -145,19 +183,57 @@ public partial class App : Application
 
         var menu = new NativeMenu();
         var open = new NativeMenuItem("Open");
-        open.Click += (_, _) => ShowMainWindow(mainWindow);
+        open.Click += (_, _) => ShowMainWindow();
         var exit = new NativeMenuItem("Exit");
         exit.Click += (_, _) => desktop.Shutdown();
         menu.Add(open);
         menu.Add(exit);
         tray.Menu = menu;
-        tray.Clicked += (_, _) => ShowMainWindow(mainWindow);
+        tray.Clicked += (_, _) => ShowMainWindow();
 
         return tray;
     }
 
-    private static void ShowMainWindow(Window window)
+    private MainWindow CreateMainWindow()
     {
+        MainWindow window = _createMainWindow!();
+
+        // A download popup keeps PDM running after the main window is closed, and a closed window
+        // cannot be shown again, so the next request builds a fresh one.
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_mainWindow, window))
+            {
+                _mainWindow = null;
+            }
+        };
+        return window;
+    }
+
+    /// <summary>
+    /// Shows the main window and brings it to the front: from the tray icon, or when PDM is launched
+    /// again while running. Runs on the UI thread.
+    /// </summary>
+    private void ShowMainWindow()
+    {
+        if (_desktop is null || _createMainWindow is null)
+        {
+            return;
+        }
+
+        MainWindow window = _mainWindow ??= CreateMainWindow();
+        if (!ReferenceEquals(_desktop.MainWindow, window))
+        {
+            // First showing after a background start (from then on PDM behaves as if launched
+            // normally), or a replacement for a main window the user closed.
+            if (_desktop.MainWindow is null)
+            {
+                _desktop.ShutdownMode = _normalShutdownMode;
+            }
+
+            _desktop.MainWindow = window;
+        }
+
         if (window.WindowState == WindowState.Minimized)
         {
             window.WindowState = WindowState.Normal;
@@ -165,5 +241,6 @@ public partial class App : Application
 
         window.Show();
         window.Activate();
+        WindowForeground.TryTakeForeground(window);
     }
 }

@@ -21,7 +21,14 @@ public partial class ConfirmDialog : Window
         MessageText.Text = message;
     }
 
-    private void OnYes(object? sender, RoutedEventArgs e) => Close(true);
+    /// <summary>True once the user pressed Yes; read when the dialog was shown as its own window rather than modally.</summary>
+    public bool Confirmed { get; private set; }
+
+    private void OnYes(object? sender, RoutedEventArgs e)
+    {
+        Confirmed = true;
+        Close(true);
+    }
 
     private void OnNo(object? sender, RoutedEventArgs e) => Close(false);
 

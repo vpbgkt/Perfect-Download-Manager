@@ -10,7 +10,7 @@ namespace PDM.NativeHost;
 /// Chrome/Edge/Firefox Native Messaging host for PDM. The browser launches this process and
 /// exchanges length-prefixed JSON messages over stdin/stdout. Each message carries a URL to
 /// download; the host forwards it to the running PDM app over a per-user named pipe. If PDM is
-/// not running, the host launches it and retries once.
+/// not running, the host launches it in the background (tray only, no main window) and retries.
 ///
 /// Native messaging wire format: a 4-byte little-endian length prefix, then that many bytes of
 /// UTF-8 JSON. We read one message, act on it, reply, and exit — the browser starts a fresh
@@ -182,6 +182,12 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// Tells PDM it was started only to take a captured download, so it opens in the tray without its
+    /// main window: the user sees just the download prompt. Must match <c>App.BackgroundArgument</c>.
+    /// </summary>
+    private const string BackgroundArgument = "--background";
+
     private static bool TryLaunchApp()
     {
         // The installer records the PDM executable path next to this host. Fall back to a
@@ -194,7 +200,7 @@ internal static class Program
 
         try
         {
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(exe, BackgroundArgument) { UseShellExecute = true });
             return true;
         }
         catch (Exception)
