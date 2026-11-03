@@ -78,17 +78,8 @@ network layer does nothing — there is no signed token, so verification fails.
 ## Layer 4 — Raising the analysis bar
 
 - **Release builds strip symbols** (`Directory.Build.props`: no PDB, optimized, deterministic).
-- **Obfuscation** (`build/obfuscate.ps1` + `build/obfuscar.xml`): the security-sensitive
-  `PDM.Licensing` assembly can be obfuscated (private-member renaming, control-flow obfuscation,
-  string hiding) while preserving its public API. The WPF UI assembly is intentionally not
-  obfuscated because XAML data-binding resolves member names as strings at runtime.
-- **`SuppressIldasm`** attribute is added during obfuscation.
-
-To enable for a release:
-```powershell
-dotnet build -c Release
-./build/obfuscate.ps1
-```
+- **NativeAOT**: the shipped executables are compiled to native machine code with symbols
+  stripped (`build/publish-aot-dist.ps1`), so there is no IL for a .NET decompiler to read back.
 
 ## Operational security
 
@@ -122,5 +113,5 @@ dotnet build -c Release
 - Move a genuinely valuable, server-only capability behind the license (e.g. a cloud feature) so
   that a cracked client loses real functionality, not just a flag.
 - Commercial anti-tamper/packer (e.g. a hardened .NET protector) for higher-value releases.
-- Code signing (see docs/REMAINING-WORK.md) to establish OS-level trust and prevent silent binary
+- Code signing (see docs/DEPLOYMENT.md, "Code signing") to establish OS-level trust and prevent silent binary
   modification warnings.

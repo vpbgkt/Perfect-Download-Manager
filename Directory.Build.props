@@ -14,8 +14,7 @@
 
   <!--
     Repo-wide defaults. Release builds strip debug symbols and enable optimization so shipped
-    binaries carry less information for reverse engineering. Obfuscation of the security-sensitive
-    assembly is a separate, opt-in step (build/obfuscate.ps1).
+    binaries carry less information for reverse engineering.
   -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <Optimize>true</Optimize>

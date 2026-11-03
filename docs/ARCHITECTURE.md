@@ -8,8 +8,9 @@ This document provides a comprehensive overview of PDM's architecture, module bo
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   PDM.App (WPF UI)                  │
-│   FluentWindow · MVVM · Tray · Notifications        │
+│        PDM.App.Avalonia (desktop UI, NativeAOT)     │
+│   Views · Tray · Notifications · Browser capture    │
+│   on PDM.App.Core (view models) + PDM.Platform.*    │
 └────────────────────┬────────────────────────────────┘
                      │
          ┌───────────┼────────────┐
@@ -34,7 +35,7 @@ This document provides a comprehensive overview of PDM's architecture, module bo
          ┌──────────────────────────────┐
          │   Browser Extension          │
          │ Chrome · Edge · Brave        │
-         │ Native Messaging → PDM.App   │
+         │ Native Messaging → PDM app   │
          └──────────────────────────────┘
 
          ┌──────────────────────────────┐
@@ -50,7 +51,7 @@ This document provides a comprehensive overview of PDM's architecture, module bo
 
 ### PDM.Core — Download Engine
 
-The heart of PDM. Has **zero UI or infrastructure dependencies** — it can be tested in isolation and used from any host (WPF app, CLI, tests).
+The heart of PDM. Has **zero UI or infrastructure dependencies** — it can be tested in isolation and used from any host (desktop app, CLI, tests).
 
 **Key classes:**
 
@@ -162,32 +163,34 @@ The manifest JSON and a detached ECDSA P-256 signature are fetched separately. T
 
 ---
 
-### PDM.App — WPF Desktop UI
+### Desktop app — PDM.App.Avalonia, PDM.App.Core, PDM.Platform(.Windows)
 
-Built on [WPF-UI 4.3](https://wpfui.lepo.co/) for Fluent Design / Mica support.
-
-**MVVM structure:**
+The UI is [Avalonia](https://avaloniaui.net/) with compiled bindings, published with NativeAOT
+(`build/publish-aot-dist.ps1`), so users need no .NET runtime. It is split in three layers so the
+view models can be tested without a UI and other platforms can be added later:
 
 ```
-Views/
-  MainWindow.xaml          ← FluentWindow host
-  DownloadsView.xaml       ← DataGrid with progress bars
-  SettingsDialog.xaml      ← Settings panel
-  AddDownloadDialog.xaml   ← URL input
-  AddManyDialog.xaml       ← Bulk URL paste
+PDM.App.Avalonia/            ← the executable (PDM.exe): views and UI-only services
+  Views/       MainWindow, DownloadPopupWindow, SettingsWindow, AddDownloadDialog,
+               BulkAddDialog, NewDownloadDialog, UpdateAvailableDialog, LicenseWindow, ...
+  Services/    BrowserCaptureService (browser downloads in), AvaloniaNotifier,
+               ThemeApplier, ArchiveExtractionRunner
 
-ViewModels/
-  MainWindowViewModel      ← Orchestrates top-level state
-  DownloadItemViewModel    ← Per-row: progress, speed, ETA, status
-  SettingsViewModel        ← Settings R/W
-  AddDownloadViewModel     ← Validation, duplicate detection
+PDM.App.Core/                ← UI-agnostic (tested by tests/PDM.App.Tests)
+  ViewModels/  MainViewModel, DownloadItemViewModel, DownloadPopupViewModel,
+               SettingsViewModel, UpdateAvailableViewModel, LicenseViewModel, ...
+  Services/    PopupManager, UpdateOrchestrator, DuplicatePrompt, RefreshCoordinator
+  AppHost      composition root: settings, catalog, DownloadManager, licensing, updates
 
-Services/
-  TrayIconService          ← WinForms NotifyIcon (no AUMID required)
-  NotificationService      ← Balloon notifications
-  SingleInstanceService    ← Named pipe, focuses existing window on re-launch
-  ThemeService             ← Light / Dark / System theme switcher
+PDM.Platform/                ← interfaces (ISingleInstance, ICaptureListener, ISecretStore, ...)
+PDM.Platform.Windows/        ← Windows implementations: DownloadRequestListener (named pipe
+                               for the browser extension), NativeHostRegistrar, SingleInstance,
+                               WindowsSecretStore (DPAPI), SevenZipArchiveExtractor, ...
 ```
+
+Two helper executables ship next to `PDM.exe`, both NativeAOT:
+`pdm-native-host.exe` (PDM.NativeHost, the browser extension's native-messaging bridge) and
+`pdm-update.exe` (PDM.UpdateLauncher, applies a downloaded update after PDM exits).
 
 ---
 

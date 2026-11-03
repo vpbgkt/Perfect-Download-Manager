@@ -62,9 +62,10 @@ Help sustain development and get priority assistance:
 - **PDM.Infrastructure** — SQLite catalog, `DownloadManager`, quiet-hours scheduler, categories, post-download hook.
 - **PDM.Licensing** — trial + grace-period, hardware binding, DPAPI-encrypted store, pluggable transport (drop in Keygen client later).
 - **PDM.Updater** — signed manifest fetch (ECDSA P-256), SHA-256 package verification, staging, release channels.
-- **PDM.App** — WPF desktop UI on WPF-UI 4.3 (Fluent/Mica), MVVM via `CommunityToolkit.Mvvm`, system tray, drag-and-drop, single-instance, Serilog rolling file logs.
+- **PDM.App.Avalonia** — the desktop app: Avalonia UI built with NativeAOT (no .NET install needed), system tray, drag-and-drop, single-instance, Serilog rolling file logs. Its view models live in **PDM.App.Core**, its Windows integration in **PDM.Platform.Windows**.
+- **PDM.NativeHost** / **PDM.UpdateLauncher** — the browser-extension bridge and the update installer.
 - **PDM.Cli** — thin command-line front end used to exercise the engine.
-- **xUnit** — **81 tests**, all passing.
+- **xUnit** — about 260 tests across 7 projects, all passing.
 
 ## 🤖 AI-Powered Features (Coming Soon)
 
@@ -122,15 +123,15 @@ Expected output: `Build succeeded. 0 Warning(s) 0 Error(s)`.
 dotnet test
 ```
 
-Expected: **81 passed, 0 failed** across four test projects (`PDM.Core.Tests`, `PDM.Infrastructure.Tests`, `PDM.Licensing.Tests`, `PDM.Updater.Tests`).
+Expected: all tests pass (about 260, across 7 test projects).
 
 ### Run the desktop app
 
 ```powershell
-dotnet run --project src/PDM.App
+dotnet run --project src/PDM.App.Avalonia
 ```
 
-You should see the main window with the beautiful Fluent/Mica design. The Community Edition runs without any trial limitations or license prompts.
+You should see the main window. The Community Edition runs without any trial limitations or license prompts.
 
 Try:
 - **Add Download** → paste a URL and hit Enter.

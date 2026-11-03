@@ -81,12 +81,12 @@ Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`
 dotnet test PDM.sln
 ```
 
-Expected: **81 passed, 0 failed**
+Expected: all tests pass (about 260, across 7 test projects).
 
 ### Run the desktop app
 
 ```powershell
-dotnet run --project src/PDM.App
+dotnet run --project src/PDM.App.Avalonia
 ```
 
 ### Run the CLI (quick engine smoke test)

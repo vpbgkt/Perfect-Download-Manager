@@ -24,7 +24,7 @@ Contact your PDM portal administrator to receive your Dhru API credentials. You 
 
 - **Username**: Your unique Dhru API username (e.g., `mycompany_abc123`)
 - **API Access Key**: Your secret key (format: `XXX-XXX-XXX-XXX-XXX-XXX-XXX-XXX`)
-- **API Endpoint**: The URL to make API requests (e.g., `https://portal.perfectdownloadmanager.com/api/dhru/index.php`)
+- **API Endpoint**: The URL to make API requests (`https://<portal domain>/api/dhru/index.php`)
 
 ### Step 2: Configure in Dhru Panel
 

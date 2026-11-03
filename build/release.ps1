@@ -118,6 +118,19 @@ foreach ($tool in @("dotnet", "node", "aws", "git")) {
     Ok "$tool present"
 }
 
+# NativeAOT links with the MSVC linker. Without it publish-aot-dist.ps1 falls back to a trimmed
+# build (bigger installer, ~3 s startup instead of ~0.3 s), which must never be released by accident.
+if (-not $SkipBuild) {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+    $vcTools = (Test-Path $vswhere) -and
+        [bool](& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+    if (-not $vcTools) {
+        Die ("Visual Studio Build Tools with the 'Desktop development with C++' workload are not installed, " +
+             "so NativeAOT cannot link. Install them (docs/DEPLOYMENT.md section 2) and re-run.")
+    }
+    Ok "Visual C++ build tools present (NativeAOT)"
+}
+
 # AWS account/region check (avoids publishing to the wrong account by accident).
 $acct = (aws sts get-caller-identity --query Account --output text 2>&1).Trim()
 if ($acct -ne $ExpectedAcct) { Die "AWS account is $acct, expected $ExpectedAcct." }

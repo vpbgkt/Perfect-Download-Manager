@@ -107,7 +107,7 @@
 
     <!-- Brand the installer green (the default WiX bitmaps read as a red/"CD" theme that feels
          alarming during setup). banner.bmp (493x58) tops the interior dialogs; dialog.bmp
-         (493x312) is the Welcome/Exit background. Regenerate with build/make-installer-art.ps1. -->
+         (493x312) is the Welcome/Exit background. -->
     <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" />
     <WixVariable Id="WixUIDialogBmp" Value="dialog.bmp" />
 

@@ -8,8 +8,8 @@ publish/
 out/
 dist/
 
-# dotnet local tool manifest is fine to commit; obfuscated output is not
-**/obfuscated/
+# Report written by backend/licensing/verify-deployment.mjs on every run
+backend/licensing/deployment-summary.txt
 
 # WiX toolset extension cache (auto-downloaded per machine)
 .wix/

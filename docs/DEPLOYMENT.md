@@ -1,487 +1,289 @@
-1# PDM Deployment & Release Runbook
+# Deployment guide
 
-The single reference for shipping Perfect Download Manager after code changes. It covers the
-**desktop app** (build → installer → signed auto-update), the **marketing website**, the
-**browser extension**, and the **admin/reseller portal**.
+How to ship Perfect Download Manager (PDM). Written from the 1.4.0 release (2026-10-24), which
+was done exactly this way.
 
-> TL;DR for a normal desktop release: run **`./build/release.ps1 -Version X.Y.Z -ReleaseNotes "Your changes" -YesToAll`**. It prompts for the version
-> tag, patches every website version marker, builds the NativeAOT dist, signs and uploads the
-> update package + MSI + Setup.exe + `downloads.json` to S3, HEAD-verifies every URL is live,
-> commits `src/` + `installer/` + `build/` + `backend/` + the patched website files, tags
-> `vX.Y.Z`, and pushes both the branch and the tag. Full details in
-> [§5 Desktop app release](#5-desktop-app-release-the-main-flow); flags/switches in
-> [§9 Quick reference](#9-quick-reference-typical-desktop-release).
+| You changed... | Do this |
+|---|---|
+| The desktop app (`src/`, `installer/`) | [§3 Release the desktop app](#3-release-the-desktop-app) |
+| The browser extension (`browser-extension/`) | [§4 Release the browser extension](#4-release-the-browser-extension) |
+| Only the website (`website/`) | Push to `main`; Cloudflare deploys it ([§5](#5-website)) |
+| The admin / reseller portal (`admin-portal/`) | [§6 Admin / reseller portal](#6-admin--reseller-portal) |
 
-## Common Pitfalls & Quick Fixes
+A desktop release is **one command** on a prepared machine:
 
-Before diving into the full documentation, here are the most common issues:
+```powershell
+./build/release.ps1 -Version 1.4.1 -ReleaseNotes "Fixed X`nImproved Y" -YesToAll
+```
 
-| Issue | Quick Fix |
-|-------|-----------|
-| Script appears to hang | **Wait 5-10 minutes** — build takes time. Check with `git log --oneline -1` to see if it completed. |
-| "Tag already exists" error | Likely already deployed! Verify: `git log --oneline -1` and check S3. If duplicate, delete tag: `git tag -d vX.Y.Z` |
-| AWS authentication fails | Run `aws sts get-caller-identity` to verify account `452359090613` |
-| Build fails with MSBuild errors | Run `dotnet clean` then retry |
-| Website not updating | Cloudflare Pages takes 1-2 minutes to deploy after push |
-| Need to retry after failure | Use `-SkipBuild` to reuse artifacts: `./build/release.ps1 -Version X.Y.Z -SkipBuild -YesToAll` |
-
-**Expected Timeline:**
-- Build: 2-5 minutes
-- Upload: 1-3 minutes  
-- Total: 5-10 minutes end-to-end
+It builds the installer, publishes it, and makes existing users see **"Update now"** in the app.
 
 ---
 
-## 1. Components & repo layout
+## 1. What is deployed where
 
-| Area | Path | Ships to |
+All files are served from one public S3 bucket:
+`https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com` (written `<S3>` below).
+
+| What | Built by | Published to | Used by |
+|---|---|---|---|
+| `PDM-<v>-Setup.exe` (installer, ~20 MB) | `build-bundle.ps1` | `<S3>/downloads/` | Website download button |
+| `PDM-<v>.msi` (same install, plain MSI) | `build-installer.ps1` | `<S3>/downloads/` | Website, IT admins |
+| `pdm-<v>.zip` (portable app **and** update package) | `release.ps1` | `<S3>/stable/` | Website "portable", auto-update |
+| `manifest.json` (signed: version, zip URL, SHA-256, notes) | `sign-release.ps1` | `<S3>/stable/` | Auto-update in installed apps |
+| `downloads.json` (version, links, sizes) | `release.ps1` | `<S3>/stable/` | Website (refreshes the buttons) |
+| Website | `website/` | Cloudflare, on push to `main` | perfectdownloadmanager.com |
+| Browser extension zip | `pack-extension.ps1` | Chrome Web Store (by hand) | Chrome, Edge, Brave |
+
+What ships inside the app (`dist/PDM/`, 11 files): `PDM.exe` (the app), `pdm-native-host.exe`
+(browser-extension bridge), `pdm-update.exe` (applies updates), native libraries (Skia, ANGLE,
+HarfBuzz, SQLite), `Assets/pdm.ico` and `tools/7-zip/`. All three executables are **NativeAOT**:
+users need no .NET runtime and no Visual C++ redistributable (only the Universal C runtime that
+every Windows 10/11 has).
+
+---
+
+## 2. Prepare a release machine (once)
+
+| Tool | Install | Check |
 |---|---|---|
-| Desktop app (WPF, .NET 10) | `src/PDM.App`, `src/PDM.NativeHost`, `src/PDM.UpdateLauncher`, `src/PDM.Core`, … | S3 (auto-update) + website (MSI) |
-| Installer (WiX v5) | `installer/Package.wxs` | S3 `downloads/` |
-| Build scripts | `build/*.ps1` | — |
-| Release signing | `backend/updates/sign-release.ps1` | S3 `stable/` |
-| Update infra (one-time) | `backend/updates/deploy.ps1`, `backend/updates/template.yaml` | AWS CloudFormation |
-| Browser extension (MV3) | `browser-extension/chromium`, `build/pack-extension.ps1` | Chrome Web Store |
-| Marketing website (static) | `website/`, `wrangler.json`, `build/pack-website.ps1` | Cloudflare (apex domain) |
-| Admin/Reseller portal (Next.js) | `admin-portal/`, `admin-portal/deploy/*` | VPS (`seller.` subdomain) |
+| .NET 10 SDK | https://dotnet.microsoft.com/download (system-wide installer) | `dotnet --list-sdks` shows `10.x` |
+| Visual Studio Build Tools 2022, C++ workload (NativeAOT linker) | see below | `release.ps1` checks it |
+| Node.js 18+ | https://nodejs.org | `node --version` |
+| AWS CLI v2, logged in to account `452359090613`, region `ap-south-1` | https://aws.amazon.com/cli/ | `aws sts get-caller-identity` shows `452359090613` |
+| Git with push access to `github.com/vpbgkt/Perfect-Download-Manager` | | `git push --dry-run` |
+
+Build Tools, from an **administrator** terminal:
+
+```powershell
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+WiX (the installer builder) needs no install: it is a local dotnet tool (`dotnet-tools.json`,
+v5.0.2) that the build scripts restore themselves. 7-Zip is downloaded by `fetch-7zip.ps1` on
+first build.
+
+The Visual C++ *Redistributable* is not the same thing as the Build Tools and is not enough.
+Without the Build Tools, `release.ps1` stops at preflight; that is intended, because the
+fallback build (`publish-aot-dist.ps1 -NoAot`) makes a larger installer (~26 MB) that starts in
+~3 s instead of ~0.3 s.
 
 ---
 
-## 2. Prerequisites (build machine)
+## 3. Release the desktop app
 
-- **.NET SDK 10** (`dotnet --version` → `10.x`)
-- **WiX** — installed automatically as a local dotnet tool by `build-installer.ps1` (pins v5.0.2)
-- **Node.js** (used by the release signer, the website tooling, and the portal) — version 18+ required
-- **AWS CLI**, configured for account **`452359090613`**, region **`ap-south-1`**
-  (`aws sts get-caller-identity` should show that account)
-- **PowerShell** (all build/release scripts are `.ps1`) — version 5.1+ required
-- Git access to `github.com/vpbgkt/Perfect-Download-Manager`
+### 3.1 Before you run it
 
-### Expected Build Times
+1. **Pick the version.** Always higher than the live one (`X.Y.Z`); see [§8](#8-versions).
+   Installed apps only update to a strictly higher version.
+2. **Commit everything first, on `main`, and push.** `release.ps1` commits only `src/`,
+   `installer/`, `build/`, `backend/`, `.github/` and the two website files it edits.
+   `CHANGELOG.md`, `docs/`, `tests/` and `browser-extension/` must already be committed.
+   ```powershell
+   git checkout main; git pull
+   git status            # must be clean
+   ```
+3. **Update `CHANGELOG.md`** with a section for the version (part of step 2).
+4. **Run the tests:**
+   ```powershell
+   dotnet test PDM.sln
+   node --test --test-force-exit browser-extension/tests/background.test.js
+   ```
+5. **Write the release notes**: one line per change, plain ASCII (no `→`, `•`, emoji).
+   They appear in the app's update window and on the website changelog.
 
-- **Full NativeAOT build:** 2-5 minutes (depends on machine specs)
-- **MSI creation:** 30-60 seconds
-- **S3 uploads:** 1-3 minutes (50+ MB files, depends on internet speed)
-- **Total release time:** 5-10 minutes for a complete release
+### 3.2 Run it
+
+```powershell
+./build/release.ps1 -Version 1.4.1 -ReleaseNotes "Line one`nLine two" -YesToAll
+```
+
+Without `-Version` / `-ReleaseNotes` it asks for them; without `-YesToAll` it asks before
+publishing. It takes about 5-10 minutes. It prints progress after each stage and ends with
+`==> Done: PDM <v> published on Stable channel.`
+
+What it does, in order (nothing reaches users until stage 4):
+
+| # | Stage | Details |
+|---|---|---|
+| 1 | Preflight | `dotnet`, `node`, `aws`, `git` present; C++ build tools present; AWS account is `452359090613`; tag `v<v>` does not exist locally or on GitHub |
+| 2 | Patch website | `website/index.html`: title, version labels, download links. `website/changelog.html`: new section from the release notes |
+| 3 | Build | `publish-aot-dist.ps1` → `dist/PDM/`; zip → `dist/PDM-<v>.zip`; `build-installer.ps1` → `dist/PDM-<v>.0.msi`; `build-bundle.ps1` → `dist/PDM-<v>.0-Setup.exe` |
+| 4 | Publish | `backend/updates/sign-release.ps1` uploads the zip, signs `manifest.json` with the key in AWS SSM and uploads it (**this is the moment existing users are offered the update**); then MSI, Setup.exe and `downloads.json`; then checks every URL returns 200 |
+| 5 | Git | Commit `release: PDM <v> - <first note line>`, tag `v<v>`, push branch and tags. Cloudflare deploys the website from the push |
+
+### 3.3 Check the release
+
+```powershell
+$v = "1.4.1"; $base = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com"
+(Invoke-RestMethod "$base/stable/manifest.json").Version      # -> 1.4.1
+(Invoke-RestMethod "$base/stable/downloads.json").version     # -> 1.4.1
+foreach ($u in "downloads/PDM-$v-Setup.exe", "downloads/PDM-$v.msi", "stable/pdm-$v.zip") {
+    "{0}  {1}" -f (Invoke-WebRequest "$base/$u" -Method Head -UseBasicParsing).StatusCode, $u }
+git ls-remote --tags origin "v$v"                             # tag is on GitHub
+```
+
+Then open https://perfectdownloadmanager.com (1-2 minutes after the push): the version label,
+the download buttons and the changelog should show the new version.
+
+### 3.4 How existing users get the update
+
+On every start the app downloads `<S3>/stable/manifest.json`, checks its ECDSA signature
+against the public key built into the app, and compares versions. If the manifest is newer, the
+sidebar shows **"Update now"**; the update window shows the release notes. The app then
+downloads the zip, checks its SHA-256 against the manifest, closes, and `pdm-update.exe`
+replaces the program files and restarts PDM.
+
+- Users on 1.3.2 or later get 1.4.x this way (tested for 1.3.2 → 1.4.0).
+- The app refuses a manifest older than one it has already seen (anti-rollback), so you can
+  never push users *back* to an old version; see [§7 Rollback](#7-rollback).
+
+### 3.5 If something goes wrong
+
+| Symptom | Cause and fix |
+|---|---|
+| `Visual Studio Build Tools ... not installed` | Install them ([§2](#2-prepare-a-release-machine-once)) |
+| `AWS account is ..., expected 452359090613` | Log in with the right AWS profile: `aws sts get-caller-identity` |
+| `Tag vX.Y.Z already exists` | That version was already released or tagged. Check `(Invoke-RestMethod "$base/stable/manifest.json").Version`. If it is live, you are done; otherwise use a new version, or release with `-SkipCommit` and tag by hand |
+| Fails during **Build** | Nothing was published. Fix the error and run the same command again |
+| Fails during **Publish** | Fix the cause, then re-run with `-SkipBuild` (reuses `dist/`; uploads overwrite the same files) |
+| Fails during **Git** | Everything is live. Commit/tag/push by hand: `git add website/index.html website/changelog.html; git commit -m "release: PDM <v>"; git tag v<v>; git push; git push origin v<v>` |
+| `sign-release.ps1 failed` | Usually AWS access to SSM parameter `/pdm/updates/private-key`. Check `aws ssm get-parameter --name /pdm/updates/private-key --with-decryption --region ap-south-1 --query Parameter.Name` |
+
+Switches for retries: `-SkipBuild` (reuse `dist/`), `-SkipUpload` (no S3), `-SkipWebsite` (do not
+edit the website), `-SkipCommit` (no git), `-YesToAll` (no prompt), `-Channel Beta` (publish to
+`<S3>/beta/` for users who chose the Beta channel; the website is not touched).
+
+The installer is **not code-signed** yet, so Windows SmartScreen shows "Windows protected your PC
+→ More info → Run anyway" on first install. Updates are not affected: they are verified by the
+signed manifest and SHA-256. See [§9](#9-code-signing-when-you-have-a-certificate).
 
 ---
 
-## 3. Fixed infrastructure facts
+## 4. Release the browser extension
+
+1. Bump `"version"` in `browser-extension/chromium/manifest.json` and add a section to
+   `browser-extension/CHANGELOG.md`.
+2. Run the tests: `node --test --test-force-exit browser-extension/tests/background.test.js`
+3. Pack it: `./build/pack-extension.ps1` → `dist/pdm-extension-<version>.zip` (files at the zip
+   root, forward-slash paths, as the store requires).
+4. Upload the zip at https://chrome.google.com/webstore/devconsole (extension ID
+   `phbbcmofdbbojilmcpaghnafpamnocom`) and submit for review. Edge and Brave users install from
+   the Chrome Web Store too. Store listing text and the review checklist:
+   [EXTENSION-PUBLISHING.md](EXTENSION-PUBLISHING.md).
+5. Commit and push the version bump.
+
+The extension and the app talk through `pdm-native-host.exe`; keep new extension features
+backward compatible with the app version users already have, and the other way round.
+
+---
+
+## 5. Website
+
+`website/` is static, served by Cloudflare (`wrangler.json` → `assets.directory = ./website`).
+**Every push to `main` deploys it**, usually within 1-2 minutes. Headers come from
+`website/_headers`. `release.ps1` edits the version and links for you; for other changes just
+edit, commit and push. The download buttons point at S3, so they work independently of the site.
+
+Fallback if the git connection ever breaks: `npx wrangler deploy` (needs a Cloudflare API token).
+
+---
+
+## 6. Admin / reseller portal
+
+A Next.js app in `admin-portal/`, meant for its own server (nginx + systemd). **It is not
+deployed at the moment and has no domain yet**: when you deploy it, set `server_name` in
+`admin-portal/deploy/nginx.conf` (currently the placeholder `portal.example.com`). It is
+deployed separately from the desktop app. Setup, local
+development, environment variables and the database scripts are in
+[admin-portal/README.md](../admin-portal/README.md); the production files are
+`admin-portal/deploy/nginx.conf`, `pdm-portal.service`, `portal.env.example` and
+`iam-policy.json`.
+
+```powershell
+cd admin-portal
+npm ci
+npm test
+npm run build      # then on the server: npm run start, behind nginx
+```
+
+---
+
+## 7. Rollback
+
+- **Bad app release:** release the last good code again with a **higher** version number (for
+  example the 1.4.0 code as 1.4.2). Installed apps only move forward.
+- **Website download buttons:** point `downloads.json` and the links in `website/index.html` at
+  older files (all old versions stay in S3), then push.
+- **Website content:** revert the commit and push, or roll back the deployment in Cloudflare.
+
+---
+
+## 8. Versions
+
+| Where | Format | Example |
+|---|---|---|
+| App, zip, manifest, `-Version` | `X.Y.Z` | `1.4.0` |
+| MSI / Setup.exe file name and `ProductVersion` | `X.Y.Z.0` (WiX needs 4 parts) | `PDM-1.4.0.0.msi` |
+| Files in S3 | `X.Y.Z` | `downloads/PDM-1.4.0.msi` |
+| Git tag | `vX.Y.Z` | `v1.4.0` |
+| Browser extension | its own `X.Y.Z` in its manifest | `1.3.1` |
+
+---
+
+## 9. Code signing (when you have a certificate)
+
+Not done yet; buy an OV or EV code-signing certificate to remove the SmartScreen warning (EV is
+trusted immediately, OV builds reputation over time). Once it is in the Windows certificate
+store:
+
+- `publish-aot-dist.ps1 -CertThumbprint <sha1>` signs `PDM.exe`, `pdm-native-host.exe` and
+  `pdm-update.exe`. `release.ps1` does not pass a thumbprint yet; add a `-CertThumbprint`
+  parameter to it and forward it.
+- `build/sign.ps1 -Thumbprint <sha1> -Paths dist/PDM-<v>.0.msi,dist/PDM-<v>.0-Setup.exe` signs
+  the installers (sign the MSI before `build-bundle.ps1` wraps it).
+- `build/new-dev-signing-cert.ps1` makes a self-signed certificate for testing the pipeline only.
+
+---
+
+## 10. Reference
+
+### Build scripts (`build/`)
+
+| Script | Purpose |
+|---|---|
+| `release.ps1` | The release: everything in [§3](#3-release-the-desktop-app) |
+| `publish-aot-dist.ps1` | Builds `dist/PDM/` (NativeAOT; `-NoAot` for the trimmed fallback) |
+| `build-installer.ps1` | `dist/PDM/` → MSI (WiX, `installer/Package.wxs`) |
+| `build-bundle.ps1` | MSI → `Setup.exe` (WiX Burn, `installer/Bundle.wxs`) |
+| `fetch-7zip.ps1` | Downloads the bundled 7-Zip into `third-party/7-zip/` |
+| `pack-extension.ps1` | Browser extension → store zip |
+| `aot-harness.ps1` | CI check that the app still builds and downloads with NativeAOT |
+| `sign.ps1`, `new-dev-signing-cert.ps1` | Code signing ([§9](#9-code-signing-when-you-have-a-certificate)) |
+
+### Fixed infrastructure
 
 | Thing | Value |
 |---|---|
 | AWS account / region | `452359090613` / `ap-south-1` |
-| Updates S3 bucket (public read, CORS GET \*) | `pdm-updates-452359090613-aps1` |
-| Auto-update manifest (signed) | `s3://…/stable/manifest.json` |
-| Update/portable package | `s3://…/stable/pdm-<version>.zip` |
-| Website MSI | `s3://…/downloads/PDM-<version>.msi` |
-| Website download metadata | `s3://…/stable/downloads.json` |
-| Release signing key (ECDSA P-256) | SSM SecureString `/pdm/updates/private-key` |
+| Update bucket (public read) | `pdm-updates-452359090613-aps1` |
+| Update signing key (ECDSA P-256) | SSM SecureString `/pdm/updates/private-key`; public key in `LicensingConfig.UpdatePublicKeyBase64` |
 | License signing key | SSM SecureString `/pdm/licensing/private-key` |
 | License table | DynamoDB `pdm-licenses` |
-| Portal tables | DynamoDB `pdm-portal-*` (7) — see `admin-portal/deploy/dynamodb/` |
+| Portal tables | DynamoDB `pdm-portal-*`, created by `admin-portal/deploy/dynamodb/create-tables.ps1` |
 | Chrome Web Store extension ID | `phbbcmofdbbojilmcpaghnafpamnocom` |
-| Firebase project (portal auth) | `perfect-download-manager` |
-| Public site | `https://perfectdownloadmanager.com` (Cloudflare) |
-| Portal site | `https://seller.perfectdownloadmanager.com` (VPS) |
+| Website | https://perfectdownloadmanager.com (Cloudflare) |
 
-**Base URL used in links:**
-`https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com`
+### One-time infrastructure (already created)
 
----
+- **Update bucket and signing key:** `backend/updates/deploy.ps1` (CloudFormation
+  `backend/updates/template.yaml`). `-RotateKeys` makes a new key; every installed app then
+  rejects updates until it gets a build with the new public key, so do not rotate casually.
+- **Licensing backend:** `backend/licensing/deploy.ps1` (DynamoDB + Lambda + API Gateway);
+  `node backend/licensing/verify-deployment.mjs` checks it.
 
-## 4. Versioning rules
+### Secrets
 
-- App / zip / manifest version: **`X.Y.Z`** (e.g. `1.0.17`).
-- MSI `ProductVersion`: **`X.Y.Z.0`** (4-part; WiX requirement).
-- **Auto-update triggers only when the manifest `Version` is strictly greater than the
-  installed version.** Always bump `X.Y.Z` for every release, or existing users won't update.
-- Git tag: **`vX.Y.Z`**.
-- Keep the MSI and the portable ZIP on the **same version** so the website is consistent.
-
----
-
-## 5. Desktop app release (the main flow)
-
-This is what you run after changing any desktop code (`src/**`, `installer/**`). A release is a
-single command:
-
-```powershell
-./build/release.ps1                           # prompts for version + release notes
-./build/release.ps1 -Version 1.2.3            # non-interactive version
-./build/release.ps1 -Version 1.2.3 -ReleaseNotes "Fixed X.`nImproved Y."
-./build/release.ps1 -Version 1.3.0-rc.1 -Channel Beta
-./build/release.ps1 -Version 1.3.1 -ReleaseNotes "Bug fixes" -YesToAll  # fully automated
-```
-
-**IMPORTANT:** The script may appear to hang or complete silently. If the build succeeds but git
-operations seem stuck, the script likely completed successfully in the background. Always verify
-with `git log --oneline -3` and `git tag -l "vX.Y.Z"` before re-running.
-
-Useful switches when retrying a partially-failed release:
-
-- `-SkipBuild`   — reuse whatever is already in `dist/` (fast retry of the upload/commit steps).
-- `-SkipUpload`  — skip the S3 publish (patch website + commit only).
-- `-SkipWebsite` — leave `website/index.html` and `website/changelog.html` untouched.
-- `-SkipCommit`  — do everything except `git commit` / `git tag` / `git push`.
-- `-YesToAll`    — no confirmation prompt before the destructive steps.
-
-What `release.ps1` actually does, in order:
-
-1. **Preflight** — checks `dotnet` / `node` / `aws` / `git` are on PATH, verifies the AWS account
-   is `452359090613`, and refuses to proceed if `vX.Y.Z` already exists locally or on origin.
-2. **Patch website** — regex-updates `<title>`, the JSON-LD `softwareVersion` and `downloadUrl`,
-   every `data-version` span, and the `#dlMsi`/`#dlZip` hrefs in `website/index.html`; prepends a
-   new `<section>` for the version in `website/changelog.html`. Idempotent.
-3. **Build** — one path only, no runtime prerequisite:
-   - `./build/publish-aot-dist.ps1 -Version <v>` — assembles the **NativeAOT** dist at
-     `dist/PDM/`: `PDM.exe` (Avalonia head), `pdm-native-host.exe`, `pdm-update.exe`, plus native
-     deps (SQLite, Skia, ANGLE, HarfBuzz). All self-contained; no .NET runtime install needed.
-   - Then zips `dist/PDM/*` -> `dist/PDM-<v>.zip` (this is the portable + auto-update package).
-   - Then `./build/build-installer.ps1 -Version <v>.0` -> `dist/PDM-<v>.0.msi`.
-   - Then `./build/build-bundle.ps1 -Version <v>.0` -> `dist/PDM-<v>.0-Setup.exe` (single-file
-     wrapper around the MSI; because the payload is already runtime-free, the bootstrapper is a
-     familiar-looking Setup.exe rather than a runtime downloader).
-4. **Publish to S3** — `sign-release.ps1` signs+uploads the zip and manifest;
-   `aws s3 cp` uploads the MSI and Setup.exe; generates + uploads `downloads.json`. Every URL is
-   HEAD-checked (must return 200).
-5. **Git** — stages **only** `src/`, `installer/`, `build/`, `backend/`, and the two patched
-   website files (never `git add .`); a secret-scan on staged files aborts if anything looks like a
-   key; commits, tags `vX.Y.Z`, pushes both branch and tags.
-
-### 5.1 Verifying a successful release
-
-After running `release.ps1`, verify the deployment completed:
-
-```powershell
-# 1. Check git commit and tag
-git log --oneline -3              # Should show "release: PDM X.Y.Z" as latest
-git tag -l "vX.Y.Z"               # Should show your new tag
-git ls-remote --tags origin       # Verify tag is on remote
-
-# 2. Verify S3 uploads
-aws s3 ls s3://pdm-updates-452359090613-aps1/stable/ | Select-String "X.Y.Z"
-aws s3 ls s3://pdm-updates-452359090613-aps1/downloads/ | Select-String "X.Y.Z"
-
-# 3. Check manifest version
-aws s3 cp s3://pdm-updates-452359090613-aps1/stable/manifest.json - | ConvertFrom-Json | Select-Object Version
-
-# 4. Test public URLs (should all return HTTP 200)
-$v = "X.Y.Z"
-$base = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com"
-Invoke-WebRequest -Method Head "$base/stable/pdm-$v.zip"
-Invoke-WebRequest -Method Head "$base/downloads/PDM-$v.msi"
-Invoke-WebRequest -Method Head "$base/downloads/PDM-$v-Setup.exe"
-```
-
-### 5.2 Troubleshooting releases
-
-**If release.ps1 appears to hang:**
-- Check if it completed silently: `git log --oneline -1` and `git tag -l`
-- Build processes can take 2-5 minutes (NativeAOT compilation)
-- Uploads can take 1-2 minutes (50+ MB files)
-- The script has no progress bars during long operations
-
-**If release.ps1 fails mid-way:**
-- Use `-SkipBuild` to retry without rebuilding
-- Use `-SkipUpload` to retry git operations only
-- Use `-SkipCommit` to test S3 uploads without git changes
-- Delete the tag if it was created: `git tag -d vX.Y.Z`
-
-**If "tag already exists" error:**
-- Check if previous release completed: `git log --oneline -1`
-- If it did complete, you're done! Verify S3 instead.
-- If it didn't, delete the tag: `git tag -d vX.Y.Z` and `git push origin :refs/tags/vX.Y.Z`
-
-**If S3 uploads fail:**
-- Verify AWS credentials: `aws sts get-caller-identity`
-- Check account is `452359090613`
-- Verify region is `ap-south-1`
-- Ensure you have write permissions to the bucket
-
-The MSI is **unsigned** (no code-signing cert), so Windows SmartScreen shows a
-"More info -> Run anyway" prompt on first install. The *auto-updater* is still safe: every
-package is ECDSA-signed and SHA-256 verified before it runs.
-
-### 5.3 Manual deployment steps (if release.ps1 fails)
-
-If the automated script fails, you can complete deployment manually:
-
-```powershell
-# 1. Sign and upload the release package
-.\backend\updates\sign-release.ps1 -Version "X.Y.Z" -Channel "Stable" -ReleaseNotes "Your notes"
-
-# 2. Upload MSI and Setup.exe
-aws s3 cp "dist\PDM-X.Y.Z.0.msi" "s3://pdm-updates-452359090613-aps1/downloads/PDM-X.Y.Z.msi" --region ap-south-1
-aws s3 cp "dist\PDM-X.Y.Z.0-Setup.exe" "s3://pdm-updates-452359090613-aps1/downloads/PDM-X.Y.Z-Setup.exe" --region ap-south-1
-
-# 3. Create and upload downloads.json
-$downloads = @{
-    version = "X.Y.Z"
-    msiUrl = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-X.Y.Z.msi"
-    msiSizeMB = [math]::Round((Get-Item "dist\PDM-X.Y.Z.0.msi").Length / 1MB, 2)
-    zipUrl = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/stable/pdm-X.Y.Z.zip"
-    zipSizeMB = [math]::Round((Get-Item "dist\PDM-X.Y.Z.zip").Length / 1MB, 2)
-    setupUrl = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-X.Y.Z-Setup.exe"
-    setupSizeMB = [math]::Round((Get-Item "dist\PDM-X.Y.Z.0-Setup.exe").Length / 1MB, 2)
-} | ConvertTo-Json -Compress
-
-$tempFile = [System.IO.Path]::GetTempFileName()
-$downloads | Out-File -FilePath $tempFile -Encoding UTF8 -NoNewline
-aws s3 cp $tempFile "s3://pdm-updates-452359090613-aps1/stable/downloads.json" --content-type "application/json"
-Remove-Item $tempFile
-
-# 4. Verify uploads
-aws s3 ls s3://pdm-updates-452359090613-aps1/stable/ | Select-String "X.Y.Z"
-aws s3 ls s3://pdm-updates-452359090613-aps1/downloads/ | Select-String "X.Y.Z"
-
-# 5. Commit and tag (only if website was patched)
-git add website/index.html website/changelog.html
-git commit -m "release: version X.Y.Z"
-git tag -a "vX.Y.Z" -m "Release X.Y.Z"
-git push origin main
-git push origin vX.Y.Z
-```
-
-**Old-flow scripts that no longer exist** (deleted after 1.2.2 to prevent picking the wrong tree):
-
-- `build/publish.ps1` — used to publish the framework-dependent WPF head (`src/PDM.App`).
-- `build/publish-avalonia-aot.ps1` — redundant single-project AOT check.
-
-If you ever see either name in a doc or CI, retarget to `build/release.ps1` (releases) or
-`build/publish-aot-dist.ps1` (dist assembly only).
-
-`website/assets/js/main.js` still refreshes version/size/links from `downloads.json` at
-runtime, but the static hrefs guarantee the buttons work even before JS runs.
-
-### 5.6 What `release.ps1` intentionally does **not** stage in git
-
-`dist/` is gitignored; the MSI/ZIP/Setup.exe live in S3 only. The script never commits any
-secret file: `.env*.local`, `firebase-service-account.json`, `*.pem`, `*.pfx`, `*.p12`, `*.key`
-are all either gitignored or blocked by the pre-commit secret-scan inside `release.ps1`. If the
-scan flags a staged file, the script aborts BEFORE committing so you can un-stage the file and
-re-run.
-
----
-
-## 6. Marketing website deploy (Cloudflare)
-
-The site is static (`website/`), served by Cloudflare Workers Static Assets. Config:
-`wrangler.json` (root) → `assets.directory = ./website`.
-
-**Deploy options:**
-- **Git-connected (current setup):** push to the branch Cloudflare builds from → it deploys
-  automatically. If Cloudflare tracks `main`, merge your branch first.
-- **CLI:** `npx wrangler deploy` (needs a Cloudflare API token).
-- **Drag-and-drop:** `./build/pack-website.ps1` → upload `dist/pdm-website-<ver>.zip` in the
-  dashboard (Workers & Pages → Create → Upload assets).
-
-Notes:
-- Security/cache headers come from `website/_headers`.
-- The S3 downloads work independently of the site deploy — the buttons resolve to S3 URLs.
-- Use `wrangler.json` (not `.jsonc`); a second config file causes a Cloudflare warning/conflict.
-
----
-
-## 7. Browser extension release (Chrome Web Store)
-
-```powershell
-# 1. Bump "version" in browser-extension/chromium/manifest.json
-# 2. Pack a store-ready zip (files at archive root)
-./build/pack-extension.ps1            # or -Version 1.2.6
-# 3. Upload dist/pdm-extension-<ver>.zip at
-#    https://chrome.google.com/webstore/devconsole
-```
-The published extension ID is permanent (`phbbcmofdbbojilmcpaghnafpamnocom`) and is
-pre-authorised by the app on startup, so users just click **Add to Chrome** — no sideloading.
-Chrome, Edge, and Brave all install from the Chrome Web Store.
-
----
-
-## 8. Admin / Reseller portal (`admin-portal/`)
-
-### 8.1 Local dev (no AWS, no Resend)
-`admin-portal/.env.local` with `PORTAL_LOCAL_DEV=1` uses an in-memory store + a seeded admin,
-OTP disabled. Then:
-```powershell
-cd admin-portal
-npm install
-npm run dev        # http://localhost:3000
-npm test           # 239 property/unit tests
-```
-
-### 8.2 Real AWS mode
-1. Create the tables (idempotent, create-only):
-   `./admin-portal/deploy/dynamodb/create-tables.ps1`
-2. Seed a super_admin:
-   `./admin-portal/deploy/dynamodb/seed-admin.ps1 -Uid <firebaseUid> -Email <email>`
-   (reseller test login: `seed-reseller-login.ps1 -Uid … -Email … -ResellerAccountId …`)
-3. In `.env.local` set `PORTAL_LOCAL_DEV=0`. Remove `PORTAL_DISABLE_OTP=1` to require the
-   email-OTP factor (needs a valid `RESEND_API_KEY` + verified sender).
-4. AWS creds come from the machine's configured profile (or `AWS_ACCESS_KEY_ID/SECRET`).
-
-### 8.3 Production (VPS at `seller.perfectdownloadmanager.com`)
-- Build & run: `npm run build` then `npm run start` (Node 24).
-- Reverse proxy / TLS: `admin-portal/deploy/nginx.conf` (HTTPS-only).
-- Process supervision: `admin-portal/deploy/pdm-portal.service` (systemd).
-- Least-privilege IAM: `admin-portal/deploy/iam-policy.json`.
-- Add `seller.perfectdownloadmanager.com` to Firebase → Authentication → Authorized domains.
-
----
-
-## 9. Quick reference (typical desktop release)
-
-```powershell
-# Most common: fully automated release
-./build/release.ps1 -Version 1.2.3 -ReleaseNotes "Your changes here" -YesToAll
-
-# Interactive: prompts for version and notes
-./build/release.ps1
-
-# Non-interactive with multi-line notes
-./build/release.ps1 -Version 1.2.3 -ReleaseNotes "Fixed X.`nImproved Y."
-```
-
-That single command: preflights AWS + git, patches every version marker on the website, builds
-the NativeAOT dist + zip + MSI + Setup.exe, signs and uploads the update package + installer +
-`downloads.json` to S3, HEAD-verifies every URL, commits (`src/` + `installer/` + `build/` +
-`backend/` + patched website files), tags `vX.Y.Z`, and pushes both branch and tags. Cloudflare
-Pages redeploys the site off the `main` push automatically.
-
-### Verification after release
-
-```powershell
-# Quick verification commands
-git log --oneline -1                # Check commit
-git tag -l "v1.2.3"                 # Check tag exists
-git ls-remote --tags origin         # Verify pushed to remote
-aws s3 ls s3://pdm-updates-452359090613-aps1/stable/ | Select-String "1.2.3"
-aws s3 cp s3://pdm-updates-452359090613-aps1/stable/manifest.json - | ConvertFrom-Json
-```
-
-Retrying after a partial failure (all switches):
-```powershell
-./build/release.ps1 -Version 1.2.3 -SkipBuild            # re-run upload/commit only
-./build/release.ps1 -Version 1.2.3 -SkipUpload           # patch website + commit only
-./build/release.ps1 -Version 1.2.3 -SkipCommit           # do everything except git
-./build/release.ps1 -Version 1.2.3 -YesToAll             # no confirmation prompt
-./build/release.ps1 -Version 1.3.0-rc.1 -Channel Beta    # publish to stable/beta/
-```
-
-**Common Issues:**
-
-1. **"Tag already exists"** → Check if release completed: `git log --oneline -1`
-2. **Script seems stuck** → Wait 3-5 minutes for build/upload, check with `git status`
-3. **AWS errors** → Verify credentials: `aws sts get-caller-identity`
-4. **Build artifacts missing** → Check `dist/` folder for PDM-X.Y.Z.* files
-
----
-
-## 10. Rollback
-
-- **Auto-update:** re-run `sign-release.ps1` for the *previous good* version but with a
-  **higher** version number (e.g. re-tag `1.0.16` content as `1.0.19`) — clients only move
-  forward. You cannot "downgrade" via the manifest by lowering the version.
-- **Website download:** re-point `downloads.json` + the `index.html` hrefs to a prior
-  `PDM-<old>.msi` / `pdm-<old>.zip` that still exist in S3, and redeploy the site.
-- **Website content:** revert the commit and redeploy (or roll back the Cloudflare deployment
-  in the dashboard).
-
----
-
-## 10.5. Post-Deployment Checklist
-
-After deploying a new version, verify everything is working:
-
-### Immediate Verification (0-5 minutes)
-
-```powershell
-# 1. Verify git state
-git log --oneline -1                    # Should show "release: version X.Y.Z"
-git tag -l "vX.Y.Z"                     # Tag exists locally
-git ls-remote --tags origin "vX.Y.Z"   # Tag pushed to remote
-
-# 2. Verify S3 artifacts
-aws s3 ls s3://pdm-updates-452359090613-aps1/stable/ | Select-String "X.Y.Z"
-aws s3 ls s3://pdm-updates-452359090613-aps1/downloads/ | Select-String "X.Y.Z"
-
-# 3. Check manifest
-$manifest = aws s3 cp s3://pdm-updates-452359090613-aps1/stable/manifest.json - | ConvertFrom-Json
-Write-Host "Manifest Version: $($manifest.Version)"
-Write-Host "Released: $($manifest.ReleasedUtc)"
-
-# 4. Verify downloads.json
-$downloads = aws s3 cp s3://pdm-updates-452359090613-aps1/stable/downloads.json - | ConvertFrom-Json
-Write-Host "Downloads Version: $($downloads.version)"
-
-# 5. Test public URLs (all should return HTTP 200)
-$base = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com"
-Invoke-WebRequest -Method Head "$base/stable/pdm-$($manifest.Version).zip"
-Invoke-WebRequest -Method Head "$base/downloads/PDM-$($manifest.Version).msi"
-Invoke-WebRequest -Method Head "$base/stable/manifest.json"
-```
-
-### Website Verification (1-3 minutes after push)
-
-1. Wait for Cloudflare Pages deployment (usually 1-2 minutes)
-2. Visit `https://perfectdownloadmanager.com`
-3. Verify:
-   - Version number displays as X.Y.Z in hero section
-   - Download buttons point to new MSI/ZIP
-   - Changelog shows new version at top
-   - "Latest stable" marker on new version only
-
-### Functional Testing (Optional but recommended)
-
-```powershell
-# Download and test the installer
-$msiUrl = "https://pdm-updates-452359090613-aps1.s3.ap-south-1.amazonaws.com/downloads/PDM-X.Y.Z.msi"
-Invoke-WebRequest -Uri $msiUrl -OutFile "$env:TEMP\PDM-X.Y.Z.msi"
-
-# Verify file integrity
-$downloaded = Get-FileHash "$env:TEMP\PDM-X.Y.Z.msi" -Algorithm SHA256
-Write-Host "Downloaded MSI SHA-256: $($downloaded.Hash)"
-```
-
-### Auto-Update Testing (24-48 hours after release)
-
-1. Install previous version (X.Y.Z-1) on a test machine
-2. Open PDM and wait for update notification
-3. Verify update downloads and installs correctly
-4. Verify app version shows X.Y.Z after restart
-
-### Monitoring Checklist
-
-- [ ] Git tag `vX.Y.Z` exists and is pushed
-- [ ] All S3 files uploaded (zip, msi, setup.exe)
-- [ ] Manifest updated to version X.Y.Z
-- [ ] downloads.json points to new version
-- [ ] All public URLs return HTTP 200
-- [ ] Website shows new version
-- [ ] Changelog updated
-- [ ] No error reports from users (24 hours)
-
----
-
-## 11. One-time infrastructure (already done — for reference / disaster recovery)
-
-- **Update bucket + signing key:** `./backend/updates/deploy.ps1` (creates the S3 bucket via
-  CloudFormation and generates the ECDSA signing key in SSM; prints the public key to embed in
-  the client as `LicensingConfig.UpdatePublicKeyBase64`). `-RotateKeys` replaces the key
-  (invalidates all previously signed manifests — clients need the new public key baked in).
-- **Licensing backend:** `backend/licensing/` (DynamoDB `pdm-licenses` + activate/validate/
-  trial Lambdas + API Gateway).
-- **Portal tables:** `admin-portal/deploy/dynamodb/create-tables.ps1`.
-
----
-
-## 12. Security notes
-
-- **Never commit secrets.** Gitignored: `admin-portal/.env.local`, `admin-portal/*.env`,
-  `admin-portal/firebase-service-account.json`, `dist/`, `*.pem`.
-- The MSI is unsigned — get an EV/OV code-signing certificate and `signtool` the MSI + EXEs to
-  remove the SmartScreen prompt for public distribution.
-- Signing keys live only in SSM SecureString and are fetched at use-time; they are never
-  written to git, logs, or client responses.
-- If a key or token is ever exposed, rotate it (Firebase service account, Resend API key,
-  and — with `deploy.ps1 -RotateKeys` — the update signing key).
+Never commit secrets. Keys live only in AWS SSM and are fetched when used; `release.ps1` refuses
+to commit files that look like keys (`*.pem`, `*.pfx`, `*.key`, `.env*`). `dist/` is gitignored.
+If a key leaks, rotate it.

@@ -1,15 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    PDM.App is a WPF application targeting net10.0-windows and using WPF. A test project
-    that references it must therefore also target net10.0-windows with UseWPF enabled so the
-    WPF-dependent types in PDM.App resolve; a plain net10.0 target cannot reference it.
+    Tests the UI-agnostic view models and services in PDM.App.Core, which the desktop app
+    (PDM.App.Avalonia) is built on.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <UseWPF>true</UseWPF>
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -30,7 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\PDM.App\PDM.App.csproj" />
+    <ProjectReference Include="..\..\src\PDM.App.Core\PDM.App.Core.csproj" />
     <ProjectReference Include="..\..\src\PDM.Core\PDM.Core.csproj" />
     <ProjectReference Include="..\..\src\PDM.Infrastructure\PDM.Infrastructure.csproj" />
   </ItemGroup>

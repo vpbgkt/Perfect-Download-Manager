@@ -302,9 +302,13 @@ Migrating from Firebase authentication? See [deploy/dynamodb/MIGRATION-GUIDE.md]
 
 ## Documentation
 
-- [Authentication Guide](docs/AUTHENTICATION.md) - Complete authentication documentation
+- [Authentication Guide](docs/AUTHENTICATION.md) - Complete authentication documentation, including troubleshooting
+- [Dhru API reference](docs/DHRU-API.md) - The Dhru Fusion-compatible reseller API: endpoints, balance deduction, errors, security
+- [Dhru API testing](docs/DHRU-API-TESTING.md) - Table setup and a step-by-step test of every Dhru action
+- [Dhru guide for resellers](docs/DHRU-RESELLER-GUIDE.md) - What to send resellers: credentials, Dhru panel setup, service IDs
+- [Dhru Fusion client sample](docs/dhru-fusion-client/) - Dhru's own PHP client library, kept as the reference for the protocol
 - [Migration Guide](deploy/dynamodb/MIGRATION-GUIDE.md) - Firebase to password migration
-- [Deployment Guide](../docs/DEPLOYMENT.md) - Production deployment
+- [Deployment Guide](../docs/DEPLOYMENT.md) - Production deployment (section "Admin / reseller portal")
 
 ## Support
 

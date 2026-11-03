@@ -172,7 +172,7 @@ All AI features toggle off in Settings. Rule-based fallbacks ensure downloads al
 - **xUnit test suite** — 81 tests, CI on every commit
 - **GitHub Actions CI** — Windows 2022 + stress soak nightly
 
-See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for full system design.
+See **[docs/ARCHITECTURE.md](../ARCHITECTURE.md)** for full system design.
 
 ### AI Integration Plan
 - `PDM.AI` module with clean interfaces (`ICategoryClassifier`, `IUrlSafetyAnalyzer`, etc.)
@@ -180,7 +180,7 @@ See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for full system design.
 - Async, non-blocking — AI never delays a download starting
 - Configurable in Settings; user controls all AI features
 
-See **[docs/AI_ROADMAP.md](docs/AI_ROADMAP.md)** for full technical roadmap.
+See **[docs/AI_ROADMAP.md](../AI_ROADMAP.md)** for full technical roadmap.
 
 ---
 
@@ -191,7 +191,7 @@ See **[docs/AI_ROADMAP.md](docs/AI_ROADMAP.md)** for full technical roadmap.
 - Contact: hello@perfectdownloadmanager.com
 - GitHub: [@vpbgkt](https://github.com/vpbgkt)
 
-**Contributors:** 1 (actively recruiting via [CONTRIBUTING.md](CONTRIBUTING.md))
+**Contributors:** 1 (actively recruiting via [CONTRIBUTING.md](../../CONTRIBUTING.md))
 
 ---
 
@@ -228,12 +228,12 @@ Download managers are ubiquitous but unintelligent. By integrating Claude:
 ## Links
 
 - **Repository:** https://github.com/vpbgkt/Perfect-Download-Manager
-- **Documentation:** [docs/](docs/)
-- **Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md)
-- **AI Integration Plan:** [docs/AI_ROADMAP.md](docs/AI_ROADMAP.md)
-- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Code of Conduct:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- **License:** [LICENSE](LICENSE) (MIT)
+- **Documentation:** [docs/](../)
+- **Roadmap:** [docs/ROADMAP.md](../ROADMAP.md)
+- **AI Integration Plan:** [docs/AI_ROADMAP.md](../AI_ROADMAP.md)
+- **Contributing:** [CONTRIBUTING.md](../../CONTRIBUTING.md)
+- **Code of Conduct:** [CODE_OF_CONDUCT.md](../../CODE_OF_CONDUCT.md)
+- **License:** [LICENSE](../../LICENSE) (MIT)
 - **Website:** https://perfectdownloadmanager.com
 
 ---

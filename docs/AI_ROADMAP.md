@@ -125,7 +125,7 @@ Recommendation: Verify this URL before proceeding.
 ## Architecture
 
 ```
-PDM.App (UI)
+PDM.App.Avalonia (UI)
     │
     ├── PDM.AI (new module — planned)
     │       ├── ICategoryClassifier   → Claude API (smart categorization)

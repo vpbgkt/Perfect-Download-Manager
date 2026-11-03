@@ -18,7 +18,7 @@ dotnet test
 ## Run the app in Debug (no installer)
 
 ```powershell
-dotnet run --project src/PDM.App
+dotnet run --project src/PDM.App.Avalonia
 ```
 
 ## Run the CLI download engine (portable one-off downloads)
@@ -51,13 +51,10 @@ Individual pieces (for debugging only - a real release should always go through 
 
 # Bootstrapper Setup.exe (produces dist/PDM-1.0.0.0-Setup.exe; requires the MSI)
 ./build/build-bundle.ps1 -Version 1.0.0.0
-
-# Optional: harden the licensing assembly with obfuscation
-./build/obfuscate.ps1
 ```
 
 The MSI is unsigned. For public distribution, sign PDM.exe, the helper exes, and the .msi with a
-code-signing certificate (see docs/REMAINING-WORK.md).
+code-signing certificate (see docs/DEPLOYMENT.md, "Code signing").
 
 ## Install the built MSI
 
