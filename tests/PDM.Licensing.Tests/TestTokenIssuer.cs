@@ -35,7 +35,9 @@ internal sealed class TestTokenIssuer : IDisposable
         string? owner = "Test Owner",
         string plan = "standard",
         DateTimeOffset? subscriptionExpiresAt = null,
-        int version = 1)
+        int version = 1,
+        int maxConn = 0,
+        int maxParallel = 0)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -45,6 +47,8 @@ internal sealed class TestTokenIssuer : IDisposable
             ["plan"] = plan,
             ["owner"] = owner,
             ["features"] = features ?? Array.Empty<string>(),
+            ["maxConn"] = maxConn,
+            ["maxParallel"] = maxParallel,
             ["issuedAt"] = DateTimeOffset.UtcNow.ToString("O"),
             ["expiresAt"] = expiresAt.ToString("O"),
             ["nonce"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(16))

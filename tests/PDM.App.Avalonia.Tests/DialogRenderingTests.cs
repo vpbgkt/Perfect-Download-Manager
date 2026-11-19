@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using PDM.App.Avalonia.Views;
 using PDM.App.Services;
 using PDM.App.ViewModels;
@@ -33,6 +34,63 @@ public sealed class DialogRenderingTests
         {
             if (File.Exists(settingsPath)) File.Delete(settingsPath);
         }
+    }
+
+    [AvaloniaFact]
+    public void LicenseWindow_shows_Community_with_the_channel_button()
+    {
+        var snapshot = new PDM.Licensing.LicenseSnapshot(PDM.Licensing.LicenseStatus.Community, TimeSpan.Zero,
+            null, null, PDM.Licensing.LicenseEntitlements.Community);
+        var vm = new LicenseViewModel(new PDM.Licensing.LicenseService(new PDM.Licensing.InMemoryLicenseStore()), snapshot);
+        var window = new LicenseWindow(vm);
+
+        window.Show();
+
+        var texts = window.GetVisualDescendants().OfType<global::Avalonia.Controls.TextBlock>()
+            .Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
+        var buttons = window.GetVisualDescendants().OfType<global::Avalonia.Controls.Button>()
+            .Where(b => b.IsEffectivelyVisible).Select(b => b.Content as string).ToList();
+        Assert.Contains("PDM Community", texts);
+        Assert.Contains(texts, t => t is not null && t.Contains("up to 8 connections"));
+        Assert.Contains("Premium license key", texts);
+        Assert.Contains("PDM channel", buttons);
+        Assert.Contains("Activate", buttons);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SettingsWindow_caps_connections_for_Community()
+    {
+        string settingsPath = Path.Combine(Path.GetTempPath(), $"pdm-aot-settings-{Guid.NewGuid():N}.json");
+        var vm = new SettingsViewModel(new AppSettings(), new JsonSettingsStore(settingsPath),
+            PDM.Licensing.LicenseEntitlements.CommunityMaxConnections);
+        var window = new SettingsWindow(vm);
+
+        window.Show();
+
+        var box = window.GetVisualDescendants().OfType<global::Avalonia.Controls.NumericUpDown>()
+            .Single(n => n.Value == 8 && n.Maximum == 8);
+        Assert.NotNull(box);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void WelcomeWindow_opens_and_the_primary_button_requests_browser_setup()
+    {
+        var window = new WelcomeWindow();
+        window.Show();
+
+        Assert.True(window.IsVisible);
+        Assert.False(window.OpenBrowserSetupRequested);
+
+        var add = window.GetVisualDescendants().OfType<global::Avalonia.Controls.Button>()
+            .Single(b => (b.Content as string) == "Add browser extension");
+        add.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(
+            global::Avalonia.Controls.Button.ClickEvent));
+
+        Assert.True(window.OpenBrowserSetupRequested, "the primary button must request the Browser Setup wizard");
     }
 
     [AvaloniaFact]

@@ -47,28 +47,56 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
     /// <summary>Extracts downloaded archives via the bundled 7-Zip engine (see <see cref="IArchiveExtractor"/>).</summary>
     public IArchiveExtractor ArchiveExtractor { get; }
 
-    /// <summary>
-    /// Parallel-connection ceiling for installs without a functional license (Expired/Invalid).
-    /// Downloads still run, but accelerated multi-connection downloading is a licensed feature, so an
-    /// unlicensed install is limited to this many connections per download.
-    /// </summary>
-    public const int UnlicensedMaxConnections = 2;
+    /// <inheritdoc />
+    public event Action? BrowserExtensionConnected;
 
-    /// <summary>How many downloads an unlicensed/expired install may transfer at the same time.</summary>
-    public const int UnlicensedMaxSimultaneousDownloads = 1;
+    event Action IAppHost.BrowserExtensionConnected
+    {
+        add => BrowserExtensionConnected += value;
+        remove => BrowserExtensionConnected -= value;
+    }
+
+    private int _extensionConnectedMarked;
+
+    /// <inheritdoc />
+    public void MarkBrowserExtensionConnected()
+    {
+        // One-shot: the first caller flips the in-memory flag, persists it, and notifies the UI.
+        if (Settings.BrowserExtensionConnected ||
+            Interlocked.Exchange(ref _extensionConnectedMarked, 1) != 0)
+        {
+            return;
+        }
+
+        Settings.BrowserExtensionConnected = true;
+        _ = Task.Run(async () =>
+        {
+            try { await SettingsStore.SaveAsync(Settings).ConfigureAwait(false); }
+            catch { /* a failed persist is non-fatal; it retries on the next capture after a restart */ }
+        });
+        BrowserExtensionConnected?.Invoke();
+    }
 
     /// <summary>
-    /// True when the install is in the reduced "free/limited" mode (no functional license), so the
-    /// UI can show gentle upgrade messaging and explain why downloads are throttled/queued.
+    /// True when the install is in the reduced "free/limited" mode of the Trial edition (trial over,
+    /// no functional license), so the UI can show gentle upgrade messaging and explain why downloads
+    /// are throttled/queued. Never true in the Community edition.
     /// </summary>
     public bool IsLimitedMode => !_license.IsFunctional;
+
+    /// <summary>
+    /// Largest "connections per download" value that takes effect right now (the Settings dialog
+    /// offers up to this), or null when only the setting's own range applies.
+    /// </summary>
+    public int? MaxConnectionsPerDownloadCap => _license.Entitlements.MaxConnectionsPerDownload;
 
     /// <summary>
     /// Applies the license-based download policy to the manager. The caps are taken from the
     /// current snapshot's <see cref="LicenseEntitlements"/>, which for an activated/grace license
     /// are derived from the <b>server-signed token</b> (C1) — not from a local boolean. A
-    /// <see langword="null"/> cap means "no client-imposed limit" (full speed); the free/expired
-    /// tier resolves to the throttled defaults baked into <see cref="LicenseEntitlements.Free"/>.
+    /// <see langword="null"/> cap means "no client-imposed limit" (full speed); without a licence the
+    /// caps are <see cref="LicenseEntitlements.Community"/> (Community edition) or the throttled
+    /// <see cref="LicenseEntitlements.Free"/> (Trial edition, after the trial).
     ///
     /// <para>Security note: because the premium throughput numbers live inside a signed token,
     /// patching an "is licensed" flag no longer unlocks accelerated downloading — the numbers
@@ -272,9 +300,11 @@ public sealed class AppHost : IAppHost, IAsyncDisposable
                 logger.LogError("Security: self-integrity check failed (binary appears tampered).");
 
                 // Degrade later and elsewhere, not at the check site, so the cause is hard to locate.
+                // A tampered build gets what an install without a licence gets in this edition.
                 await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(20, 60))).ConfigureAwait(false);
-                manager.MaxConnectionsPerDownloadCap = UnlicensedMaxConnections;
-                manager.MaxSimultaneousDownloadsCap = UnlicensedMaxSimultaneousDownloads;
+                LicenseEntitlements unlicensed = LicenseEntitlements.Unlicensed(EditionPolicy.Current);
+                manager.MaxConnectionsPerDownloadCap = unlicensed.MaxConnectionsPerDownload;
+                manager.MaxSimultaneousDownloadsCap = unlicensed.MaxParallelDownloads;
             }
         }
         catch (Exception)

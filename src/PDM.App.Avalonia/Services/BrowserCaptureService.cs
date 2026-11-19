@@ -110,6 +110,11 @@ public sealed class BrowserCaptureService : IAsyncDisposable
             return;
         }
 
+        // The extension just handed us a real download, so it is installed and talking to PDM.
+        // Record that once (even if the user later declines this one) to retire the "add the
+        // browser extension" reminder for good.
+        _host.MarkBrowserExtensionConnected();
+
         // Correlate with an armed "refresh from browser" first; a confident match re-links the
         // existing download instead of creating a duplicate.
         if (await TryHandleRefreshCaptureAsync(uri, request.Referrer).ConfigureAwait(false))

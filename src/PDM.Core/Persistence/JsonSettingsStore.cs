@@ -43,7 +43,11 @@ public sealed class JsonSettingsStore
         {
             if (!File.Exists(_path))
             {
-                return new AppSettings();
+                // Brand-new install: stamp the current schema version so the first-run migrations
+                // below (which assume an upgraded existing user and would suppress onboarding) do not
+                // run. WelcomeShown / BrowserExtensionConnected stay at their defaults (false), so a
+                // new user gets the welcome and the "add the extension" reminder.
+                return new AppSettings { SettingsVersion = AppSettings.CurrentSettingsVersion };
             }
 
             AppSettings settings;
@@ -142,6 +146,18 @@ public sealed class JsonSettingsStore
             }
 
             settings.SettingsVersion = 3;
+            changed = true;
+        }
+
+        // v4: first-run onboarding. An install being migrated is an EXISTING user, so mark the
+        // welcome as already shown and the browser extension as already dealt with — they have long
+        // since made their choice and must not be interrupted or nagged. Only brand-new installs
+        // (which never run migration) leave these false and therefore see the onboarding.
+        if (settings.SettingsVersion < 4)
+        {
+            settings.WelcomeShown = true;
+            settings.BrowserExtensionConnected = true;
+            settings.SettingsVersion = 4;
             changed = true;
         }
 

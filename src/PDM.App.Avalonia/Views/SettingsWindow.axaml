@@ -69,9 +69,12 @@
                                                Minimum="1" Maximum="32" Increment="1" FormatString="0" />
                             </StackPanel>
                             <StackPanel Grid.Column="2" Spacing="7">
-                                <TextBlock Classes="section" Text="CONNECTIONS PER DOWNLOAD (1-64)" />
+                                <TextBlock Classes="section" Text="{Binding ConnectionsLabel}" />
                                 <NumericUpDown Value="{Binding MaxConnectionsPerDownload}"
-                                               Minimum="1" Maximum="64" Increment="1" FormatString="0" />
+                                               Minimum="1" Maximum="{Binding MaxConnectionsAllowed}"
+                                               Increment="1" FormatString="0" />
+                                <TextBlock Classes="caption" Text="{Binding ConnectionsNote}" TextWrapping="Wrap"
+                                           IsVisible="{Binding ConnectionsNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             </StackPanel>
                         </Grid>
 

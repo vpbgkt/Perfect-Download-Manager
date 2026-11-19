@@ -111,9 +111,11 @@ CREATE INDEX idx_category ON Downloads(Category);
 
 ---
 
-### PDM.Licensing — Trial & Activation
+### PDM.Licensing — Editions & Activation
 
-The licensing module is designed around a clean seam: `ILicenseTransport` is the interface that server communication plugs into. The local DPAPI store, trial logic, and token verification all work without a server — the Community Edition uses this freely.
+The licensing module is designed around a clean seam: `ILicenseTransport` is the interface that server communication plugs into. The local DPAPI store, trial logic, and token verification all work without a server.
+
+Which product model a build runs is one constant, `EditionPolicy.Current` in `ProductEdition.cs`: **Community** (no key = PDM Community with up to 8 connections, a Premium key shows Premium) or **Trial** (14-day trial, then 2 connections). Both are kept and tested; see [EDITIONS.md](EDITIONS.md).
 
 **Key components:**
 

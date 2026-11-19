@@ -139,7 +139,7 @@ The roadmap moves faster with community involvement:
 - **Code contributors:** See [CONTRIBUTING.md](../CONTRIBUTING.md) and issues tagged `help-wanted`
 - **AI feature design:** Join the "AI integration" discussion on GitHub Discussions
 - **Beta testing:** Subscribe to the Beta update channel for early access
-- **Premium support:** [Supporter and Enterprise plans](https://perfectdownloadmanager.com/pricing) directly fund AI API costs and development time
+- **Premium support:** [Supporter and Enterprise plans](https://perfectdownloadmanager.com/support) directly fund AI API costs and development time
 - **Feedback:** Open feature requests on GitHub — the most-voted ones get prioritized
 
 ---

@@ -22,15 +22,30 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly AppSettings _live;
     private readonly JsonSettingsStore _store;
 
+    /// <summary>Upper end of the "connections per download" setting when no licence cap applies.</summary>
+    public const int SettingMaxConnections = 64;
+
     /// <summary>The settings snapshot being edited. Save applies it back to <paramref name="live"/>.</summary>
-    public SettingsViewModel(AppSettings live, JsonSettingsStore store)
+    /// <param name="live">The running settings.</param>
+    /// <param name="store">Where they are saved.</param>
+    /// <param name="connectionCap">
+    /// Most connections per download the current plan allows (8 in Community), or null for the
+    /// setting's full range. The dialog offers no more than this, so a value is never silently ignored.
+    /// </param>
+    public SettingsViewModel(AppSettings live, JsonSettingsStore store, int? connectionCap = null)
     {
         _live = live ?? throw new ArgumentNullException(nameof(live));
         _store = store ?? throw new ArgumentNullException(nameof(store));
 
+        MaxConnectionsAllowed = connectionCap is > 0 and < SettingMaxConnections ? connectionCap.Value : SettingMaxConnections;
+        ConnectionsLabel = $"CONNECTIONS PER DOWNLOAD (1-{MaxConnectionsAllowed})";
+        ConnectionsNote = MaxConnectionsAllowed < SettingMaxConnections
+            ? $"Your plan allows up to {MaxConnectionsAllowed} connections per download."
+            : string.Empty;
+
         _defaultDownloadDirectory = live.DefaultDownloadDirectory;
         _maxSimultaneousDownloads = live.MaxSimultaneousDownloads;
-        _maxConnectionsPerDownload = live.MaxConnectionsPerDownload;
+        _maxConnectionsPerDownload = Math.Min(live.MaxConnectionsPerDownload, MaxConnectionsAllowed);
         _globalMaxKilobytesPerSecond = live.GlobalMaxBytesPerSecond / 1024;
         _userAgent = live.UserAgent ?? string.Empty;
         _proxyUrl = live.ProxyUrl ?? string.Empty;
@@ -62,6 +77,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _maxSimultaneousDownloads;
 
     [ObservableProperty] private int _maxConnectionsPerDownload;
+
+    /// <summary>Largest value the connections box accepts (the plan's cap, or 64).</summary>
+    public int MaxConnectionsAllowed { get; }
+
+    /// <summary>Heading above the connections box, including its range.</summary>
+    public string ConnectionsLabel { get; }
+
+    /// <summary>Explains a plan cap under the connections box; empty when there is none.</summary>
+    public string ConnectionsNote { get; }
 
     /// <summary>Global speed cap expressed in KB/s (0 = unlimited).</summary>
     [ObservableProperty] private long _globalMaxKilobytesPerSecond;
@@ -144,9 +168,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             return false;
         }
 
-        if (MaxConnectionsPerDownload is < 1 or > 64)
+        if (MaxConnectionsPerDownload < 1 || MaxConnectionsPerDownload > MaxConnectionsAllowed)
         {
-            ValidationError = "Connections per download must be between 1 and 64.";
+            ValidationError = $"Connections per download must be between 1 and {MaxConnectionsAllowed}.";
             return false;
         }
 

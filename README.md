@@ -26,8 +26,9 @@ PDM serves users worldwide, especially those in:
 
 ### 🆓 Community Edition (Free & Open Source)
 Perfect Download Manager Community Edition is **100% free and open source** under the MIT License. It includes:
-- ✅ All core download features (multi-connection, resume, queue management)
-- ✅ Modern WPF UI with Fluent Design and Mica effects
+- ✅ All core download features (up to 8 connections per download, resume, queue management)
+- ✅ No trial, no time limit, no license key
+- ✅ Modern Avalonia UI, native (NativeAOT) for fast start-up
 - ✅ Browser integration (Chrome, Edge, Brave)
 - ✅ Automatic updates
 - ✅ Categories, scheduling, and notifications
@@ -38,6 +39,7 @@ Help sustain development and get priority assistance:
 
 #### **Professional Plan** - $29/year
 - ✅ All Community Edition features
+- 🏷️ Premium badge with your name in PDM
 - 🎫 Priority email support (24-hour response time)
 - 📧 Direct access to the core development team
 - 🎁 Early access to new features
@@ -51,16 +53,16 @@ Help sustain development and get priority assistance:
 - 🛡️ Extended security updates
 - 📝 Service Level Agreement (SLA)
 
-**[Get Premium Support →](https://perfectdownloadmanager.com/pricing)**
+**[Get Premium Support →](https://perfectdownloadmanager.com/support)** · News and releases: [PDM channel on WhatsApp](https://whatsapp.com/channel/0029VbD6BsnDJ6Gx5LoXHr2I)
 
-> **Note:** All features are available in the free Community Edition. Premium plans only unlock priority support and direct assistance from maintainers.
+> **Note:** All features are available in the free Community Edition. Premium plans add priority support, direct assistance from maintainers and the Premium badge. How the editions work in the code: [docs/EDITIONS.md](docs/EDITIONS.md).
 
 ## Tech stack
 
 - **.NET 10 / C#** — native performance, first-class Windows integration.
 - **PDM.Core** — download engine (async, multi-connection, resumable). No UI dependencies.
 - **PDM.Infrastructure** — SQLite catalog, `DownloadManager`, quiet-hours scheduler, categories, post-download hook.
-- **PDM.Licensing** — trial + grace-period, hardware binding, DPAPI-encrypted store, pluggable transport (drop in Keygen client later).
+- **PDM.Licensing** — Community / Premium editions (see [docs/EDITIONS.md](docs/EDITIONS.md)), signed license tokens, grace period, hardware binding, DPAPI-encrypted store.
 - **PDM.Updater** — signed manifest fetch (ECDSA P-256), SHA-256 package verification, staging, release channels.
 - **PDM.App.Avalonia** — the desktop app: Avalonia UI built with NativeAOT (no .NET install needed), system tray, drag-and-drop, single-instance, Serilog rolling file logs. Its view models live in **PDM.App.Core**, its Windows integration in **PDM.Platform.Windows**.
 - **PDM.NativeHost** / **PDM.UpdateLauncher** — the browser-extension bridge and the update installer.
@@ -267,7 +269,7 @@ Perfect Download Manager is free and open source. If you find it useful, conside
 - 🔧 **Contribute code** or documentation
 - 💎 **Get Premium Support** to help sustain development
 
-**[Become a Sponsor →](https://perfectdownloadmanager.com/pricing)**
+**[Become a Sponsor →](https://perfectdownloadmanager.com/support)**
 
 ## 📧 Contact & Community
 
@@ -275,7 +277,7 @@ Perfect Download Manager is free and open source. If you find it useful, conside
 - **GitHub Discussions**: [Community Forum](https://github.com/yourusername/PDM/discussions)
 - **Issues**: [Bug Reports & Feature Requests](https://github.com/yourusername/PDM/issues)
 - **Email**: support@perfectdownloadmanager.com
-- **Premium Support**: [Get Priority Help](https://perfectdownloadmanager.com/pricing)
+- **Premium Support**: [Get Priority Help](https://perfectdownloadmanager.com/support)
 
 ## 🌟 Acknowledgments
 

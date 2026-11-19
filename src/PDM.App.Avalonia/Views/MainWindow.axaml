@@ -45,9 +45,6 @@
                                IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
                 </StackPanel>
 
-                <!-- Plan badge: always visible above the brand. Premium shows an accent badge;
-                     free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
-                     leaving just the status glyph. -->
                 <!-- Brand pinned to the very bottom; text hides when collapsed, leaving the logo only.
                      Declared first among the bottom-docked items so it takes the lowest edge, with the
                      plan tag and update notice stacking above it. Wrapped in a ghost button so the
@@ -68,35 +65,74 @@
                     </StackPanel>
                 </Button>
 
-                <!-- Plan tag: sits directly above the brand. Premium shows an accent badge;
-                     free/limited shows a subtle warning badge. Text hides when the sidebar collapses,
-                     leaving just the status glyph. -->
-                <Border DockPanel.Dock="Bottom" Margin="4,0,4,10" CornerRadius="10" Padding="10,8"
-                        Background="{DynamicResource AppAccentSubtleBrush}"
+                <!-- Plan tag: sits directly above the brand. Exactly one of the three is visible.
+                     Premium (accent) opens the license details; Community (neutral) opens the PDM
+                     WhatsApp channel; the Trial edition's states (warning) open the license window.
+                     Text hides when the sidebar collapses, leaving just the glyph. -->
+                <Button DockPanel.Dock="Bottom" Classes="ghost" Margin="4,0,4,10" Padding="0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                        Click="OnOpenLicense" ToolTip.Tip="Premium supporter — thank you! Click for license details"
                         IsVisible="{Binding LicenseBanner.IsPremiumPlan}">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="glyph" Text="&#xE735;" FontSize="14"
-                                   Foreground="{DynamicResource AppAccentBrush}" />
-                        <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource AppTextPrimaryBrush}"
-                                   IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}" />
-                    </StackPanel>
-                </Border>
-                <Border DockPanel.Dock="Bottom" Margin="4,0,4,10" CornerRadius="10" Padding="10,8"
-                        Background="{DynamicResource StatusWarningSubtleBrush}"
-                        IsVisible="{Binding !LicenseBanner.IsPremiumPlan}">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="glyph" Text="&#xE7BA;" FontSize="14"
-                                   Foreground="{DynamicResource StatusWarningBrush}" />
-                        <StackPanel VerticalAlignment="Center"
-                                    IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
-                            <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
-                                       Foreground="{DynamicResource AppTextPrimaryBrush}" />
-                            <TextBlock Text="Upgrade for full speed" Classes="caption" Margin="0,-1,0,0" />
+                    <Border CornerRadius="10" Padding="10,8" Background="{DynamicResource AppAccentSubtleBrush}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="glyph" Text="&#xE735;" FontSize="14" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppAccentBrush}" />
+                            <StackPanel VerticalAlignment="Center"
+                                        IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                                <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                                <TextBlock Text="{Binding LicenseBanner.PlanCaption}" Classes="caption"
+                                           Margin="0,-1,0,0" TextTrimming="CharacterEllipsis" />
+                                <!-- Supporter flair: a heart and a thank-you line, Premium only. -->
+                                <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,3,0,0">
+                                    <TextBlock Classes="glyph" Text="&#xEB52;" FontSize="10" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource AppAccentBrush}" />
+                                    <TextBlock Text="{Binding LicenseBanner.SupporterThanksText}" Classes="caption"
+                                               FontStyle="Italic" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource AppAccentBrush}" />
+                                </StackPanel>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
+                    </Border>
+                </Button>
+                <Button DockPanel.Dock="Bottom" Classes="ghost" Margin="4,0,4,10" Padding="0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                        Click="OnOpenChannel"
+                        ToolTip.Tip="Join the PDM channel on WhatsApp for news, releases and tips"
+                        IsVisible="{Binding LicenseBanner.IsCommunityPlan}">
+                    <Border CornerRadius="10" Padding="10,8" Background="{DynamicResource AppAccentSubtleBrush}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="glyph" Text="&#xE716;" FontSize="14" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppAccentBrush}" />
+                            <StackPanel VerticalAlignment="Center"
+                                        IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                                <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                                <TextBlock Text="{Binding LicenseBanner.PlanCaption}" Classes="caption"
+                                           Margin="0,-1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Button>
+                <Button DockPanel.Dock="Bottom" Classes="ghost" Margin="4,0,4,10" Padding="0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                        Click="OnOpenLicense" ToolTip.Tip="License details"
+                        IsVisible="{Binding LicenseBanner.IsTrialEditionPlan}">
+                    <Border CornerRadius="10" Padding="10,8" Background="{DynamicResource StatusWarningSubtleBrush}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="glyph" Text="&#xE7BA;" FontSize="14" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource StatusWarningBrush}" />
+                            <StackPanel VerticalAlignment="Center"
+                                        IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                                <TextBlock Text="{Binding LicenseBanner.PlanName}" FontWeight="SemiBold" FontSize="12.5"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                                <TextBlock Text="{Binding LicenseBanner.PlanCaption}" Classes="caption"
+                                           Margin="0,-1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Button>
 
                 <!-- Update-available notice: a gentle, non-blocking prompt shown only after a silent
                      background check finds a newer version. It informs (never forces); "Update now"
@@ -125,6 +161,29 @@
                         </Button>
                     </StackPanel>
                 </Border>
+
+                <!-- "Connect your browser" card: shown until the extension hands PDM its first
+                     download, then gone for good. Existing installs never see it (settings migration).
+                     Clicking opens the Browser Setup wizard. Collapsed sidebar shows just the glyph. -->
+                <Button DockPanel.Dock="Bottom" Classes="ghost" Margin="4,0,4,10" Padding="0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                        Click="OnOpenBrowserSetupPrompt"
+                        ToolTip.Tip="Add the PDM extension so browser downloads come to PDM"
+                        IsVisible="{Binding ShowBrowserSetupPrompt}">
+                    <Border CornerRadius="10" Padding="10,9" Background="{DynamicResource AppAccentSubtleBrush}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="glyph" Text="&#xE71B;" FontSize="14" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppAccentBrush}" />
+                            <StackPanel VerticalAlignment="Center"
+                                        IsVisible="{Binding !IsChecked, ElementName=SidebarToggle}">
+                                <TextBlock Text="Connect your browser" FontWeight="SemiBold" FontSize="12.5"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" />
+                                <TextBlock Text="Capture downloads automatically" Classes="caption"
+                                           Margin="0,-1,0,0" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Button>
 
                 <ListBox DockPanel.Dock="Top" Classes="categories" ItemsSource="{Binding Categories}"
                          SelectedItem="{Binding SelectedCategory}">
@@ -267,6 +326,7 @@
                             <MenuItem Header="Browser setup" Click="OnBrowserSetup" />
                             <MenuItem Header="Check for updates" Click="OnCheckForUpdates" />
                             <Separator />
+                            <MenuItem Header="PDM channel on WhatsApp" Click="OnOpenChannel" />
                             <MenuItem Header="Help or report a problem" Click="OnHelpOrReport" />
                         </MenuFlyout>
                     </Button.Flyout>

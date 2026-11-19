@@ -121,6 +121,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public PopupManager? PopupManager { get; set; }
 
+    /// <summary>
+    /// Drives the sidebar "add the browser extension" card. True until the extension has handed PDM
+    /// its first download, then false for good (existing installs start false via settings migration).
+    /// Clicking the card opens the Browser Setup wizard (wired in the view).
+    /// </summary>
+    [ObservableProperty] private bool _showBrowserSetupPrompt;
+
     public MainViewModel(IAppHost host, IUiDispatcher dispatcher)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
@@ -128,6 +135,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         LicenseBanner = new LicenseBannerViewModel(host, dispatcher);
         UpdateBanner = new UpdateBannerViewModel(host, dispatcher);
+
+        _showBrowserSetupPrompt = !host.Settings.BrowserExtensionConnected;
+        _host.BrowserExtensionConnected += OnBrowserExtensionConnected;
 
         // Default to the "All Downloads" view.
         _selectedCategory = Categories[0];
@@ -145,6 +155,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         UpdateEmptyState();
     }
+
+    /// <summary>Hides the browser-setup card the moment the extension first connects (off-UI-thread event).</summary>
+    private void OnBrowserExtensionConnected() => _dispatcher.Post(() => ShowBrowserSetupPrompt = false);
 
     /// <summary>
     /// Recomputes <see cref="IsListEmpty"/> plus the empty-state title/hint. The title changes
@@ -565,6 +578,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         LicenseBanner.Dispose();
+        _host.BrowserExtensionConnected -= OnBrowserExtensionConnected;
         foreach (DownloadItemViewModel vm in _all)
         {
             vm.PropertyChanged -= OnItemPropertyChanged;

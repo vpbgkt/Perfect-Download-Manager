@@ -13,6 +13,7 @@
 ## Developers
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — projects, layers and how they fit together.
+- **[EDITIONS.md](EDITIONS.md)** — Community and Premium: what each gets, where the switch is, and how to go back to the trial model.
 - **[COMMANDS.md](COMMANDS.md)** — build, test, run, licensing backend commands.
 - **[DOWNLOAD-ENGINE-PERFORMANCE.md](DOWNLOAD-ENGINE-PERFORMANCE.md)** — how the download engine reaches full speed; the long version with all measurements is in [`research/`](../research/README.md).
 - **[SECURITY.md](SECURITY.md)** — threat model, signed licenses and updates, tamper detection, limits.

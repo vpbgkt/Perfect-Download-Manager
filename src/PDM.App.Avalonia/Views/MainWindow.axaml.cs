@@ -87,6 +87,10 @@ public partial class MainWindow : Window
 
         InitializeBrowserMenu();
 
+        // First-run welcome: fires when the main window is first shown (including the first time it is
+        // surfaced from a background/tray start), so the dialog centres on a visible window.
+        Opened += OnFirstShown;
+
         // Silently check for updates shortly after launch so the sidebar can surface a gentle,
         // non-blocking notice when a newer version exists. Fire-and-forget with a small delay so it
         // never competes with window startup work; failures stay silent (the manual "Check for
@@ -112,6 +116,11 @@ public partial class MainWindow : Window
     /// sidebar brand (logo + wordmark).</summary>
     private void OnOpenWebsite(object? sender, RoutedEventArgs e) =>
         OpenExternal("https://perfectdownloadmanager.com", "Open website");
+
+    /// <summary>Opens the PDM WhatsApp channel. Wired to the sidebar Community badge and the More
+    /// flyout. Uses the same error toast as the other external links.</summary>
+    private void OnOpenChannel(object? sender, RoutedEventArgs e) =>
+        OpenExternal(SupportLinks.WhatsAppChannelUrl, "PDM channel");
 
     /// <summary>Opens the "Help or report a problem" feedback form in the user's default browser.
     /// Wired to the More flyout item.</summary>
@@ -742,7 +751,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var vm = new SettingsViewModel(host.Settings, host.SettingsStore);
+        var vm = new SettingsViewModel(host.Settings, host.SettingsStore, host.MaxConnectionsPerDownloadCap);
         await new SettingsWindow(vm).ShowDialog<bool>(this).ConfigureAwait(true);
     }
 
@@ -758,19 +767,54 @@ public partial class MainWindow : Window
         var dialog = new LicenseWindow(vm);
         await dialog.ShowDialog(this).ConfigureAwait(true);
 
-        // Reflect any activation/deactivation back into app state and the banner.
-        host.License = dialog.LatestSnapshot;
+        // Reflect any activation/deactivation back into app state and the banner. Re-read the saved
+        // state rather than taking the dialog's last snapshot: after a failed activation attempt
+        // that snapshot is the attempt's "invalid key" result, and adopting it dropped the whole app
+        // to the unlicensed tier (and an "invalid license" banner) although nothing had changed.
+        host.License = await host.LicenseService.GetSnapshotAsync().ConfigureAwait(true);
         _viewModel.LicenseBanner.Refresh();
     }
 
-    private void OnBrowserSetup(object? sender, RoutedEventArgs e)
+    private void OnBrowserSetup(object? sender, RoutedEventArgs e) => _ = OpenBrowserSetupAsync();
+
+    /// <summary>Opens the Browser Setup wizard. Shared by the ⋯ menu, the sidebar card and first-run.</summary>
+    private Task OpenBrowserSetupAsync()
     {
         string hostExe = Path.Combine(AppContext.BaseDirectory, "pdm-native-host.exe");
         var vm = new BrowserSetupViewModel(
             hostExe,
             new PDM.Platform.Windows.WindowsNativeHostInstaller(),
             new PDM.Platform.Windows.WindowsBrowserDetector());
-        _ = new BrowserSetupWindow(vm).ShowDialog(this);
+        return new BrowserSetupWindow(vm).ShowDialog(this);
+    }
+
+    /// <summary>Sidebar "add the browser extension" card. Same destination as the ⋯ menu item.</summary>
+    private void OnOpenBrowserSetupPrompt(object? sender, RoutedEventArgs e) => _ = OpenBrowserSetupAsync();
+
+    /// <summary>
+    /// First-run onboarding: shown once (gated by <c>AppSettings.WelcomeShown</c>) the first time a
+    /// brand-new install opens its main window. Existing installs have WelcomeShown set true by the
+    /// settings migration, so an upgrade never shows this.
+    /// </summary>
+    private async void OnFirstShown(object? sender, EventArgs e)
+    {
+        Opened -= OnFirstShown; // once per process
+        AppHost? host = App.Host;
+        if (host is null || host.Settings.WelcomeShown)
+        {
+            return;
+        }
+
+        host.Settings.WelcomeShown = true;
+        try { await host.SettingsStore.SaveAsync(host.Settings).ConfigureAwait(true); }
+        catch { /* persisting the flag is best-effort; worst case the welcome shows once more */ }
+
+        var welcome = new WelcomeWindow();
+        await welcome.ShowDialog(this).ConfigureAwait(true);
+        if (welcome.OpenBrowserSetupRequested)
+        {
+            await OpenBrowserSetupAsync().ConfigureAwait(true);
+        }
     }
 
     private async void OnCheckForUpdates(object? sender, RoutedEventArgs e)

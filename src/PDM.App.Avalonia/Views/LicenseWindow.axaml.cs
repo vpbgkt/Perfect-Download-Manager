@@ -29,4 +29,6 @@ public partial class LicenseWindow : Window
     private void OnClose(object? sender, RoutedEventArgs e) => Close();
 
     private void OnContactSupport(object? sender, RoutedEventArgs e) => SupportLinks.OpenSupport();
+
+    private void OnOpenChannel(object? sender, RoutedEventArgs e) => SupportLinks.OpenWhatsAppChannel();
 }

@@ -7,10 +7,31 @@ namespace PDM.Core.Models;
 public sealed class AppSettings
 {
     /// <summary>
+    /// Schema version the newest build writes. A brand-new install starts here (see
+    /// <c>JsonSettingsStore.LoadAsync</c>) so first-run migrations — which assume an upgraded
+    /// existing user — do not run and suppress the first-run onboarding.
+    /// </summary>
+    public const int CurrentSettingsVersion = 4;
+
+    /// <summary>
     /// Schema version of the persisted settings file, used to apply one-time migrations when defaults
     /// change. 0 means the file predates versioning. See <c>JsonSettingsStore.Migrate</c>.
     /// </summary>
     public int SettingsVersion { get; set; }
+
+    /// <summary>
+    /// True once the first-run welcome has been shown. Fresh installs start <c>false</c> so the
+    /// welcome appears exactly once; existing installs are set <c>true</c> by migration so an upgrade
+    /// never interrupts them.
+    /// </summary>
+    public bool WelcomeShown { get; set; }
+
+    /// <summary>
+    /// True once the browser extension has handed PDM at least one download. Drives the gentle
+    /// "add the browser extension" reminder, which disappears for good once this is set. Existing
+    /// installs are set <c>true</c> by migration so established users are never nagged.
+    /// </summary>
+    public bool BrowserExtensionConnected { get; set; }
 
     /// <summary>Directory used when a download does not specify one.</summary>
     public string DefaultDownloadDirectory { get; set; } =

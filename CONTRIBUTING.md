@@ -33,7 +33,7 @@ You don't need to write code to contribute meaningfully:
 - 🧪 **Test pre-releases** — try Beta channel builds and report issues
 - 💬 **Help in Discussions** — answer questions from other users
 - ⭐ **Star the repo** — increases visibility for others discovering the project
-- 💎 **Become a supporter** — [Premium plans](https://perfectdownloadmanager.com/pricing) directly fund development
+- 💎 **Become a supporter** — [Premium plans](https://perfectdownloadmanager.com/support) directly fund development
 
 ---
 
@@ -223,7 +223,7 @@ Docs use standard Markdown. Diagrams use Mermaid (rendered on GitHub).
 - **Discussions**: [GitHub Discussions](https://github.com/vpbgkt/Perfect-Download-Manager/discussions) — questions, ideas, show & tell
 - **Issues**: [GitHub Issues](https://github.com/vpbgkt/Perfect-Download-Manager/issues) — bugs and feature requests
 - **Email**: contributors@perfectdownloadmanager.com
-- **Premium Supporters Discord**: available to [premium plan](https://perfectdownloadmanager.com/pricing) subscribers
+- **Premium Supporters Discord**: available to [premium plan](https://perfectdownloadmanager.com/support) subscribers
 
 ---
 

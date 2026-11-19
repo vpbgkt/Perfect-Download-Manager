@@ -6,13 +6,13 @@ Thank you to everyone who supports Perfect Download Manager — whether through 
 
 ## 💎 Enterprise Partners
 
-*Your logo and link here — [become an Enterprise Partner](https://perfectdownloadmanager.com/pricing)*
+*Your logo and link here — [become an Enterprise Partner](https://perfectdownloadmanager.com/support)*
 
 ---
 
 ## ⭐ Premium Supporters
 
-*Your name here — [become a Supporter](https://perfectdownloadmanager.com/pricing)*
+*Your name here — [become a Supporter](https://perfectdownloadmanager.com/support)*
 
 ---
 
@@ -51,4 +51,4 @@ Contributors who have submitted accepted pull requests, significant bug reports,
 
 ---
 
-*Want to support PDM's development? [Visit our pricing page](https://perfectdownloadmanager.com/pricing) or [contribute on GitHub](https://github.com/vpbgkt/Perfect-Download-Manager).*
+*Want to support PDM's development? [Contact us](https://perfectdownloadmanager.com/support) or [contribute on GitHub](https://github.com/vpbgkt/Perfect-Download-Manager).*

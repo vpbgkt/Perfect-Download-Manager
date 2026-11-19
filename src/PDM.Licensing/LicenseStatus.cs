@@ -16,5 +16,12 @@ public enum LicenseStatus
     Activated = 3,
 
     /// <summary>A license exists but validation failed (e.g. revoked or moved to another device).</summary>
-    Invalid = 4
+    Invalid = 4,
+
+    /// <summary>
+    /// No (working) Premium licence in the <see cref="ProductEdition.Community"/> edition: fully
+    /// functional with the Community entitlements. Replaces Trial / Expired / Invalid in that edition;
+    /// a lapsed or rejected Premium licence also lands here, with the reason in the snapshot message.
+    /// </summary>
+    Community = 5
 }

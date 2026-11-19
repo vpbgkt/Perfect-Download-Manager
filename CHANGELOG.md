@@ -19,6 +19,40 @@ PDM uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.5.0] - 2026-11-19
+
+### Added
+- First-run welcome for new installs that makes the browser extension easy to find: it explains the
+  one-time setup in plain steps and has an "Add browser extension" button that opens the wizard.
+  Existing installs are never shown it
+- A gentle "Connect your browser" card in the sidebar that stays until the extension hands PDM its
+  first download, then disappears for good. Existing installs never see it
+- The Browser Setup wizard now shows numbered steps and a clear "Add to Chrome/Edge/Brave" button
+- Premium badge supporter flair: a heart and "Thank you for supporting PDM" under the owner's name
+
+### Changed
+- PDM now opens as **PDM Community**: every feature, up to 8 connections per download (the default
+  stays 8), no trial, no time limit, no key. The 14-day trial and the 2-connection, one-at-a-time
+  free tier are gone, and so are the "Upgrade" pop-ups and the speed notice in the download popup
+- A valid Premium key shows **Premium** with the owner's name in the sidebar. Premium never gets
+  less than Community; a Premium licence that ends, is revoked or moves to another PC falls back to
+  Community (not to a reduced tier) and the warning bar says why
+- Community installs no longer contact the licensing server at start-up (no trial anchor)
+- The sidebar plan badge is clickable: Community opens the PDM WhatsApp channel, Premium opens the
+  license details. The channel is also in the ⋯ menu and the License window
+- Settings: the connections box offers at most what the plan allows (1-8 in Community) instead of
+  accepting values that were silently capped
+- The trial model is still in the code behind one switch (`EditionPolicy.Current`); see
+  `docs/EDITIONS.md`
+
+### Fixed
+- Typing a wrong licence key in the License window dropped the whole app to the 2-connection tier
+  and showed "License invalid" until restart, even during a valid trial or licence
+- Website: the Professional/Enterprise buttons and several README links pointed to a `/pricing`
+  page that does not exist (404); they now go to the support page
+
+---
+
 ## [1.4.1] - 2026-11-03
 
 ### Fixed

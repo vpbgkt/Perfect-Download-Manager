@@ -4,7 +4,7 @@
         x:Class="PDM.App.Avalonia.Views.LicenseWindow"
         x:DataType="vm:LicenseViewModel"
         Title="License"
-        Width="560" Height="460"
+        Width="560" SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
@@ -12,10 +12,13 @@
 
         <TextBlock Text="{Binding StatusText}" FontSize="16" FontWeight="SemiBold" />
 
+        <TextBlock Text="{Binding PlanDescription}" Opacity="0.75" TextWrapping="Wrap"
+                   IsVisible="{Binding PlanDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
         <TextBlock Text="{Binding Message}" Opacity="0.75" TextWrapping="Wrap"
                    IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-        <TextBlock Text="License key" IsVisible="{Binding !IsActivated}" />
+        <TextBlock Text="Premium license key" IsVisible="{Binding !IsActivated}" />
         <TextBox Text="{Binding LicenseKey}"
                  Watermark="PDM-XXXX-XXXX-XXXX-XXXX"
                  IsEnabled="{Binding !IsWorking}"
@@ -26,9 +29,11 @@
                  FontFamily="Consolas,Cascadia Mono,monospace" FontSize="11" />
 
         <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12" Margin="0,6,0,0"
-                   Text="Need a license, a renewal, or help? Contact the PDM team." />
+                   Text="Want Premium, a renewal, or help? Contact the PDM team. News and releases are on the PDM WhatsApp channel." />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+            <Button Content="PDM channel" MinWidth="110" Click="OnOpenChannel"
+                    ToolTip.Tip="Open the PDM channel on WhatsApp" />
             <Button Content="Contact / Renew" MinWidth="120" Click="OnContactSupport" />
             <Button Content="Close" MinWidth="96" Click="OnClose" IsCancel="True" />
             <Button Content="Deactivate" MinWidth="120" Classes="danger"

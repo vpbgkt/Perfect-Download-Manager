@@ -13,11 +13,14 @@ public sealed partial class BrowserRowViewModel : ObservableObject
 
     public string DisplayName => Browser.DisplayName;
 
+    /// <summary>Label for this row's install button, e.g. "Add to Chrome".</summary>
+    public string AddButtonText => $"Add to {DisplayName}";
+
     /// <summary>URL that opens the published "Add to Chrome/Edge/Brave" store listing.</summary>
     public required string StorePageUrl { get; init; }
 
     /// <summary>Status text shown next to the row.</summary>
-    [ObservableProperty] private string _status = "Click \u201CAdd to browser\u201D to install the extension.";
+    [ObservableProperty] private string _status = "Not added yet.";
 }
 
 /// <summary>

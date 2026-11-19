@@ -17,11 +17,37 @@ public readonly record struct LicenseEntitlements(
     int? MaxParallelDownloads,
     string[] Features)
 {
-    /// <summary>Reduced free/expired tier: throttled, one-at-a-time.</summary>
+    /// <summary>Connections per download in the Community edition (also the default setting).</summary>
+    public const int CommunityMaxConnections = 8;
+
+    /// <summary>Reduced free/expired tier of the Trial edition: throttled, one-at-a-time.</summary>
     public static readonly LicenseEntitlements Free = new(2, 1, Array.Empty<string>());
+
+    /// <summary>
+    /// Community edition without a Premium licence: up to <see cref="CommunityMaxConnections"/>
+    /// connections per download; simultaneous downloads follow the user's setting.
+    /// </summary>
+    public static readonly LicenseEntitlements Community = new(CommunityMaxConnections, null, Array.Empty<string>());
 
     /// <summary>Full trial/licensed tier when no explicit signed cap is present: uncapped.</summary>
     public static readonly LicenseEntitlements Full = new(null, null, Array.Empty<string>());
+
+    /// <summary>What an install without a working licence gets in <paramref name="edition"/>.</summary>
+    public static LicenseEntitlements Unlicensed(ProductEdition edition) =>
+        edition == ProductEdition.Community ? Community : Free;
+
+    /// <summary>
+    /// Raises any cap below <paramref name="floor"/> to the floor's value (a null cap is "no limit"),
+    /// so a paid licence never ends up with less than the free edition offers.
+    /// </summary>
+    public LicenseEntitlements AtLeast(LicenseEntitlements floor) => this with
+    {
+        MaxConnectionsPerDownload = Higher(MaxConnectionsPerDownload, floor.MaxConnectionsPerDownload),
+        MaxParallelDownloads = Higher(MaxParallelDownloads, floor.MaxParallelDownloads)
+    };
+
+    private static int? Higher(int? cap, int? floor) =>
+        cap is null || floor is null ? null : Math.Max(cap.Value, floor.Value);
 }
 
 /// <summary>
@@ -35,7 +61,8 @@ public readonly record struct LicenseSnapshot(
     LicenseEntitlements Entitlements = default)
 {
     /// <summary>True when the app should offer full commercial features.</summary>
-    public bool IsFunctional => Status is LicenseStatus.Trial or LicenseStatus.Grace or LicenseStatus.Activated;
+    public bool IsFunctional => Status is LicenseStatus.Trial or LicenseStatus.Grace or LicenseStatus.Activated
+        or LicenseStatus.Community;
 }
 
 /// <summary>
@@ -85,6 +112,15 @@ public sealed class LicenseService
     /// <summary>Grace period; overridable for testing.</summary>
     public TimeSpan GracePeriod { get; init; } = DefaultGracePeriod;
 
+    /// <summary>
+    /// Product model: <see cref="ProductEdition.Community"/> (no key = Community, nothing expires)
+    /// or <see cref="ProductEdition.Trial"/> (14-day trial, then the reduced Free tier). Defaults to
+    /// the build-wide <see cref="EditionPolicy.Current"/>; overridable so tests cover both.
+    /// </summary>
+    public ProductEdition Edition { get; init; } = EditionPolicy.Current;
+
+    private LicenseEntitlements UnlicensedEntitlements => LicenseEntitlements.Unlicensed(Edition);
+
     /// <summary>Loads the current snapshot, creating a fresh trial record on first launch.</summary>
     public async Task<LicenseSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
@@ -126,6 +162,11 @@ public sealed class LicenseService
     /// </summary>
     public async Task EnsureTrialAnchorAsync(CancellationToken cancellationToken = default)
     {
+        if (Edition == ProductEdition.Community)
+        {
+            return; // there is no trial to anchor, so no reason to contact the server
+        }
+
         LicenseRecord record = await LoadOrInitializeAsync(cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(record.SignedToken))
         {
@@ -182,13 +223,13 @@ public sealed class LicenseService
         {
             return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, null,
                 "Could not reach the licensing server. Check your connection and try again.",
-                LicenseEntitlements.Free);
+                UnlicensedEntitlements);
         }
 
         if (!result.IsValid)
         {
             return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, null, result.Message,
-                LicenseEntitlements.Free);
+                UnlicensedEntitlements);
         }
 
         LicenseClaims? claims = VerifyToken(result.Token, key, fingerprint);
@@ -197,7 +238,7 @@ public sealed class LicenseService
             // Valid-looking response but the token failed cryptographic verification: reject.
             return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, null,
                 "The license token could not be verified. Please contact support.",
-                LicenseEntitlements.Free);
+                UnlicensedEntitlements);
         }
 
         LicenseRecord record = await LoadOrInitializeAsync(cancellationToken).ConfigureAwait(false);
@@ -394,6 +435,11 @@ public sealed class LicenseService
             return BuildLicensedSnapshot(record, now);
         }
 
+        if (Edition == ProductEdition.Community)
+        {
+            return CommunitySnapshot(message: null);
+        }
+
         // No license: trial flow. Prefer the server-signed anchor (reinstall-proof) over the
         // local first-launch time, so deleting local state or the registry cannot reset the trial.
         (DateTimeOffset trialStart, TimeSpan trialLength) = ResolveTrialWindow(record);
@@ -439,25 +485,34 @@ public sealed class LicenseService
         LicenseClaims? claims = _verifier?.Verify(record.SignedToken);
         if (claims is null)
         {
-            return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, record.Owner,
-                "The stored license token is invalid. Please re-activate.", LicenseEntitlements.Free);
+            return Unlicensed(LicenseStatus.Invalid, record.Owner,
+                "The stored license token is invalid. Please re-activate.",
+                "Your Premium license could not be verified, so PDM is running as Community. " +
+                "Activate your key again to restore Premium.");
         }
 
         string currentFp = _fingerprintProvider();
         if (!string.Equals(claims.Fingerprint, currentFp, StringComparison.OrdinalIgnoreCase))
         {
-            return new LicenseSnapshot(LicenseStatus.Invalid, TimeSpan.Zero, record.Owner,
-                "This license is bound to a different machine.", LicenseEntitlements.Free);
+            return Unlicensed(LicenseStatus.Invalid, record.Owner,
+                "This license is bound to a different machine.",
+                "Your Premium license is activated on a different PC, so PDM is running as Community here.");
         }
 
         LicenseEntitlements entitlements = EntitlementsFromClaims(claims);
+        if (Edition == ProductEdition.Community)
+        {
+            // A paid licence never gets less than the free Community edition.
+            entitlements = entitlements.AtLeast(LicenseEntitlements.Community);
+        }
 
         // The subscription genuinely ending outranks everything else: once the paid period is over
-        // the install drops to the reduced tier even if the last token is still within its TTL.
+        // the install drops to the unlicensed tier even if the last token is still within its TTL.
         if (claims.SubscriptionExpiresAt is { } subscriptionEnd && now >= subscriptionEnd)
         {
-            return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, claims.Owner,
-                "Your license has expired. Please renew to continue.", LicenseEntitlements.Free);
+            return Unlicensed(LicenseStatus.Expired, claims.Owner,
+                "Your license has expired. Please renew to continue.",
+                "Your Premium license has ended. PDM keeps working as Community; renew to get Premium back.");
         }
 
         if (now < claims.ExpiresAt)
@@ -475,12 +530,31 @@ public sealed class LicenseService
         if (sinceExpiry < GracePeriod)
         {
             return new LicenseSnapshot(LicenseStatus.Grace, GracePeriod - sinceExpiry, claims.Owner,
-                "Your license needs to re-validate online. Connect to the internet to continue.", entitlements);
+                Edition == ProductEdition.Community
+                    ? "Your Premium license needs to re-validate online. Connect to the internet to keep Premium."
+                    : "Your license needs to re-validate online. Connect to the internet to continue.",
+                entitlements);
         }
 
-        return new LicenseSnapshot(LicenseStatus.Expired, TimeSpan.Zero, claims.Owner,
-            "Your license could not be re-validated. Please connect and re-activate.", LicenseEntitlements.Free);
+        return Unlicensed(LicenseStatus.Expired, claims.Owner,
+            "Your license could not be re-validated. Please connect and re-activate.",
+            "Your Premium license could not be re-validated, so PDM is running as Community. " +
+            "Connect to the internet to restore Premium.");
     }
+
+    /// <summary>
+    /// The snapshot for a licence that does not (or no longer) work. The Trial edition reports
+    /// <paramref name="trialEditionStatus"/> on the reduced Free tier; the Community edition simply
+    /// continues as Community and says what happened to the licence.
+    /// </summary>
+    private LicenseSnapshot Unlicensed(
+        LicenseStatus trialEditionStatus, string? owner, string trialEditionMessage, string communityMessage) =>
+        Edition == ProductEdition.Community
+            ? CommunitySnapshot(communityMessage)
+            : new LicenseSnapshot(trialEditionStatus, TimeSpan.Zero, owner, trialEditionMessage, LicenseEntitlements.Free);
+
+    private static LicenseSnapshot CommunitySnapshot(string? message) =>
+        new(LicenseStatus.Community, TimeSpan.Zero, null, message, LicenseEntitlements.Community);
 
     /// <summary>
     /// How long the <b>licence</b> still has to run, for display purposes.

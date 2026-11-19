@@ -39,11 +39,26 @@ public sealed partial class LicenseBannerViewModel : ObservableObject, IDisposab
 
     [ObservableProperty] private bool _isWarning;
 
-    /// <summary>Concise plan label for the always-visible sidebar badge, e.g. "Premium plan active".</summary>
+    /// <summary>Concise plan label for the always-visible sidebar badge, e.g. "Premium" or "Community".</summary>
     [ObservableProperty] private string _planName = string.Empty;
+
+    /// <summary>Second line of the sidebar badge (who the licence belongs to, or what a click does).</summary>
+    [ObservableProperty] private string _planCaption = string.Empty;
+
+    /// <summary>Thank-you line shown on the Premium badge (supporter flair).</summary>
+    public const string SupporterThanks = "Thank you for supporting PDM";
+
+    /// <summary>Third line of the Premium badge; bound so the view has no hard-coded copy.</summary>
+    public string SupporterThanksText => SupporterThanks;
 
     /// <summary>True when the plan is a paid, activated license (drives the premium sidebar badge).</summary>
     [ObservableProperty] private bool _isPremiumPlan;
+
+    /// <summary>True for the free Community edition (drives the Community badge, which links to the PDM channel).</summary>
+    [ObservableProperty] private bool _isCommunityPlan;
+
+    /// <summary>True for the Trial edition's states (trial, grace, expired, invalid): neither badge above.</summary>
+    [ObservableProperty] private bool _isTrialEditionPlan;
 
     /// <summary>True when the app is in the free/limited mode (no functional license).</summary>
     [ObservableProperty] private bool _isLimitedPlan;
@@ -55,17 +70,38 @@ public sealed partial class LicenseBannerViewModel : ObservableObject, IDisposab
 
         // Always-visible sidebar plan badge (independent of the warning banner).
         IsPremiumPlan = snap.Status == LicenseStatus.Activated;
-        IsLimitedPlan = !snap.IsFunctional; // Expired / Invalid → reduced "free" mode
+        IsCommunityPlan = snap.Status == LicenseStatus.Community;
+        IsTrialEditionPlan = !IsPremiumPlan && !IsCommunityPlan;
+        IsLimitedPlan = !snap.IsFunctional; // Trial edition only: Expired / Invalid → reduced "free" mode
         PlanName = snap.Status switch
         {
-            LicenseStatus.Activated => "Premium plan active",
+            LicenseStatus.Activated => "Premium",
+            LicenseStatus.Community => "Community",
             LicenseStatus.Trial => "Free trial",
             LicenseStatus.Grace => "Grace period",
             _ => "Free plan · limited"
         };
+        PlanCaption = snap.Status switch
+        {
+            LicenseStatus.Activated => string.IsNullOrEmpty(snap.Owner) ? "Premium supporter" : $"Licensed to {snap.Owner}",
+            LicenseStatus.Community => "Join the PDM channel",
+            LicenseStatus.Grace => "Re-validation needed",
+            LicenseStatus.Trial => "All features unlocked",
+            _ => "Upgrade for full speed"
+        };
 
         switch (snap.Status)
         {
+            case LicenseStatus.Community:
+                // The warning bar only appears when there is something to say (a Premium licence
+                // that lapsed or could not be used); plain Community use is never nagged.
+                StatusText = "Community edition";
+                DetailText = snap.Message ??
+                    $"Free for everyone, with up to {LicenseEntitlements.CommunityMaxConnections} connections per download.";
+                ActionLabel = "License details";
+                IsActionVisible = true;
+                IsWarning = snap.Message is not null;
+                break;
             case LicenseStatus.Trial:
                 {
                     int days = (int)Math.Ceiling(snap.Remaining.TotalDays);

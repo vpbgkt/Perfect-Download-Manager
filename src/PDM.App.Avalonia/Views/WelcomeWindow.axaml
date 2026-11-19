@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:PDM.App.Avalonia.Views"
+        x:Class="PDM.App.Avalonia.Views.WelcomeWindow"
+        Title="Welcome to Perfect Download Manager"
+        Width="560" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <StackPanel Margin="24" Spacing="16">
+
+        <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+            <Image Width="44" Height="44" Source="{x:Static views:MainWindow.AppIcon}" />
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="Welcome to Perfect Download Manager" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="Community edition — every feature, free, no account, no time limit."
+                           Classes="caption" Margin="0,1,0,0" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- The one thing new users miss: the browser extension. Make it the centrepiece. -->
+        <Border CornerRadius="10" Padding="16" Background="{DynamicResource AppAccentSubtleBrush}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="One quick step: connect your browser" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock TextWrapping="Wrap" Opacity="0.85"
+                           Text="With the free PDM browser extension, downloads you start in Chrome, Edge or Brave come straight to PDM — faster, resumable, and organised. It takes two clicks and PDM is already set up for it." />
+                <StackPanel Spacing="4" Margin="0,2,0,0">
+                    <TextBlock Text="1.  Click &#x201C;Add browser extension&#x201D; below." TextWrapping="Wrap" />
+                    <TextBlock Text="2.  In your browser, click &#x201C;Add extension&#x201D; to confirm." TextWrapping="Wrap" />
+                    <TextBlock Text="3.  That's it — your downloads now come to PDM automatically." TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="12"
+                   Text="Prefer not to? PDM works fully without it — drag a link onto the window, or paste a URL with Add Download. You can connect your browser any time from the ⋯ menu → Browser setup." />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Maybe later" MinWidth="110" Click="OnLater" IsCancel="True" />
+            <Button Content="Add browser extension" MinWidth="170" Classes="brand" IsDefault="True"
+                    Click="OnAddExtension" />
+        </StackPanel>
+    </StackPanel>
+</Window>

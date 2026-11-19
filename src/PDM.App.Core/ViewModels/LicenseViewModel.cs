@@ -31,10 +31,14 @@ public sealed partial class LicenseViewModel : ObservableObject
 
     /// <summary>True if the current state warrants encouraging activation.</summary>
     public bool ShouldOfferActivation =>
-        Snapshot.Status is LicenseStatus.Trial or LicenseStatus.Grace or LicenseStatus.Expired or LicenseStatus.Invalid;
+        Snapshot.Status is LicenseStatus.Trial or LicenseStatus.Grace or LicenseStatus.Expired or LicenseStatus.Invalid
+            or LicenseStatus.Community;
 
     /// <summary>True if the app is currently activated (offer deactivation instead).</summary>
     public bool IsActivated => Snapshot.Status == LicenseStatus.Activated;
+
+    /// <summary>What the current plan is, shown under the status line.</summary>
+    [ObservableProperty] private string _planDescription = string.Empty;
 
     partial void OnSnapshotChanged(LicenseSnapshot value) => Refresh();
 
@@ -42,13 +46,27 @@ public sealed partial class LicenseViewModel : ObservableObject
     {
         StatusText = Snapshot.Status switch
         {
+            LicenseStatus.Community => "PDM Community",
             LicenseStatus.Trial => $"Trial — {FormatRemaining(Snapshot.Remaining)} left",
-            LicenseStatus.Grace => $"Grace period — {FormatRemaining(Snapshot.Remaining)} remaining",
-            LicenseStatus.Activated when Snapshot.Remaining == TimeSpan.MaxValue => "Activated (perpetual license)",
-            LicenseStatus.Activated => $"Activated — expires in {FormatRemaining(Snapshot.Remaining)}",
+            LicenseStatus.Grace => $"Premium — grace period, {FormatRemaining(Snapshot.Remaining)} remaining",
+            LicenseStatus.Activated when Snapshot.Remaining == TimeSpan.MaxValue => "Premium — perpetual license",
+            LicenseStatus.Activated => $"Premium — expires in {FormatRemaining(Snapshot.Remaining)}",
             LicenseStatus.Expired => "Expired",
             LicenseStatus.Invalid => "License invalid",
             _ => Snapshot.Status.ToString()
+        };
+
+        PlanDescription = Snapshot.Status switch
+        {
+            LicenseStatus.Community =>
+                $"Community is free for everyone: every feature, up to {LicenseEntitlements.CommunityMaxConnections} " +
+                "connections per download, no time limit. Premium is optional: it supports PDM's development " +
+                "and shows the Premium badge with your name.",
+            LicenseStatus.Activated or LicenseStatus.Grace =>
+                string.IsNullOrEmpty(Snapshot.Owner)
+                    ? "Thank you for supporting PDM."
+                    : $"Licensed to {Snapshot.Owner}. Thank you for supporting PDM.",
+            _ => string.Empty
         };
 
         Message = Snapshot.Message ?? string.Empty;

@@ -19,14 +19,18 @@ Silent install (for scripting): `msiexec /i PDM-1.0.0.0.msi /qn`.
 
 To uninstall: use **Settings → Apps** in Windows, or run `msiexec /x PDM-1.0.0.0.msi /qn`.
 
-## First launch — free trial
+## First launch — PDM Community
 
-- The first time you open PDM, a **14-day free trial** starts automatically. No key or sign-up
-  required.
-- The banner at the top of the window shows **"Free trial — N days left"**. When 3 days or fewer
-  are left, the banner turns amber to remind you.
-- The trial is anchored to your machine's hardware fingerprint on our licensing server, so
-  **reinstalling PDM, editing the registry, or clearing local files does not reset the trial**.
+- PDM opens as **PDM Community**: every feature, up to **8 connections per download**, no trial,
+  no time limit, no key and no sign-up.
+- The badge at the bottom of the sidebar says **Community**. Click it to join the PDM channel on
+  WhatsApp (news, releases and tips); it is also under **⋯ → PDM channel on WhatsApp**.
+- **Premium** is optional: it supports PDM's development, adds priority support, and shows the
+  **Premium** badge with your name. See [License activation](#license-activation).
+- On the very first launch a short **welcome** offers to set up the browser extension (the one thing
+  new users miss). Until the extension is connected, a **"Connect your browser"** card sits in the
+  sidebar; it opens the setup wizard and disappears for good once the extension sends its first
+  download. You can also reach it any time from **⋯ → Browser setup**.
 
 ## Downloading
 
@@ -51,7 +55,8 @@ Right-click a download for: Open, Show in folder, Pause, Resume, Remove / Delete
 Toolbar → **Settings**. Sections:
 
 - **General**: default download folder, auto-start added downloads, show notifications.
-- **Downloads**: max simultaneous downloads (1–32), connections per download (1–64), global
+- **Downloads**: max simultaneous downloads (1–32), connections per download (1–8 in Community,
+  default 8), global
   speed cap in KB/s (0 = unlimited), overwrite policy (Rename / Overwrite / Skip),
   post-download command (e.g. run an antivirus scanner on completed files).
 - **Network**: custom User-Agent, HTTP/HTTPS proxy.
@@ -61,19 +66,20 @@ Toolbar → **Settings**. Sections:
 
 ## License activation
 
-When you buy a license you receive a key like `PDM-XXXX-XXXX-XXXX-XXXX`.
+When you buy Premium you receive a key like `PDM-XXXX-XXXX-XXXX-XXXX`.
 
-1. Click **License** in the toolbar.
+1. Open **⋯ → License** in the toolbar.
 2. Paste the key and click **Activate**.
-3. On success the banner switches to **"Licensed to ..."** and the trial ends.
+3. On success the sidebar badge switches to **Premium** with your name.
 
 Machine binding: each key allows a fixed number of machines (typically **one** for a personal
 license). Activation is bound to a hardware fingerprint. Moving to a new PC requires
 **Deactivate** on the old machine first.
 
 Offline behavior: once activated, PDM re-validates online in the background every so often. If
-your machine is offline, PDM keeps working for up to the token expiry (typically 14 days) plus a
-7-day grace period, then locks until you reconnect.
+your machine is offline, Premium stays active for up to the token expiry (typically 14 days) plus a
+7-day grace period. After that, or when a Premium license ends, PDM simply continues as Community
+(nothing locks) and shows why; reconnect or renew to get Premium back.
 
 ## Auto-update
 

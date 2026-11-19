@@ -49,4 +49,17 @@ public interface IAppHost
 
     /// <summary>Extracts downloaded archives (ZIP/RAR/7z/…) via the bundled 7-Zip engine.</summary>
     IArchiveExtractor ArchiveExtractor { get; }
+
+    /// <summary>
+    /// Raised once when the browser extension hands PDM its first download, so the UI can retire the
+    /// "add the browser extension" reminder live. Marshalling to the UI thread is the subscriber's job.
+    /// </summary>
+    event Action BrowserExtensionConnected;
+
+    /// <summary>
+    /// Records that the browser extension is installed and working, persists it, and raises
+    /// <see cref="BrowserExtensionConnected"/> the first time. Safe to call on any thread and as often
+    /// as captures arrive; only the first call does anything.
+    /// </summary>
+    void MarkBrowserExtensionConnected();
 }

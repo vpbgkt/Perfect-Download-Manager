@@ -3,6 +3,12 @@ using PDM.Licensing.Signed;
 
 namespace PDM.Licensing.Tests;
 
+/// <summary>
+/// The Trial edition (14-day trial, then the reduced Free tier) and the licence paths shared by both
+/// editions. Every service here pins <see cref="ProductEdition.Trial"/>, so these tests keep
+/// covering that model whatever <see cref="EditionPolicy.Current"/> is. The Community edition is
+/// covered by <see cref="CommunityEditionTests"/>.
+/// </summary>
 public sealed class LicenseServiceTests : IDisposable
 {
     private const string Fingerprint = "ABCDEF0123456789ABCDEF0123456789";
@@ -22,6 +28,7 @@ public sealed class LicenseServiceTests : IDisposable
             () => now ?? DateTimeOffset.UtcNow,
             () => fingerprint)
         {
+            Edition = ProductEdition.Trial,
             TrialLength = trial ?? TimeSpan.FromDays(30),
             GracePeriod = grace ?? TimeSpan.FromDays(7)
         };
@@ -50,13 +57,13 @@ public sealed class LicenseServiceTests : IDisposable
         // Default trial length is 14 days.
         Assert.Equal(LicenseStatus.Trial,
             (await new LicenseService(store, transport, new LicenseTokenVerifier(_issuer.PublicKeySpki),
-                () => t0, () => Fingerprint).GetSnapshotAsync()).Status);
+                () => t0, () => Fingerprint) { Edition = ProductEdition.Trial }.GetSnapshotAsync()).Status);
         Assert.Equal(LicenseStatus.Trial,
             (await new LicenseService(store, transport, new LicenseTokenVerifier(_issuer.PublicKeySpki),
-                () => t0.AddDays(13), () => Fingerprint).GetSnapshotAsync()).Status);
+                () => t0.AddDays(13), () => Fingerprint) { Edition = ProductEdition.Trial }.GetSnapshotAsync()).Status);
         Assert.Equal(LicenseStatus.Expired,
             (await new LicenseService(store, transport, new LicenseTokenVerifier(_issuer.PublicKeySpki),
-                () => t0.AddDays(15), () => Fingerprint).GetSnapshotAsync()).Status);
+                () => t0.AddDays(15), () => Fingerprint) { Edition = ProductEdition.Trial }.GetSnapshotAsync()).Status);
     }
 
     [Fact]
