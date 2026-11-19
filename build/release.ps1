@@ -384,6 +384,13 @@ if (-not $SkipCommit) {
     Say ""
     Say "==> Git commit / tag / push" "Magenta"
 
+    # Git writes harmless notices to stderr (e.g. "LF will be replaced by CRLF", push progress).
+    # Under Windows PowerShell 5.1 with ErrorActionPreference=Stop, ANY native stderr line becomes a
+    # terminating NativeCommandError, which aborted the 1.5.0 release here after everything was
+    # already published. Every git call below is checked by its real exit code (Check-Exit), so
+    # relax the preference for this stage only.
+    $ErrorActionPreference = "Continue"
+
     # Only source + installer + build scripts + CI + the patched marketing pages. Never
     # `git add .` (would sweep in dist/, secrets, junk). `.github/` is included so a workflow tweak
     # travels with the release commit - historically it was omitted, and a CI-yaml fix that pointed

@@ -147,6 +147,7 @@ replaces the program files and restarts PDM.
 | `Tag vX.Y.Z already exists` | That version was already released or tagged. Check `(Invoke-RestMethod "$base/stable/manifest.json").Version`. If it is live, you are done; otherwise use a new version, or release with `-SkipCommit` and tag by hand |
 | Fails during **Build** | Nothing was published. Fix the error and run the same command again |
 | Fails during **Publish** | Fix the cause, then re-run with `-SkipBuild` (reuses `dist/`; uploads overwrite the same files) |
+| Fails during **Git** with `NativeCommandError` on a git *warning* (e.g. "LF will be replaced by CRLF") | Fixed in `release.ps1` after 1.5.0 (the git stage now judges git by its exit code, not its stderr). If it ever recurs, everything is already live: finish by hand as in the next row |
 | Fails during **Git** | Everything is live. Commit/tag/push by hand: `git add website/index.html website/changelog.html; git commit -m "release: PDM <v>"; git tag v<v>; git push; git push origin v<v>` |
 | `sign-release.ps1 failed` | Usually AWS access to SSM parameter `/pdm/updates/private-key`. Check `aws ssm get-parameter --name /pdm/updates/private-key --with-decryption --region ap-south-1 --query Parameter.Name` |
 
